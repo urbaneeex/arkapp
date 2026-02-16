@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect, useMemo } from 'react'
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useAppointmentToast } from '@/app/(dashboard)/dashboard/appointments/new/ToastWrapper'
 import { useRouter } from 'next/navigation'
@@ -13,10 +13,13 @@ import {
   startOfDay,
   isToday,
   isBefore,
+  addDays,
   } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { AlertTriangle, Calculator, ChevronDown, ChevronUp, Clock } from 'lucide-react'
+import { AlertTriangle, Calculator, ChevronDown, ChevronUp } from 'lucide-react'
 import { ClientSearchCombobox, NewClientFields, type ClientOption } from './ClientSearchCombobox'
+import { DateNavigator } from './DateNavigator'
+import { TimeNavigator } from './TimeNavigator'
 import {
   getDayOfWeek,
   getOpenRangesForDay,
@@ -25,6 +28,7 @@ import {
   generateSlots,
   minutesToTime,
   timeToMinutes,
+  overlapsAppointment,
   type Shift,
 } from '@/lib/availability'
 import { cn } from '@/lib/utils'
@@ -70,23 +74,32 @@ export function NewAppointmentForm({
   const [newClientEmail, setNewClientEmail] = useState('')
   const [newClientAddress, setNewClientAddress] = useState('')
   const [phoneDuplicateError, setPhoneDuplicateError] = useState<string | null>(null)
+  const [existingClientPhone, setExistingClientPhone] = useState('')
+  const [existingClientEmail, setExistingClientEmail] = useState('')
 
   const [service_id, setService_id] = useState('')
   const [staff_id, setStaff_id] = useState('')
   const [startDateTime, setStartDateTime] = useState(format(new Date(), "yyyy-MM-dd'T'HH:mm"))
   const dateStr = startDateTime.slice(0, 10)
-  const setDateStr = (v: string) => setStartDateTime((prev) => v + prev.slice(10))
+  const setDateStr = (v: string) => {
+    hasAutoAdjustedRef.current = false
+    setStartDateTime((prev) => v + prev.slice(10))
+  }
   const startTimeStr = startDateTime.slice(11, 16)
-  const setStartTimeStr = (v: string) => setStartDateTime((prev) => prev.slice(0, 11) + v)
+  const setStartTimeStr = (v: string) => {
+    autoAdjustRef.current = false
+    hasAutoAdjustedRef.current = true
+    setStartDateTime((prev) => prev.slice(0, 11) + v)
+  }
   const [customEndOverride, setCustomEndOverride] = useState(false)
   const [customEndDateTime, setCustomEndDateTime] = useState('')
   const [price_total, setPrice_total] = useState<string>('')
-  const [status, setStatus] = useState<string>('pending')
+  const [status, setStatus] = useState<string>('confirmed')
   const [depositPaid, setDepositPaid] = useState(false)
-  const [sendWhatsApp, setSendWhatsApp] = useState(false)
   const [conflictAck, setConflictAck] = useState(false)
   const [availabilityPanelOpen, setAvailabilityPanelOpen] = useState(true)
-  const [timeError, setTimeError] = useState<string | null>(null)
+  const autoAdjustRef = useRef(false)
+  const hasAutoAdjustedRef = useRef(false)
 
   const selectedService = services.find((s) => s.id === service_id)
   const durationMin = selectedService?.duration ?? 0
@@ -107,6 +120,8 @@ export function NewAppointmentForm({
 
   const [staffAppointments, setStaffAppointments] = useState<{ start_min: number; end_min: number; client_name?: string; service_name?: string }[]>([])
   const [slots, setSlots] = useState<{ start_min: number; end_min: number; label: string; occupied: boolean; client_name?: string; service_name?: string }[]>([])
+  const [filteredSlots, setFilteredSlots] = useState<{ start_min: number; end_min: number; label: string; occupied: boolean; client_name?: string; service_name?: string }[]>([])
+  const [alternativeSlots, setAlternativeSlots] = useState<{ date: string; time: string; label: string }[]>([])
   const [conflict, setConflict] = useState<{
     type: 'overlap' | 'outside_hours'
     message: string
@@ -154,8 +169,78 @@ export function NewAppointmentForm({
         const slotDuration = Math.max(SLOT_STEP_MINUTES, Math.min(selectedService.duration || 60, 60))
         const newSlots = generateSlots(slotDuration, ranges, list)
         setSlots(newSlots)
+        
+        const now = new Date()
+        const currentDateStr = format(now, 'yyyy-MM-dd')
+        const isToday = dateStr === currentDateStr
+        const currentMin = now.getHours() * 60 + now.getMinutes()
+        
+        let filtered = newSlots
+        if (isToday) {
+          filtered = newSlots.filter((s) => s.start_min >= currentMin)
+        }
+        setFilteredSlots(filtered)
+        
+        const availableFiltered = filtered.filter((s) => !s.occupied)
+        if (availableFiltered.length === 0) {
+          const targetMin = isToday ? currentMin : (filtered.length > 0 ? filtered[0].start_min : 540)
+          const findAlternatives = async () => {
+            const alternatives: { date: string; time: string; label: string }[] = []
+            for (let dayOffset = 1; dayOffset <= 7 && alternatives.length < 3; dayOffset++) {
+              const altDate = addDays(selectedDate, dayOffset)
+              const altDateStr = format(altDate, 'yyyy-MM-dd')
+              const altDow = getDayOfWeek(altDate)
+              const altRanges = getOpenRangesForDay(businessHoursByDay, altDow)
+              if (altRanges.length > 0) {
+                const altDayStart = startOfDay(altDate)
+                const altDayEnd = addMinutes(altDayStart, 24 * 60)
+                const { data: altData } = await supabase
+                  .from('appointments')
+                  .select('start_time, end_time, status')
+                  .eq('staff_id', staff_id)
+                  .gte('start_time', altDayStart.toISOString())
+                  .lt('start_time', altDayEnd.toISOString())
+                  .neq('status', 'cancelled')
+                const altList = (altData ?? []).map((a: { start_time: string; end_time: string }) => {
+                  const start = new Date(a.start_time)
+                  const end = new Date(a.end_time)
+                  return { start_min: start.getHours() * 60 + start.getMinutes(), end_min: end.getHours() * 60 + end.getMinutes() }
+                })
+                const altSlots = generateSlots(slotDuration, altRanges, altList)
+                const altAvailable = altSlots.filter((s) => !s.occupied)
+                if (altAvailable.length > 0) {
+                  const similarSlot = altAvailable.find((s) => Math.abs(s.start_min - targetMin) < 120) || altAvailable[0]
+                  alternatives.push({
+                    date: altDateStr,
+                    time: minutesToTime(similarSlot.start_min),
+                    label: `${format(altDate, "d 'de' MMMM", { locale: es })} a las ${minutesToTime(similarSlot.start_min)}`,
+                  })
+                }
+              }
+            }
+            setAlternativeSlots(alternatives)
+          }
+          findAlternatives()
+        } else {
+          setAlternativeSlots([])
+        }
       })
-  }, [staff_id, selectedDate, selectedService, businessHoursByDay, supabase])
+  }, [staff_id, selectedDate, selectedService, businessHoursByDay, supabase, dateStr, selectedService?.duration])
+
+  useEffect(() => {
+    if (filteredSlots.length > 0 && !hasAutoAdjustedRef.current) {
+      const availableSlots = filteredSlots.filter((s) => !s.occupied)
+      if (availableSlots.length > 0) {
+        const firstSlot = availableSlots[0]
+        autoAdjustRef.current = true
+        setStartDateTime((prev) => {
+          const newTime = minutesToTime(firstSlot.start_min)
+          return prev.slice(0, 11) + newTime
+        })
+        hasAutoAdjustedRef.current = true
+      }
+    }
+  }, [filteredSlots])
 
   useEffect(() => {
     if (!startDateTime || !endDateTime || !staff_id || !dateStr || !selectedService) {
@@ -172,7 +257,7 @@ export function NewAppointmentForm({
     const dow = getDayOfWeek(dateForDay)
     const ranges = getOpenRangesForDay(businessHoursByDay, dow)
     if (!isWithinBusinessHours(startMin, ranges) || !isWithinBusinessHours(endMin - 1, ranges)) {
-      const next = { type: 'outside_hours' as const, message: 'La hora está fuera del horario de operación del negocio.' }
+      const next = { type: 'outside_hours' as const, message: 'Esta hora está fuera del horario de operación.' }
       setConflict((prev) => (prev?.type === 'outside_hours' ? prev : next))
       return
     }
@@ -194,13 +279,22 @@ export function NewAppointmentForm({
   }, [startDateTime, endDateTime, staff_id, dateStr, selectedService, businessHoursByDay, staffAppointments])
 
   useEffect(() => {
-    if (selectedService) setPrice_total(String(selectedService.price))
+    if (selectedService) {
+      setPrice_total(String(selectedService.price))
+      hasAutoAdjustedRef.current = false
+    }
   }, [selectedService])
+
+  useEffect(() => {
+    hasAutoAdjustedRef.current = false
+  }, [staff_id])
 
   const handleSelectExistingClient = useCallback((client: ClientOption) => {
     setSelectedClient(client)
     setIsNewClient(false)
     setClientSearchText(client.name)
+    setExistingClientPhone(client.phone || '')
+    setExistingClientEmail(client.email || '')
     setPhoneDuplicateError(null)
   }, [])
 
@@ -224,17 +318,17 @@ export function NewAppointmentForm({
     const hasService = !!service_id
     const hasStaff = !!staff_id
     const hasStart = !!startDateTime
-    const hasEnd = !!endDateTime
+    const hasEnd = computedEnd || endDateTime
     const noPast = () => {
+      if (!startDateTime) return false
       const start = new Date(startDateTime)
       const now = new Date()
       if (isBefore(start, now)) return false
       return true
     }
     if (conflict && !conflictAck) return false
-    if (timeError) return false
     return !!(hasClient && hasService && hasStaff && hasStart && hasEnd && noPast())
-  }, [isNewClient, newClientName, newClientPhone, selectedClient, service_id, staff_id, startDateTime, endDateTime, conflict, conflictAck, timeError])
+  }, [isNewClient, newClientName, newClientPhone, selectedClient, service_id, staff_id, startDateTime, computedEnd, endDateTime, conflict, conflictAck])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -286,6 +380,26 @@ export function NewAppointmentForm({
           return
         }
         clientId = selectedClient.id
+        
+        const phoneChanged = existingClientPhone.trim() !== (selectedClient.phone || '')
+        const emailChanged = existingClientEmail.trim() !== (selectedClient.email || '')
+        
+        if (phoneChanged || emailChanged) {
+          const updateData: { phone?: string; email?: string | null } = {}
+          if (phoneChanged) updateData.phone = existingClientPhone.trim()
+          if (emailChanged) updateData.email = existingClientEmail.trim() || null
+          
+          const { error: updateClientErr } = await supabase
+            .from('clients')
+            .update(updateData)
+            .eq('id', selectedClient.id)
+          
+          if (updateClientErr) {
+            setError(`Error al actualizar cliente: ${updateClientErr.message}`)
+            setLoading(false)
+            return
+          }
+        }
       }
 
       const start = new Date(startDateTime)
@@ -335,26 +449,7 @@ export function NewAppointmentForm({
   const selectedStartMin = selectedDate && startDateTime ? timeToMinutes(startDateTime.slice(11, 16)) : null
 
   const now = new Date()
-  const todayStr = format(now, 'yyyy-MM-dd')
-  const minTimeStr = dateStr === todayStr ? format(now, 'HH:mm') : '00:00'
-  const timeInputDisabled = !dateStr || !selectedService
-  const validateTime = useCallback((timeVal: string) => {
-    if (!timeVal) return
-    const [h, m] = timeVal.split(':').map(Number)
-    if (h < 0 || h > 23 || m < 0 || m > 59) {
-      setTimeError('Hora no válida. Use formato HH:MM (00:00 - 23:59).')
-      return
-    }
-    if (dateStr === todayStr) {
-      const nowMin = now.getHours() * 60 + now.getMinutes()
-      const selMin = h * 60 + m
-      if (selMin < nowMin) {
-        setTimeError('No se puede seleccionar una hora pasada para el día actual.')
-        return
-      }
-    }
-    setTimeError(null)
-  }, [dateStr, todayStr])
+  const minDate = now
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -369,14 +464,14 @@ export function NewAppointmentForm({
           <AlertTriangle className="h-5 w-5 text-yellow-600 flex-shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
             <p className="font-medium text-yellow-800">
-              CONFLICTO DE HORARIO
+              ⚠️ ADVERTENCIA DE HORARIO
             </p>
             <p className="text-sm text-yellow-800 mt-1">
               {conflict.type === 'overlap' && conflict.existingClient && (
-                <>El empleado ya tiene una cita de {conflict.existingStart} a {conflict.existingEnd} con {conflict.existingClient}{conflict.existingService ? ` (${conflict.existingService})` : ''}. ¿Deseas continuar de todas formas?</>
+                <>El empleado ya tiene una cita de {conflict.existingStart} a {conflict.existingEnd} con {conflict.existingClient}{conflict.existingService ? ` (${conflict.existingService})` : ''}. Puedes continuar si lo deseas.</>
               )}
-              {conflict.type === 'overlap' && !conflict.existingClient && <>{conflict.message}</>}
-              {conflict.type === 'outside_hours' && conflict.message}
+              {conflict.type === 'overlap' && !conflict.existingClient && <>{conflict.message} Puedes continuar si lo deseas.</>}
+              {conflict.type === 'outside_hours' && <>{conflict.message} Puedes continuar si lo deseas.</>}
             </p>
             <label className="mt-3 flex items-center gap-2 cursor-pointer">
               <input
@@ -385,7 +480,7 @@ export function NewAppointmentForm({
                 onChange={(e) => setConflictAck(e.target.checked)}
                 className="rounded border-yellow-600 text-yellow-600 focus:ring-yellow-500"
               />
-              <span className="text-sm text-yellow-800">Entiendo el conflicto y quiero crear la cita de todas formas</span>
+              <span className="text-sm text-yellow-800">Entiendo la advertencia y quiero crear la cita</span>
             </label>
           </div>
         </div>
@@ -394,7 +489,7 @@ export function NewAppointmentForm({
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-8">
         <div className="space-y-4">
           <div>
-            <Label>Cliente</Label>
+            <Label className="text-gray-900 font-medium">Cliente</Label>
             <ClientSearchCombobox
               businessId={businessId}
               recentClients={recentClients}
@@ -403,13 +498,33 @@ export function NewAppointmentForm({
               onSelectExisting={handleSelectExistingClient}
               onSelectNew={handleSelectNewClient}
               disabled={false}
-              className="mt-1"
+              className="mt-1 [&_input]:text-gray-900 [&_input]:font-medium"
             />
             {selectedClient && !isNewClient && (
-              <p className="text-xs text-gray-500 mt-1">
-                {selectedClient.phone && <>Tel: {selectedClient.phone}</>}
-                {selectedClient.email && <> · {selectedClient.email}</>}
-              </p>
+              <div className="mt-3 space-y-3 rounded-lg border border-gray-200 bg-gray-50/50 p-4">
+                <p className="text-xs font-medium text-gray-700 mb-2">Actualizar datos del cliente</p>
+                <div>
+                  <Label htmlFor="existing-client-phone" className="text-gray-900 font-medium">Teléfono</Label>
+                  <Input
+                    id="existing-client-phone"
+                    value={existingClientPhone}
+                    onChange={(e) => setExistingClientPhone(e.target.value)}
+                    className="mt-1 text-gray-900 font-medium"
+                    placeholder="Ej: 612345678"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="existing-client-email" className="text-gray-900 font-medium">Email</Label>
+                  <Input
+                    id="existing-client-email"
+                    type="email"
+                    value={existingClientEmail}
+                    onChange={(e) => setExistingClientEmail(e.target.value)}
+                    className="mt-1 text-gray-900 font-medium"
+                    placeholder="email@ejemplo.com"
+                  />
+                </div>
+              </div>
             )}
           </div>
 
@@ -466,68 +581,51 @@ export function NewAppointmentForm({
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="date">Fecha</Label>
-              <Input
-                id="date"
-                type="date"
-                value={dateStr}
-                onChange={(e) => {
-                  setDateStr(e.target.value)
-                  if (startTimeStr) setTimeout(() => validateTime(startTimeStr), 0)
-                }}
-                min={format(new Date(), 'yyyy-MM-dd')}
-                className="mt-1"
-              />
-            </div>
-            <div>
-              <Label htmlFor="start_time">Hora inicio</Label>
-              <div className="mt-1 relative">
-                <Input
-                  id="start_time"
-                  type="time"
-                  value={startTimeStr}
-                  onChange={(e) => {
-                    setStartTimeStr(e.target.value)
-                    setTimeError(null)
-                  }}
-                  onBlur={(e) => validateTime(e.target.value)}
-                  min={minTimeStr}
-                  max="23:59"
-                  step="900"
-                  required
-                  disabled={timeInputDisabled}
-                  placeholder="HH:MM"
-                  className={cn(
-                    'pr-9 cursor-pointer',
-                    timeInputDisabled && 'opacity-50 cursor-not-allowed',
-                    timeError && 'border-red-500 focus-visible:ring-red-500'
-                  )}
-                  aria-invalid={!!timeError}
-                  aria-describedby={timeError ? 'start_time_error' : undefined}
-                />
-                <Clock className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
-              </div>
-              {timeError && (
-                <p id="start_time_error" className="text-xs text-red-600 mt-1">
-                  {timeError}
-                </p>
-              )}
-            </div>
+            <DateNavigator
+              value={dateStr}
+              onChange={setDateStr}
+              minDate={minDate}
+            />
+            <TimeNavigator
+              value={startTimeStr}
+              onChange={setStartTimeStr}
+              availableSlots={filteredSlots}
+              disabled={!dateStr || !selectedService}
+            />
           </div>
 
           <div>
-            <Label className="flex items-center gap-2">
+            <Label className="flex items-center gap-2 text-gray-900 font-medium">
               <Calculator className="h-4 w-4 text-gray-500" />
               Hora fin (calculado)
             </Label>
             <div className="mt-1 flex items-center gap-2">
-              <Input
-                readOnly={!customEndOverride}
-                value={endDateTime}
-                onChange={(e) => customEndOverride && setCustomEndDateTime(e.target.value)}
-                className={cn('bg-gray-50', !customEndOverride && 'cursor-not-allowed')}
-              />
+              {customEndOverride ? (
+                <Input
+                  type="datetime-local"
+                  value={customEndDateTime}
+                  onChange={(e) => setCustomEndDateTime(e.target.value)}
+                  className="flex-1 text-gray-900 font-medium"
+                />
+              ) : (
+                <div
+                  className={cn(
+                    'flex-1 min-h-10 px-3 py-2 rounded-md border border-gray-300 bg-gray-50 text-base font-medium text-gray-900',
+                    'cursor-default'
+                  )}
+                >
+                  {endDateTime
+                    ? (() => {
+                        try {
+                          const d = new Date(endDateTime)
+                          return isNaN(d.getTime()) ? endDateTime : format(d, "d 'de' MMMM 'de' yyyy HH:mm", { locale: es })
+                        } catch {
+                          return endDateTime
+                        }
+                      })()
+                    : '--'}
+                </div>
+              )}
               <Button
                 type="button"
                 variant="outline"
@@ -544,7 +642,7 @@ export function NewAppointmentForm({
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <Label htmlFor="price_total">Precio total (€)</Label>
+              <Label htmlFor="price_total" className="text-gray-900 font-medium">Precio total (€)</Label>
               <Input
                 id="price_total"
                 type="number"
@@ -552,7 +650,7 @@ export function NewAppointmentForm({
                 value={price_total}
                 onChange={(e) => setPrice_total(e.target.value)}
                 placeholder={selectedService?.price?.toString()}
-                className="mt-1"
+                className="mt-1 text-gray-900 font-medium text-base"
               />
             </div>
             <div>
@@ -584,16 +682,6 @@ export function NewAppointmentForm({
             </label>
           )}
 
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={sendWhatsApp}
-              onChange={(e) => setSendWhatsApp(e.target.checked)}
-              className="rounded border-gray-300 text-[#2563eb] focus:ring-[#2563eb]"
-            />
-            <span className="text-sm text-gray-700">Enviar confirmación por WhatsApp</span>
-          </label>
-
           <div className="flex gap-3 pt-2">
             <Button type="submit" disabled={loading || !canSubmit}>
               {loading ? 'Creando...' : 'Crear cita'}
@@ -621,9 +709,36 @@ export function NewAppointmentForm({
                 <p className="text-sm text-gray-500">Selecciona un servicio para ver slots.</p>
               ) : openRanges.length === 0 ? (
                 <p className="text-sm text-amber-700">El negocio está cerrado este día.</p>
+              ) : filteredSlots.filter((s) => !s.occupied).length === 0 ? (
+                <div className="space-y-3">
+                  <p className="text-sm font-medium text-gray-900">
+                    {isToday(selectedDate ?? new Date()) ? 'No hay horarios disponibles para hoy.' : `No hay horarios disponibles para ${format(selectedDate ?? new Date(), "d 'de' MMMM", { locale: es })}.`}
+                  </p>
+                  {alternativeSlots.length > 0 && (
+                    <div>
+                      <p className="text-xs text-gray-600 mb-2">Sugerencias para días próximos:</p>
+                      <ul className="space-y-1">
+                        {alternativeSlots.map((alt, idx) => (
+                          <li key={idx}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setDateStr(alt.date)
+                                setStartTimeStr(alt.time)
+                              }}
+                              className="w-full text-left px-3 py-2 rounded text-sm bg-blue-50 text-blue-800 hover:bg-blue-100 border border-blue-200"
+                            >
+                              <span className="font-medium">{alt.label}</span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
               ) : (
                 <ul className="space-y-1">
-                  {slots.map((slot) => {
+                  {filteredSlots.map((slot) => {
                     const isSelected = selectedStartMin !== null && slot.start_min === selectedStartMin
                     return (
                       <li key={slot.label}>

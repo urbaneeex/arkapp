@@ -8,7 +8,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { format, parseISO } from 'date-fns'
+import { format, parseISO, isSameDay } from 'date-fns'
 import { es } from 'date-fns/locale'
 
 export function MoveAppointmentDialog({
@@ -17,6 +17,7 @@ export function MoveAppointmentDialog({
   appointment,
   fromDate,
   toDate,
+  conflictWarning,
   onConfirm,
   loading,
 }: {
@@ -25,10 +26,13 @@ export function MoveAppointmentDialog({
   appointment: { id: string; client_name: string | null; service_name: string | null; start_time: string } | null
   fromDate: Date | null
   toDate: Date | null
+  conflictWarning?: string | null
   onConfirm: () => void
   loading: boolean
 }) {
   if (!appointment || !fromDate || !toDate) return null
+
+  const sameDay = isSameDay(fromDate, toDate)
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -36,7 +40,9 @@ export function MoveAppointmentDialog({
         <DialogHeader>
           <DialogTitle>Mover cita</DialogTitle>
           <DialogDescription>
-            ¿Mover esta cita al nuevo día? Se mantendrá la misma hora.
+            {sameDay
+              ? '¿Mover esta cita a la nueva hora del mismo día?'
+              : '¿Mover esta cita al nuevo día? Se mantendrá la misma hora.'}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3 py-2">
@@ -48,14 +54,23 @@ export function MoveAppointmentDialog({
           </p>
           <div className="flex flex-wrap gap-4 text-sm">
             <div>
-              <span className="text-gray-500">Fecha actual: </span>
-              <span className="font-medium">{format(fromDate, "EEEE d MMMM", { locale: es })}</span>
+              <span className="text-gray-500">{sameDay ? 'Hora actual: ' : 'Fecha actual: '}</span>
+              <span className="font-medium">
+                {sameDay ? format(fromDate, 'HH:mm') : format(fromDate, "EEEE d MMMM", { locale: es })}
+              </span>
             </div>
             <div>
-              <span className="text-gray-500">Nueva fecha: </span>
-              <span className="font-medium text-blue-600">{format(toDate, "EEEE d MMMM", { locale: es })}</span>
+              <span className="text-gray-500">{sameDay ? 'Nueva hora: ' : 'Nueva fecha: '}</span>
+              <span className="font-medium text-blue-600">
+                {sameDay ? format(toDate, 'HH:mm') : format(toDate, "EEEE d MMMM", { locale: es })}
+              </span>
             </div>
           </div>
+          {conflictWarning && (
+            <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+              {conflictWarning}
+            </p>
+          )}
           <div className="flex justify-end gap-2 pt-4">
             <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
               Cancelar

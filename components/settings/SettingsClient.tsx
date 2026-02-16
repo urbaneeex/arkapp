@@ -22,6 +22,7 @@ import {
   Plus,
   Trash2,
 } from 'lucide-react'
+import { useBusinessStore } from '@/stores/business'
 const INDUSTRIES = ['Belleza', 'Salud', 'Consultoría', 'Fitness', 'Educación', 'Legal', 'Otro']
 const DAYS = [
   { label: 'Lunes', day: 1 },
@@ -122,6 +123,7 @@ export function SettingsClient({
   const [webhookUrl, setWebhookUrl] = useState((notif.webhook_url as string) ?? '')
 
   const supabase = createClient()
+  const setBusiness = useBusinessStore((s) => s.setBusiness)
 
   const showFeedback = (type: 'error' | 'success', msg: string) => {
     if (type === 'error') setError(msg)
@@ -152,6 +154,11 @@ export function SettingsClient({
       .eq('id', business.id)
     setSaving(null)
     if (e) return showFeedback('error', e.message)
+    setBusiness({
+      name,
+      logo_url: logoUrl || null,
+      plan: business.plan ?? null,
+    })
     showFeedback('success', 'Datos guardados.')
     router.refresh()
   }
@@ -188,6 +195,11 @@ export function SettingsClient({
     setLogoUploading(false)
     if (updateErr) return showFeedback('error', updateErr.message)
     setLogoUrl(publicUrl)
+    setBusiness({
+      name: business.name,
+      logo_url: publicUrl,
+      plan: business.plan ?? null,
+    })
     showFeedback('success', 'Logo actualizado.')
     router.refresh()
     e.target.value = ''
@@ -203,6 +215,11 @@ export function SettingsClient({
     setLogoUploading(false)
     if (e) return showFeedback('error', e.message)
     setLogoUrl('')
+    setBusiness({
+      name: business.name,
+      logo_url: null,
+      plan: business.plan ?? null,
+    })
     showFeedback('success', 'Logo eliminado.')
     router.refresh()
   }

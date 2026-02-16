@@ -184,24 +184,24 @@ export function AppointmentForm({
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <Label htmlFor="start_time">Inicio</Label>
+          <Label htmlFor="start_time" className="text-gray-900 font-medium">Inicio</Label>
           <Input
             id="start_time"
             type="datetime-local"
             value={form.start_time}
             onChange={(e) => setForm((f) => ({ ...f, start_time: e.target.value }))}
             required
-            className="mt-1"
+            className="mt-1 text-gray-900 font-medium"
           />
         </div>
         <div>
-          <Label htmlFor="end_time">Fin</Label>
+          <Label htmlFor="end_time" className="text-gray-900 font-medium">Fin</Label>
           <Input
             id="end_time"
             type="datetime-local"
             value={form.end_time || suggestedEnd}
             onChange={(e) => setForm((f) => ({ ...f, end_time: e.target.value }))}
-            className="mt-1"
+            className="mt-1 text-gray-900 font-medium"
           />
         </div>
       </div>
@@ -222,7 +222,7 @@ export function AppointmentForm({
           </select>
         </div>
         <div>
-          <Label htmlFor="price_total">Precio total (€)</Label>
+          <Label htmlFor="price_total" className="text-gray-900 font-medium">Precio total (€)</Label>
           <Input
             id="price_total"
             type="number"
@@ -232,7 +232,7 @@ export function AppointmentForm({
               setForm((f) => ({ ...f, price_total: e.target.value }))
             }
             placeholder={selectedService?.price.toString()}
-            className="mt-1"
+            className="mt-1 text-gray-900 font-medium text-base"
           />
         </div>
       </div>

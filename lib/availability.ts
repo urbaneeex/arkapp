@@ -48,6 +48,25 @@ export function isWithinBusinessHours(minutes: number, ranges: { start: number; 
   return ranges.some((r) => minutes >= r.start && minutes < r.end)
 }
 
+const MINUTES_PER_DAY = 24 * 60
+
+/**
+ * Return closed (out-of-operation) ranges in minutes for a day.
+ * Ranges are sorted and non-overlapping.
+ */
+export function getClosedRangesForDay(shiftsByDay: Record<number, Shift[]>, dayOfWeek: number): { start: number; end: number }[] {
+  const open = getOpenRangesForDay(shiftsByDay, dayOfWeek)
+  if (open.length === 0) return [{ start: 0, end: MINUTES_PER_DAY }]
+  const closed: { start: number; end: number }[] = []
+  let prevEnd = 0
+  for (const r of open.sort((a, b) => a.start - b.start)) {
+    if (r.start > prevEnd) closed.push({ start: prevEnd, end: r.start })
+    prevEnd = Math.max(prevEnd, r.end)
+  }
+  if (prevEnd < MINUTES_PER_DAY) closed.push({ start: prevEnd, end: MINUTES_PER_DAY })
+  return closed
+}
+
 /**
  * Check if [startMin, endMin) overlaps any existing appointment.
  * appointments: { start_min: number, end_min: number }[] for the same day.

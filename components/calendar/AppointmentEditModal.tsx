@@ -84,8 +84,8 @@ export function AppointmentEditModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent showClose={true} className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Editar cita</DialogTitle>
-          <p className="text-sm text-gray-500">
+          <DialogTitle className="text-2xl font-bold text-gray-900">Editar cita</DialogTitle>
+          <p className="text-sm font-medium text-gray-700 mt-1">
             {format(parseISO(appointment.start_time), "EEEE d MMMM · HH:mm", { locale: es })}
           </p>
         </DialogHeader>

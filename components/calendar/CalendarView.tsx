@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   format,
@@ -30,23 +30,29 @@ import {
 import { es } from 'date-fns/locale'
 import {
   DndContext,
+  DragOverlay,
   PointerSensor,
   useSensor,
   useSensors,
   useDraggable,
   useDroppable,
+  useDndMonitor,
   type DragEndEvent,
 } from '@dnd-kit/core'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { AppointmentsCalendar } from '@/components/appointments/AppointmentsCalendar'
+import { ClientOnlyDnd } from '@/components/calendar/ClientOnlyDnd'
 import { AppointmentPopover, type AppointmentForPopover } from '@/components/calendar/AppointmentPopover'
 import { MoveAppointmentDialog } from '@/components/calendar/MoveAppointmentDialog'
 import { AppointmentEditModal } from '@/components/calendar/AppointmentEditModal'
 import { ToastSimple } from '@/components/ui/toast-simple'
 import { createClient } from '@/lib/supabase/client'
 import { addMinutes } from 'date-fns'
+import { getDayOfWeek } from '@/lib/availability'
+import type { Shift } from '@/lib/availability'
+import { getClosedRangesForDay } from '@/lib/availability'
 
 const STATUS_COLORS: Record<string, string> = {
   pending: 'bg-amber-100 border-amber-300 text-amber-800',
@@ -103,12 +109,14 @@ export function CalendarView({
   services,
   staff,
   businessId,
+  shiftsByDay = {},
 }: {
   appointments: AppointmentRow[]
   clients: { id: string; name: string }[]
   services: { id: string; name: string; duration: number; price: number }[]
   staff: { id: string; name: string }[]
   businessId: string
+  shiftsByDay?: Record<number, Shift[]>
 }) {
   const router = useRouter()
   const supabase = createClient()
@@ -122,6 +130,7 @@ export function CalendarView({
     apt: AppointmentNormalized
     fromDate: Date
     toDate: Date
+    conflictWarning: string | null
   } | null>(null)
   const [moveLoading, setMoveLoading] = useState(false)
   const [editModalAppointmentId, setEditModalAppointmentId] = useState<string | null>(null)
@@ -213,14 +222,32 @@ export function CalendarView({
 
   const handleDropAppointment = useCallback((apt: AppointmentNormalized, toDate: Date) => {
     const fromDate = parseISO(apt.start_time)
-    if (isSameDay(fromDate, toDate)) return
     const today = startOfDay(new Date())
     if (toDate < today) {
       setToast({ message: 'No se puede mover la cita a una fecha pasada', type: 'error' })
       return
     }
-    setMoveDialog({ apt, fromDate, toDate })
-  }, [])
+    const start = parseISO(apt.start_time)
+    const end = parseISO(apt.end_time)
+    const durationMs = end.getTime() - start.getTime()
+    const newStart = new Date(toDate)
+    newStart.setSeconds(0, 0)
+    const newEnd = addMinutes(newStart, Math.round(durationMs / 60000))
+    const newStartMs = newStart.getTime()
+    const newEndMs = newEnd.getTime()
+    const sameDayStaff = filteredAppointments.filter(
+      (a) => a.id !== apt.id && a.staff_id === apt.staff_id && isSameDay(parseISO(a.start_time), toDate)
+    )
+    const conflict = sameDayStaff.find((a) => {
+      const aStart = parseISO(a.start_time).getTime()
+      const aEnd = parseISO(a.end_time).getTime()
+      return newStartMs < aEnd && newEndMs > aStart
+    })
+    const conflictWarning = conflict
+      ? `Atención: hay solapamiento con otra cita (${conflict.client_name ?? 'cliente'}). Puedes continuar bajo tu responsabilidad.`
+      : null
+    setMoveDialog({ apt, fromDate, toDate, conflictWarning })
+  }, [filteredAppointments])
 
   const handleConfirmMove = useCallback(async () => {
     if (!moveDialog) return
@@ -229,7 +256,7 @@ export function CalendarView({
     const end = parseISO(moveDialog.apt.end_time)
     const durationMs = end.getTime() - start.getTime()
     const newStart = new Date(moveDialog.toDate)
-    newStart.setHours(start.getHours(), start.getMinutes(), 0, 0)
+    newStart.setSeconds(0, 0)
     const newEnd = addMinutes(newStart, Math.round(durationMs / 60000))
     const { error } = await supabase
       .from('appointments')
@@ -292,58 +319,66 @@ export function CalendarView({
         </div>
       </div>
 
-      {view === 'week' ? (
-        <AppointmentsCalendar
-          appointments={appointmentsForWeekView}
-          clients={clients}
-          services={services}
-          staff={staff}
-          businessId={businessId}
-          controlledWeekStart={startOfWeek(current, { weekStartsOn: 1 })}
-          hideToolbar
-          onAppointmentClick={(apt, e) => {
-            e.preventDefault()
-            e.stopPropagation()
-            setAnchorPosition({ x: e.clientX, y: e.clientY })
-            setPopoverAppointment({
-              id: apt.id,
-              start_time: apt.start_time,
-              end_time: apt.end_time,
-              status: apt.status ?? 'pending',
-              client_name: Array.isArray(apt.clients) ? apt.clients[0]?.name ?? null : apt.clients?.name ?? null,
-              service_name: Array.isArray(apt.services) ? apt.services[0]?.name ?? null : apt.services?.name ?? null,
-              staff_name: Array.isArray(apt.staff) ? apt.staff[0]?.name ?? null : apt.staff?.name ?? null,
-            })
-          }}
-          onDropAppointment={(apt, toDate) => handleDropAppointment(normalizeAppointment(apt), toDate)}
-        />
-      ) : (
-        <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
-          {view === 'day' && (
-            <DayView
-              day={current}
-              appointments={aptsForDay(current)}
-              onAppointmentClick={handleAppointmentClick}
-            />
-          )}
-          {view === 'month' && (
-            <MonthView
-              month={current}
-              appointments={filteredAppointments}
-              onAppointmentClick={handleAppointmentClick}
-              onDropAppointment={handleDropAppointment}
-            />
-          )}
-          {view === 'year' && (
-            <YearView
-              year={current}
-              appointments={filteredAppointments}
-              onGoToDay={(day) => { setCurrent(day); setView('day') }}
-              onAppointmentClick={handleAppointmentClick}
-            />
-          )}
-        </div>
-      )}
+      <ClientOnlyDnd
+        fallback={
+          <div className="rounded-xl border border-gray-200 bg-white overflow-hidden min-h-[400px]" aria-hidden />
+        }
+      >
+        {view === 'week' ? (
+          <AppointmentsCalendar
+            appointments={appointmentsForWeekView}
+            clients={clients}
+            services={services}
+            staff={staff}
+            businessId={businessId}
+            controlledWeekStart={startOfWeek(current, { weekStartsOn: 1 })}
+            hideToolbar
+            onAppointmentClick={(apt, e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              setAnchorPosition({ x: e.clientX, y: e.clientY })
+              setPopoverAppointment({
+                id: apt.id,
+                start_time: apt.start_time,
+                end_time: apt.end_time,
+                status: apt.status ?? 'pending',
+                client_name: Array.isArray(apt.clients) ? apt.clients[0]?.name ?? null : apt.clients?.name ?? null,
+                service_name: Array.isArray(apt.services) ? apt.services[0]?.name ?? null : apt.services?.name ?? null,
+                staff_name: Array.isArray(apt.staff) ? apt.staff[0]?.name ?? null : apt.staff?.name ?? null,
+              })
+            }}
+            onDropAppointment={(apt, toDate) => handleDropAppointment(normalizeAppointment(apt), toDate)}
+          />
+        ) : (
+          <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+            {view === 'day' && (
+              <DayView
+                day={current}
+                appointments={aptsForDay(current)}
+                shiftsByDay={shiftsByDay}
+                onAppointmentClick={handleAppointmentClick}
+                onDropInDay={handleDropAppointment}
+              />
+            )}
+            {view === 'month' && (
+              <MonthView
+                month={current}
+                appointments={filteredAppointments}
+                onAppointmentClick={handleAppointmentClick}
+                onDropAppointment={handleDropAppointment}
+              />
+            )}
+            {view === 'year' && (
+              <YearView
+                year={current}
+                appointments={filteredAppointments}
+                onGoToDay={(day) => { setCurrent(day); setView('day') }}
+                onAppointmentClick={handleAppointmentClick}
+              />
+            )}
+          </div>
+        )}
+      </ClientOnlyDnd>
 
       <AppointmentPopover
         appointment={popoverAppointment}
@@ -368,6 +403,7 @@ export function CalendarView({
         appointment={moveDialog ? { id: moveDialog.apt.id, client_name: moveDialog.apt.client_name, service_name: moveDialog.apt.service_name, start_time: moveDialog.apt.start_time } : null}
         fromDate={moveDialog?.fromDate ?? null}
         toDate={moveDialog?.toDate ?? null}
+        conflictWarning={moveDialog?.conflictWarning ?? null}
         onConfirm={handleConfirmMove}
         loading={moveLoading}
       />
@@ -386,54 +422,310 @@ export function CalendarView({
   )
 }
 
+const DAY_VIEW_START_MIN = 6 * 60
+const DAY_VIEW_END_MIN = 24 * 60
+const SLOT_MINUTES = 5
+const MINUTES_PER_SLOT = 5
+const TOTAL_SLOTS = (DAY_VIEW_END_MIN - DAY_VIEW_START_MIN) / MINUTES_PER_SLOT
+const SLOT_HEIGHT_PX = 24
+
 function DayView({
   day,
   appointments,
+  shiftsByDay,
+  onAppointmentClick,
+  onDropInDay,
+}: {
+  day: Date
+  appointments: AppointmentNormalized[]
+  shiftsByDay: Record<number, Shift[]>
+  onAppointmentClick: (apt: AppointmentNormalized, e: React.MouseEvent) => void
+  onDropInDay: (apt: AppointmentNormalized, toDate: Date) => void
+}) {
+  const dayOfWeek = getDayOfWeek(day)
+  const closedRanges = useMemo(
+    () => getClosedRangesForDay(shiftsByDay, dayOfWeek),
+    [shiftsByDay, dayOfWeek]
+  )
+
+  const isSlotClosed = useCallback(
+    (slotIndex: number) => {
+      const startMin = DAY_VIEW_START_MIN + slotIndex * MINUTES_PER_SLOT
+      const endMin = startMin + MINUTES_PER_SLOT
+      return closedRanges.some((r) => startMin < r.end && endMin > r.start)
+    },
+    [closedRanges]
+  )
+
+  const [currentTimeTop, setCurrentTimeTop] = useState<number | null>(null)
+  const isToday = isSameDay(day, new Date())
+
+  useEffect(() => {
+    if (!isToday) {
+      setCurrentTimeTop(null)
+      return
+    }
+    const update = () => {
+      const now = new Date()
+      const minSinceMidnight = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60
+      if (minSinceMidnight < DAY_VIEW_START_MIN || minSinceMidnight >= DAY_VIEW_END_MIN) {
+        setCurrentTimeTop(null)
+        return
+      }
+      const pct = (minSinceMidnight - DAY_VIEW_START_MIN) / (DAY_VIEW_END_MIN - DAY_VIEW_START_MIN)
+      setCurrentTimeTop(pct * TOTAL_SLOTS * SLOT_HEIGHT_PX)
+    }
+    update()
+    const id = setInterval(update, 60000)
+    return () => clearInterval(id)
+  }, [isToday])
+
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
+  const [overSlot, setOverSlot] = useState<number | null>(null)
+
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event
+      setOverSlot(null)
+      if (over?.id == null || typeof over.id !== 'string') return
+      const slotIndex = parseInt(over.id.replace('slot-', ''), 10)
+      if (isNaN(slotIndex) || slotIndex < 0 || slotIndex >= TOTAL_SLOTS) return
+      const apt = appointments.find((a) => a.id === active.id)
+      if (!apt) return
+      if (apt.status === 'completed' || apt.status === 'cancelled') return
+      const newStartMin = DAY_VIEW_START_MIN + slotIndex * MINUTES_PER_SLOT
+      const toDate = new Date(day)
+      toDate.setHours(Math.floor(newStartMin / 60), newStartMin % 60, 0, 0)
+      onDropInDay(apt, toDate)
+    },
+    [appointments, day, onDropInDay]
+  )
+
+  const timeLabels = useMemo(() => {
+    const out: { min: number; label: string; isMajor: boolean }[] = []
+    for (let min = DAY_VIEW_START_MIN; min < DAY_VIEW_END_MIN; min += MINUTES_PER_SLOT) {
+      const isMajor = min % 30 === 0
+      out.push({
+        min,
+        label: `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`,
+        isMajor,
+      })
+    }
+    return out
+  }, [])
+
+  return (
+    <DndContext
+      sensors={sensors}
+      onDragEnd={handleDragEnd}
+      onDragOver={(e) => {
+        const over = e.over?.id
+        if (over != null && typeof over === 'string' && over.startsWith('slot-'))
+          setOverSlot(parseInt(over.replace('slot-', ''), 10))
+      }}
+      onDragCancel={() => setOverSlot(null)}
+    >
+      <DayViewContent
+        day={day}
+        appointments={appointments}
+        isSlotClosed={isSlotClosed}
+        overSlot={overSlot}
+        currentTimeTop={currentTimeTop}
+        isToday={isToday}
+        timeLabels={timeLabels}
+        onAppointmentClick={onAppointmentClick}
+      />
+    </DndContext>
+  )
+}
+
+/** Renders day grid + DragOverlay. Must be a child of DndContext so useDndMonitor works. */
+function DayViewContent({
+  day,
+  appointments,
+  isSlotClosed,
+  overSlot,
+  currentTimeTop,
+  isToday,
+  timeLabels,
   onAppointmentClick,
 }: {
   day: Date
   appointments: AppointmentNormalized[]
+  isSlotClosed: (slotIndex: number) => boolean
+  overSlot: number | null
+  currentTimeTop: number | null
+  isToday: boolean
+  timeLabels: { min: number; label: string; isMajor: boolean }[]
   onAppointmentClick: (apt: AppointmentNormalized, e: React.MouseEvent) => void
 }) {
-  const hours = eachHourOfInterval({ start: startOfDay(day), end: endOfDay(day) })
+  const [activeId, setActiveId] = useState<string | null>(null)
+
+  useDndMonitor({
+    onDragStart: (e) => setActiveId(String(e.active.id)),
+    onDragEnd: () => setActiveId(null),
+    onDragCancel: () => setActiveId(null),
+  })
+
+  const activeApt = activeId ? appointments.find((a) => a.id === activeId) : null
+
   return (
-    <div className="grid grid-cols-[60px_1fr]">
-      <div className="border-r border-gray-200 bg-gray-50">
-        {hours.map((h) => (
-          <div
-            key={h.toISOString()}
-            className="h-14 border-b border-gray-100 text-xs text-gray-500 pl-2 pt-1"
-          >
-            {format(h, 'HH:mm')}
-          </div>
-        ))}
-      </div>
-      <div>
-        {hours.map((h) => {
-          const apts = appointments.filter((a) => parseISO(a.start_time).getHours() === h.getHours())
-          return (
+    <>
+      <div className="relative grid grid-cols-[56px_1fr] min-h-[400px]">
+        <div className="border-r border-gray-200 bg-gray-50/80">
+          {timeLabels.map(({ min, label, isMajor }) => (
             <div
-              key={h.toISOString()}
-              className="h-14 border-b border-gray-100 min-h-[3.5rem]"
+              key={min}
+              className={cn(
+                'border-b border-gray-100 pr-1 text-right',
+                isMajor ? 'text-xs font-medium text-gray-700' : 'text-[10px] text-gray-400'
+              )}
+              style={{ height: SLOT_HEIGHT_PX }}
             >
-              {apts.map((apt) => (
-                <button
-                  key={apt.id}
-                  type="button"
-                  onClick={(e) => onAppointmentClick(apt, e)}
-                  className={cn(
-                    'cursor-pointer w-full text-left block rounded border-l-4 px-2 py-1 text-xs truncate transition-opacity hover:opacity-90',
-                    STATUS_COLORS[apt.status] ?? 'bg-gray-100'
-                  )}
-                >
-                  {format(parseISO(apt.start_time), 'HH:mm')} {apt.client_name ?? apt.service_name ?? 'Cita'}
-                </button>
-              ))}
+              {isMajor ? label : ''}
             </div>
-          )
-        })}
+          ))}
+        </div>
+        <div className="relative overflow-hidden">
+          <div className="absolute inset-0 flex flex-col">
+            {Array.from({ length: TOTAL_SLOTS }).map((_, slotIndex) => {
+              const closed = isSlotClosed(slotIndex)
+              return (
+                <DaySlot
+                  key={slotIndex}
+                  slotIndex={slotIndex}
+                  closed={closed}
+                  isOver={overSlot === slotIndex}
+                  slotHeightPx={SLOT_HEIGHT_PX}
+                />
+              )
+            })}
+          </div>
+          <div className="absolute inset-0 pointer-events-none">
+            <div className="relative w-full h-full pointer-events-auto">
+              {appointments.map((apt) => {
+                const start = parseISO(apt.start_time)
+                if (!isSameDay(start, day)) return null
+                const startMin = start.getHours() * 60 + start.getMinutes()
+                if (startMin < DAY_VIEW_START_MIN || startMin >= DAY_VIEW_END_MIN) return null
+                const slotIndex = Math.floor((startMin - DAY_VIEW_START_MIN) / MINUTES_PER_SLOT)
+                const end = parseISO(apt.end_time)
+                const durationMin = (end.getTime() - start.getTime()) / 60000
+                const heightSlots = Math.max(1, Math.round(durationMin / MINUTES_PER_SLOT))
+                const heightPx = heightSlots * SLOT_HEIGHT_PX - 2
+                return (
+                  <DayDraggableAppointment
+                    key={apt.id}
+                    apt={apt}
+                    slotHeightPx={SLOT_HEIGHT_PX}
+                    dayStartMin={DAY_VIEW_START_MIN}
+                    slotIndex={slotIndex}
+                    onAppointmentClick={onAppointmentClick}
+                    heightPx={heightPx}
+                  />
+                )
+              })}
+            </div>
+          </div>
+          {isToday && currentTimeTop != null && (
+            <div
+              className="absolute left-0 right-0 z-10 pointer-events-none flex items-center gap-1"
+              style={{ top: currentTimeTop, transform: 'translateY(-1px)' }}
+            >
+              <span className="h-2 w-2 rounded-full bg-red-500 shrink-0" />
+              <span className="border-t-2 border-red-500 flex-1" />
+              <span className="text-[10px] font-medium text-red-600 bg-white/90 px-1 rounded">
+                {format(new Date(), 'HH:mm')}
+              </span>
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+
+      <DragOverlay dropAnimation={null}>
+        {activeApt ? (
+          <div
+            className={cn(
+              'rounded border-l-4 px-2 py-1 text-xs truncate cursor-grabbing shadow-lg opacity-95',
+              STATUS_COLORS[activeApt.status] ?? 'bg-gray-100'
+            )}
+          >
+            {format(parseISO(activeApt.start_time), 'HH:mm')} {activeApt.client_name ?? activeApt.service_name ?? 'Cita'}
+          </div>
+        ) : null}
+      </DragOverlay>
+    </>
+  )
+}
+
+function DaySlot({
+  slotIndex,
+  closed,
+  isOver,
+  slotHeightPx,
+}: {
+  slotIndex: number
+  closed: boolean
+  isOver: boolean
+  slotHeightPx: number
+}) {
+  const { setNodeRef, isOver: isOverDnd } = useDroppable({ id: `slot-${slotIndex}` })
+  const showOver = isOver || isOverDnd
+  return (
+    <div
+      ref={setNodeRef}
+      className={cn(
+        'border-b border-gray-100 transition-colors shrink-0',
+        closed && 'bg-gray-100/80 bg-[repeating-linear-gradient(45deg,transparent,transparent_4px,rgba(0,0,0,.03)_4px,rgba(0,0,0,.03)_8px)]',
+        showOver && 'ring-1 ring-inset ring-blue-400 bg-blue-50/50'
+      )}
+      style={{ height: slotHeightPx }}
+    />
+  )
+}
+
+function DayDraggableAppointment({
+  apt,
+  slotHeightPx,
+  dayStartMin,
+  slotIndex,
+  onAppointmentClick,
+  heightPx,
+}: {
+  apt: AppointmentNormalized
+  slotHeightPx: number
+  dayStartMin: number
+  slotIndex: number
+  onAppointmentClick: (apt: AppointmentNormalized, e: React.MouseEvent) => void
+  heightPx: number
+}) {
+  const canDrag = apt.status !== 'completed' && apt.status !== 'cancelled'
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: apt.id,
+    disabled: !canDrag,
+  })
+  const start = parseISO(apt.start_time)
+
+  return (
+    <button
+      ref={setNodeRef}
+      type="button"
+      onClick={(e) => onAppointmentClick(apt, e)}
+      {...(canDrag ? { ...attributes, ...listeners } : {})}
+      title={!canDrag ? 'No se pueden mover citas completadas o canceladas' : undefined}
+      className={cn(
+        'absolute left-1 right-1 rounded border-l-4 px-2 py-0.5 text-xs truncate text-left transition-shadow cursor-pointer',
+        canDrag ? 'cursor-grab active:cursor-grabbing' : 'cursor-not-allowed opacity-90',
+        isDragging && 'opacity-70 shadow-lg z-20',
+        STATUS_COLORS[apt.status] ?? 'bg-gray-100'
+      )}
+      style={{
+        top: slotIndex * slotHeightPx + 1,
+        height: heightPx,
+      }}
+    >
+      {format(start, 'HH:mm')} {apt.client_name ?? apt.service_name ?? 'Cita'}
+    </button>
   )
 }
 
