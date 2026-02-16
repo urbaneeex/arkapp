@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Citas CRM | Gestión de citas para barberías",
-  description: "Sistema de gestión de citas para barberías y negocios similares",
+  title: "CitasPro | CRM de citas y clientes",
+  description: "Gestiona citas, clientes y servicios de cualquier tipo de negocio",
 };
 
 export default function RootLayout({

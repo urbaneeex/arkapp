@@ -170,10 +170,23 @@ export type Database = {
           currency: string | null
           id: string
           name: string
+          owner_name: string | null
+          owner_phone: string | null
+          business_name: string | null
+          onboarding_completed: boolean | null
           owner_uid: string
           slug: string
           timezone: string | null
           whatsapp_number: string | null
+          logo_url: string | null
+          industry: string | null
+          website: string | null
+          address: string | null
+          instagram: string | null
+          facebook: string | null
+          booking_settings: Json | null
+          notification_settings: Json | null
+          plan: string | null
         }
         Insert: {
           config_json?: Json | null
@@ -181,10 +194,23 @@ export type Database = {
           currency?: string | null
           id?: string
           name: string
+          owner_name?: string | null
+          owner_phone?: string | null
+          business_name?: string | null
+          onboarding_completed?: boolean | null
           owner_uid: string
           slug: string
           timezone?: string | null
           whatsapp_number?: string | null
+          logo_url?: string | null
+          industry?: string | null
+          website?: string | null
+          address?: string | null
+          instagram?: string | null
+          facebook?: string | null
+          booking_settings?: Json | null
+          notification_settings?: Json | null
+          plan?: string | null
         }
         Update: {
           config_json?: Json | null
@@ -192,10 +218,23 @@ export type Database = {
           currency?: string | null
           id?: string
           name?: string
+          owner_name?: string | null
+          owner_phone?: string | null
+          business_name?: string | null
+          onboarding_completed?: boolean | null
           owner_uid?: string
           slug?: string
           timezone?: string | null
           whatsapp_number?: string | null
+          logo_url?: string | null
+          industry?: string | null
+          website?: string | null
+          address?: string | null
+          instagram?: string | null
+          facebook?: string | null
+          booking_settings?: Json | null
+          notification_settings?: Json | null
+          plan?: string | null
         }
         Relationships: []
       }
@@ -210,6 +249,9 @@ export type Database = {
           name: string
           notes: string | null
           phone: string
+          tags: string[] | null
+          total_spent: number | null
+          last_visit: string | null
         }
         Insert: {
           address?: string | null
@@ -221,6 +263,9 @@ export type Database = {
           name: string
           notes?: string | null
           phone: string
+          tags?: string[] | null
+          total_spent?: number | null
+          last_visit?: string | null
         }
         Update: {
           address?: string | null
@@ -232,6 +277,9 @@ export type Database = {
           name?: string
           notes?: string | null
           phone?: string
+          tags?: string[] | null
+          total_spent?: number | null
+          last_visit?: string | null
         }
         Relationships: [
           {
@@ -254,6 +302,8 @@ export type Database = {
           name: string
           price: number
           requires_deposit: boolean | null
+          color: string | null
+          category: string | null
         }
         Insert: {
           business_id: string
@@ -265,6 +315,8 @@ export type Database = {
           name: string
           price: number
           requires_deposit?: boolean | null
+          color?: string | null
+          category?: string | null
         }
         Update: {
           business_id?: string
@@ -276,6 +328,8 @@ export type Database = {
           name?: string
           price?: number
           requires_deposit?: boolean | null
+          color?: string | null
+          category?: string | null
         }
         Relationships: [
           {
@@ -297,6 +351,10 @@ export type Database = {
           name: string
           phone: string | null
           role: string | null
+          color: string | null
+          avatar_url: string | null
+          email: string | null
+          schedule: Json | null
         }
         Insert: {
           business_id: string
@@ -307,6 +365,10 @@ export type Database = {
           name: string
           phone?: string | null
           role?: string | null
+          color?: string | null
+          avatar_url?: string | null
+          email?: string | null
+          schedule?: Json | null
         }
         Update: {
           business_id?: string
@@ -317,10 +379,99 @@ export type Database = {
           name?: string
           phone?: string | null
           role?: string | null
+          color?: string | null
+          avatar_url?: string | null
+          email?: string | null
+          schedule?: Json | null
         }
         Relationships: [
           {
             foreignKeyName: "staff_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notifications: {
+        Row: {
+          id: string
+          business_id: string
+          type: string
+          title: string
+          message: string | null
+          read: boolean | null
+          metadata: Json | null
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          business_id: string
+          type: string
+          title: string
+          message?: string | null
+          read?: boolean | null
+          metadata?: Json | null
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          business_id?: string
+          type?: string
+          title?: string
+          message?: string | null
+          read?: boolean | null
+          metadata?: Json | null
+          created_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      expenses: {
+        Row: {
+          id: string
+          business_id: string
+          date: string
+          category: string
+          description: string | null
+          amount: number
+          receipt_url: string | null
+          notes: string | null
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          business_id: string
+          date: string
+          category: string
+          description?: string | null
+          amount: number
+          receipt_url?: string | null
+          notes?: string | null
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          business_id?: string
+          date?: string
+          category?: string
+          description?: string | null
+          amount?: number
+          receipt_url?: string | null
+          notes?: string | null
+          created_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expenses_business_id_fkey"
             columns: ["business_id"]
             isOneToOne: false
             referencedRelation: "businesses"

@@ -1,10 +1,10 @@
 'use client'
 
 import React, { useState } from 'react'
-import { createClient } from '../../../lib/supabase/client'
+import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import { Button } from '../../../components/ui/button'
-import type { Database } from '../../../types/database.types'
+import { Button } from '@/components/ui/button'
+import type { Database } from '@/types/database.types'
 
 type ClientRow = Database['public']['Tables']['clients']['Row']
 

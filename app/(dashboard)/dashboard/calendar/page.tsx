@@ -3,9 +3,9 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Plus } from 'lucide-react'
-import { AppointmentsCalendar } from '@/components/appointments/AppointmentsCalendar'
+import { CalendarView } from '@/components/calendar/CalendarView'
 
-export default async function AppointmentsPage() {
+export default async function CalendarPage() {
   const supabase = await createClient()
   const {
     data: { user },
@@ -18,9 +18,7 @@ export default async function AppointmentsPage() {
     .eq('owner_uid', user.id)
     .single()
 
-  if (!business) {
-    return <div>No tienes un negocio configurado</div>
-  }
+  if (!business) redirect('/dashboard')
 
   const { data: appointments } = await supabase
     .from('appointments')
@@ -63,21 +61,21 @@ export default async function AppointmentsPage() {
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center mb-6">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Citas</h1>
+          <h1 className="text-3xl font-bold text-gray-900">Calendario</h1>
           <p className="text-gray-600 mt-1">
-            Calendario y gestión de citas
+            Vista día, semana, mes o año
           </p>
         </div>
-        <Link href="/dashboard/appointments/new">
-          <Button>
+        <Link href="/dashboard/appointments/new" className="cursor-pointer">
+          <Button className="cursor-pointer">
             <Plus className="w-4 h-4 mr-2" />
             Nueva cita
           </Button>
         </Link>
       </div>
-      <AppointmentsCalendar
+      <CalendarView
         appointments={appointments ?? []}
         clients={clients ?? []}
         services={services ?? []}

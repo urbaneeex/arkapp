@@ -96,7 +96,7 @@ export function StaffForm({
           id="role"
           value={form.role}
           onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}
-          placeholder="Barbero, Recepcionista..."
+          placeholder="Profesional, Recepcionista..."
           className="mt-1"
         />
       </div>

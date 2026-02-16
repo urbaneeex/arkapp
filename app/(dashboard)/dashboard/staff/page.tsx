@@ -39,10 +39,10 @@ export default async function StaffPage() {
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Empleados</h1>
           <p className="text-gray-600 mt-1">
-            Barberos y personal ({staff?.length ?? 0})
+            Empleados y profesionales ({staff?.length ?? 0})
           </p>
         </div>
-        <Link href="/dashboard/staff/new">
+        <Link href="/dashboard/staff/new" className="cursor-pointer">
           <Button>
             <Plus className="w-4 h-4 mr-2" />
             Nuevo empleado

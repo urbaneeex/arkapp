@@ -36,8 +36,8 @@ export default async function ClientDetailPage({
   return (
     <div className="max-w-2xl">
       <div className="flex items-center gap-4 mb-6">
-        <Link href="/dashboard/clients">
-          <Button variant="ghost" size="icon">
+        <Link href="/dashboard/clients" className="cursor-pointer">
+          <Button variant="ghost" size="icon" className="cursor-pointer">
             <ArrowLeft className="h-4 w-4" />
           </Button>
         </Link>
@@ -45,8 +45,8 @@ export default async function ClientDetailPage({
           <h1 className="text-2xl font-bold text-gray-900">{client.name}</h1>
           <p className="text-gray-600 text-sm">Cliente</p>
         </div>
-        <Link href={`/dashboard/clients/${client.id}/edit`}>
-          <Button>
+        <Link href={`/dashboard/clients/${client.id}/edit`} className="cursor-pointer">
+          <Button className="cursor-pointer">
             <Pencil className="w-4 h-4 mr-2" />
             Editar
           </Button>

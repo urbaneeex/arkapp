@@ -43,7 +43,7 @@ export default function ClientsList({ clients }: ClientsListProps) {
         </thead>
         <tbody className="bg-white divide-y divide-gray-200">
           {clients.map((client) => (
-            <tr key={client.id} className="hover:bg-gray-50">
+            <tr key={client.id} className="hover:bg-gray-50 cursor-pointer">
               <td className="px-6 py-4 whitespace-nowrap">
                 <div className="text-sm font-medium text-gray-900">
                   {client.name}
@@ -63,7 +63,7 @@ export default function ClientsList({ clients }: ClientsListProps) {
               <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                 <Link
                   href={`/dashboard/clients/${client.id}`}
-                  className="text-blue-600 hover:text-blue-900"
+                  className="text-blue-600 hover:text-blue-900 cursor-pointer"
                 >
                   Ver
                 </Link>

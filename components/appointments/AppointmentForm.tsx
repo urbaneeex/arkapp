@@ -27,6 +27,9 @@ export function AppointmentForm({
   services,
   staff,
   appointment,
+  redirectOnSuccess = true,
+  onSuccess,
+  onCancel,
 }: {
   businessId: string
   clients: Client[]
@@ -42,6 +45,9 @@ export function AppointmentForm({
     staff_id: string | null
     price_total: number | null
   }
+  redirectOnSuccess?: boolean
+  onSuccess?: () => void
+  onCancel?: () => void
 }) {
   const router = useRouter()
   const supabase = createClient()
@@ -99,7 +105,8 @@ export function AppointmentForm({
         setLoading(false)
         return
       }
-      router.push('/dashboard/appointments')
+      if (redirectOnSuccess) router.push('/dashboard/calendar')
+      else onSuccess?.()
     } else {
       const { error: err } = await supabase.from('appointments').insert(payload)
       if (err) {
@@ -107,7 +114,8 @@ export function AppointmentForm({
         setLoading(false)
         return
       }
-      router.push('/dashboard/appointments')
+      if (redirectOnSuccess) router.push('/dashboard/calendar')
+      else onSuccess?.()
     }
     router.refresh()
     setLoading(false)
@@ -126,7 +134,7 @@ export function AppointmentForm({
           id="client_id"
           value={form.client_id}
           onChange={(e) => setForm((f) => ({ ...f, client_id: e.target.value }))}
-          className="mt-1 flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb]"
+          className="mt-1 flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] focus-visible:ring-offset-2"
         >
           <option value="">Seleccionar cliente</option>
           {clients.map((c) => (
@@ -148,7 +156,7 @@ export function AppointmentForm({
               end_time: '',
             }))
           }}
-          className="mt-1 flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb]"
+          className="mt-1 flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] focus-visible:ring-offset-2"
         >
           <option value="">Seleccionar servicio</option>
           {services.map((s) => (
@@ -164,7 +172,7 @@ export function AppointmentForm({
           id="staff_id"
           value={form.staff_id}
           onChange={(e) => setForm((f) => ({ ...f, staff_id: e.target.value }))}
-          className="mt-1 flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb]"
+          className="mt-1 flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] focus-visible:ring-offset-2"
         >
           <option value="">Seleccionar empleado</option>
           {staff.map((s) => (
@@ -204,7 +212,7 @@ export function AppointmentForm({
             id="status"
             value={form.status}
             onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
-            className="mt-1 flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb]"
+            className="mt-1 flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] focus-visible:ring-offset-2"
           >
             {STATUS_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>
@@ -235,7 +243,7 @@ export function AppointmentForm({
         <Button
           type="button"
           variant="outline"
-          onClick={() => router.push('/dashboard/appointments')}
+          onClick={() => (onCancel ? onCancel() : router.push('/dashboard/calendar'))}
         >
           Cancelar
         </Button>

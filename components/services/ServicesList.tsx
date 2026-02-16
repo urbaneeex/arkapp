@@ -42,18 +42,18 @@ export function ServicesList({
         </TableHeader>
         <TableBody>
           {services.map((s) => (
-            <TableRow key={s.id}>
-              <TableCell className="font-medium">{s.name}</TableCell>
-              <TableCell>{s.duration} min</TableCell>
-              <TableCell>
+            <TableRow key={s.id} className="cursor-pointer">
+              <TableCell className="font-medium text-gray-900">{s.name}</TableCell>
+              <TableCell className="text-gray-800">{s.duration} min</TableCell>
+              <TableCell className="text-gray-800">
                 {new Intl.NumberFormat('es-ES', {
                   style: 'currency',
                   currency: 'EUR',
                 }).format(s.price)}
               </TableCell>
               <TableCell className="text-right">
-                <Link href={`/dashboard/services/${s.id}/edit`}>
-                  <Button variant="outline" size="sm">
+                <Link href={`/dashboard/services/${s.id}/edit`} className="cursor-pointer">
+                  <Button variant="outline" size="sm" className="cursor-pointer">
                     Editar
                   </Button>
                 </Link>

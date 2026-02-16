@@ -42,7 +42,7 @@ export default async function ServicesPage() {
             Gestiona precios y duraciones ({services?.length ?? 0})
           </p>
         </div>
-        <Link href="/dashboard/services/new">
+        <Link href="/dashboard/services/new" className="cursor-pointer">
           <Button>
             <Plus className="w-4 h-4 mr-2" />
             Nuevo servicio

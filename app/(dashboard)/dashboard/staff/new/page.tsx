@@ -20,7 +20,7 @@ export default async function NewStaffPage() {
   return (
     <div className="max-w-xl">
       <h1 className="text-3xl font-bold text-gray-900 mb-2">Nuevo empleado</h1>
-      <p className="text-gray-600 mb-8">Añade un barbero o miembro del equipo</p>
+      <p className="text-gray-600 mb-8">Añade un empleado o miembro del equipo</p>
       <StaffForm businessId={business.id} />
     </div>
   )

@@ -43,24 +43,24 @@ export function StaffList({
         </TableHeader>
         <TableBody>
           {staff.map((s) => (
-            <TableRow key={s.id}>
-              <TableCell className="font-medium">{s.name}</TableCell>
-              <TableCell>{s.phone ?? '-'}</TableCell>
-              <TableCell>{s.role ?? '-'}</TableCell>
+            <TableRow key={s.id} className="cursor-pointer">
+              <TableCell className="font-medium text-gray-900">{s.name}</TableCell>
+              <TableCell className="text-gray-800">{s.phone ?? '-'}</TableCell>
+              <TableCell className="text-gray-800">{s.role ?? '-'}</TableCell>
               <TableCell>
                 <span
                   className={
                     s.is_active !== false
                       ? 'text-emerald-600'
-                      : 'text-gray-400'
+                      : 'text-gray-500'
                   }
                 >
                   {s.is_active !== false ? 'Activo' : 'Inactivo'}
                 </span>
               </TableCell>
               <TableCell className="text-right">
-                <Link href={`/dashboard/staff/${s.id}/edit`}>
-                  <Button variant="outline" size="sm">
+                <Link href={`/dashboard/staff/${s.id}/edit`} className="cursor-pointer">
+                  <Button variant="outline" size="sm" className="cursor-pointer">
                     Editar
                   </Button>
                 </Link>
