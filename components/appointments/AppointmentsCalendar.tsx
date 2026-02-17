@@ -100,7 +100,12 @@ export function AppointmentsCalendar({
     if (!apt) return
     const fromDayKey = format(parseISO(apt.start_time), 'yyyy-MM-dd')
     if (fromDayKey === toDayKey) return
-    const toDate = new Date(toDayKey + 'T12:00:00')
+    const start = parseISO(apt.start_time)
+    const h = start.getHours()
+    const m = start.getMinutes()
+    const s = start.getSeconds()
+    const timePart = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+    const toDate = new Date(toDayKey + 'T' + timePart)
     if (isNaN(toDate.getTime())) return
     onDropAppointment(apt, toDate)
   }

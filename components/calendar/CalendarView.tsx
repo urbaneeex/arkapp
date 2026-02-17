@@ -50,7 +50,7 @@ import { AppointmentEditModal } from '@/components/calendar/AppointmentEditModal
 import { ToastSimple } from '@/components/ui/toast-simple'
 import { createClient } from '@/lib/supabase/client'
 import { addMinutes } from 'date-fns'
-import { getDayOfWeek } from '@/lib/availability'
+import { getDayOfWeek, getOpenRangesForDay } from '@/lib/availability'
 import type { Shift } from '@/lib/availability'
 import { getClosedRangesForDay } from '@/lib/availability'
 
@@ -422,12 +422,11 @@ export function CalendarView({
   )
 }
 
-const DAY_VIEW_START_MIN = 6 * 60
-const DAY_VIEW_END_MIN = 24 * 60
-const SLOT_MINUTES = 5
-const MINUTES_PER_SLOT = 5
-const TOTAL_SLOTS = (DAY_VIEW_END_MIN - DAY_VIEW_START_MIN) / MINUTES_PER_SLOT
+const MINUTES_PER_SLOT = 15
+const SLOTS_PER_HOUR = 4
 const SLOT_HEIGHT_PX = 24
+const HOUR_HEIGHT_PX = SLOTS_PER_HOUR * SLOT_HEIGHT_PX
+const MINUTES_PER_DAY = 24 * 60
 
 function DayView({
   day,
@@ -443,19 +442,77 @@ function DayView({
   onDropInDay: (apt: AppointmentNormalized, toDate: Date) => void
 }) {
   const dayOfWeek = getDayOfWeek(day)
+  const openRanges = useMemo(
+    () => getOpenRangesForDay(shiftsByDay, dayOfWeek),
+    [shiftsByDay, dayOfWeek]
+  )
   const closedRanges = useMemo(
     () => getClosedRangesForDay(shiftsByDay, dayOfWeek),
     [shiftsByDay, dayOfWeek]
   )
 
+  const { dayViewStartMin, dayViewEndMin, totalSlots, isClosed } = useMemo(() => {
+    if (openRanges.length === 0) {
+      return { dayViewStartMin: 0, dayViewEndMin: MINUTES_PER_DAY, totalSlots: 0, isClosed: true }
+    }
+    const businessStartMin = Math.min(...openRanges.map((r) => r.start))
+    const businessEndMin = Math.max(...openRanges.map((r) => r.end))
+    let overallStartMin = businessStartMin
+    let overallEndMin = businessEndMin
+    appointments.forEach((apt) => {
+      const start = parseISO(apt.start_time)
+      if (!isSameDay(start, day)) return
+      const startMin = start.getHours() * 60 + start.getMinutes()
+      const end = parseISO(apt.end_time)
+      const endMin = end.getHours() * 60 + end.getMinutes()
+      overallStartMin = Math.min(overallStartMin, startMin)
+      overallEndMin = Math.max(overallEndMin, endMin)
+    })
+    overallStartMin = Math.max(0, Math.floor(overallStartMin / MINUTES_PER_SLOT) * MINUTES_PER_SLOT)
+    overallEndMin = Math.min(MINUTES_PER_DAY, Math.ceil(overallEndMin / MINUTES_PER_SLOT) * MINUTES_PER_SLOT)
+    const totalSlots = Math.max(0, Math.round((overallEndMin - overallStartMin) / MINUTES_PER_SLOT))
+    return {
+      dayViewStartMin: overallStartMin,
+      dayViewEndMin: overallEndMin,
+      totalSlots,
+      isClosed: false,
+    }
+  }, [openRanges, appointments, day])
+
+  if (isClosed) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[320px] rounded-xl border border-gray-200 bg-white p-8 text-center">
+        <p className="text-gray-600 font-medium">El negocio está cerrado este día</p>
+      </div>
+    )
+  }
+
   const isSlotClosed = useCallback(
     (slotIndex: number) => {
-      const startMin = DAY_VIEW_START_MIN + slotIndex * MINUTES_PER_SLOT
+      const startMin = dayViewStartMin + slotIndex * MINUTES_PER_SLOT
       const endMin = startMin + MINUTES_PER_SLOT
       return closedRanges.some((r) => startMin < r.end && endMin > r.start)
     },
-    [closedRanges]
+    [closedRanges, dayViewStartMin]
   )
+
+  const closedHourRuns = useMemo(() => {
+    const runs: { start: number; end: number }[] = []
+    let runStart: number | null = null
+    for (let i = 0; i < totalSlots; i++) {
+      const closed = isSlotClosed(i)
+      if (closed) {
+        if (runStart === null) runStart = i
+      } else {
+        if (runStart !== null) {
+          runs.push({ start: runStart, end: i })
+          runStart = null
+        }
+      }
+    }
+    if (runStart !== null) runs.push({ start: runStart, end: totalSlots })
+    return runs
+  }, [totalSlots, isSlotClosed])
 
   const [currentTimeTop, setCurrentTimeTop] = useState<number | null>(null)
   const isToday = isSameDay(day, new Date())
@@ -468,17 +525,18 @@ function DayView({
     const update = () => {
       const now = new Date()
       const minSinceMidnight = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60
-      if (minSinceMidnight < DAY_VIEW_START_MIN || minSinceMidnight >= DAY_VIEW_END_MIN) {
+      if (minSinceMidnight < dayViewStartMin || minSinceMidnight >= dayViewEndMin) {
         setCurrentTimeTop(null)
         return
       }
-      const pct = (minSinceMidnight - DAY_VIEW_START_MIN) / (DAY_VIEW_END_MIN - DAY_VIEW_START_MIN)
-      setCurrentTimeTop(pct * TOTAL_SLOTS * SLOT_HEIGHT_PX)
+      const rangeMin = dayViewEndMin - dayViewStartMin
+      const pct = (minSinceMidnight - dayViewStartMin) / rangeMin
+      setCurrentTimeTop(pct * totalSlots * SLOT_HEIGHT_PX)
     }
     update()
     const id = setInterval(update, 60000)
     return () => clearInterval(id)
-  }, [isToday])
+  }, [isToday, dayViewStartMin, dayViewEndMin, totalSlots])
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
   const [overSlot, setOverSlot] = useState<number | null>(null)
@@ -489,30 +547,28 @@ function DayView({
       setOverSlot(null)
       if (over?.id == null || typeof over.id !== 'string') return
       const slotIndex = parseInt(over.id.replace('slot-', ''), 10)
-      if (isNaN(slotIndex) || slotIndex < 0 || slotIndex >= TOTAL_SLOTS) return
+      if (isNaN(slotIndex) || slotIndex < 0 || slotIndex >= totalSlots) return
       const apt = appointments.find((a) => a.id === active.id)
       if (!apt) return
       if (apt.status === 'completed' || apt.status === 'cancelled') return
-      const newStartMin = DAY_VIEW_START_MIN + slotIndex * MINUTES_PER_SLOT
+      const newStartMin = dayViewStartMin + slotIndex * MINUTES_PER_SLOT
       const toDate = new Date(day)
       toDate.setHours(Math.floor(newStartMin / 60), newStartMin % 60, 0, 0)
       onDropInDay(apt, toDate)
     },
-    [appointments, day, onDropInDay]
+    [appointments, day, dayViewStartMin, totalSlots, onDropInDay]
   )
 
   const timeLabels = useMemo(() => {
-    const out: { min: number; label: string; isMajor: boolean }[] = []
-    for (let min = DAY_VIEW_START_MIN; min < DAY_VIEW_END_MIN; min += MINUTES_PER_SLOT) {
-      const isMajor = min % 30 === 0
+    const out: { min: number; label: string }[] = []
+    for (let min = dayViewStartMin; min < dayViewEndMin; min += 60) {
       out.push({
         min,
         label: `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`,
-        isMajor,
       })
     }
     return out
-  }, [])
+  }, [dayViewStartMin, dayViewEndMin])
 
   return (
     <DndContext
@@ -528,7 +584,10 @@ function DayView({
       <DayViewContent
         day={day}
         appointments={appointments}
-        isSlotClosed={isSlotClosed}
+        dayViewStartMin={dayViewStartMin}
+        dayViewEndMin={dayViewEndMin}
+        totalSlots={totalSlots}
+        closedHourRuns={closedHourRuns}
         overSlot={overSlot}
         currentTimeTop={currentTimeTop}
         isToday={isToday}
@@ -543,7 +602,10 @@ function DayView({
 function DayViewContent({
   day,
   appointments,
-  isSlotClosed,
+  dayViewStartMin,
+  dayViewEndMin,
+  totalSlots,
+  closedHourRuns,
   overSlot,
   currentTimeTop,
   isToday,
@@ -552,11 +614,14 @@ function DayViewContent({
 }: {
   day: Date
   appointments: AppointmentNormalized[]
-  isSlotClosed: (slotIndex: number) => boolean
+  dayViewStartMin: number
+  dayViewEndMin: number
+  totalSlots: number
+  closedHourRuns: { start: number; end: number }[]
   overSlot: number | null
   currentTimeTop: number | null
   isToday: boolean
-  timeLabels: { min: number; label: string; isMajor: boolean }[]
+  timeLabels: { min: number; label: string }[]
   onAppointmentClick: (apt: AppointmentNormalized, e: React.MouseEvent) => void
 }) {
   const [activeId, setActiveId] = useState<string | null>(null)
@@ -569,59 +634,103 @@ function DayViewContent({
 
   const activeApt = activeId ? appointments.find((a) => a.id === activeId) : null
 
+  const appointmentsWithColumns = useMemo(() => {
+    const dayApps = appointments.filter((a) => {
+      const start = parseISO(a.start_time)
+      if (!isSameDay(start, day)) return false
+      const startMin = start.getHours() * 60 + start.getMinutes()
+      return startMin >= dayViewStartMin && startMin < dayViewEndMin
+    })
+    const withTimes = dayApps.map((a) => {
+      const start = parseISO(a.start_time)
+      const end = parseISO(a.end_time)
+      return {
+        apt: a,
+        startMin: start.getHours() * 60 + start.getMinutes() + start.getSeconds() / 60,
+        endMin: end.getHours() * 60 + end.getMinutes() + end.getSeconds() / 60,
+      }
+    })
+    withTimes.sort((a, b) => a.startMin - b.startMin)
+    let maxCols = 0
+    const columns: number[] = []
+    for (let i = 0; i < withTimes.length; i++) {
+      const overlappingCols = new Set<number>()
+      for (let j = 0; j < i; j++) {
+        const overlaps = withTimes[j].endMin > withTimes[i].startMin && withTimes[j].startMin < withTimes[i].endMin
+        if (overlaps) overlappingCols.add(columns[j])
+      }
+      let col = 0
+      while (overlappingCols.has(col)) col++
+      columns.push(col)
+      maxCols = Math.max(maxCols, col + 1)
+    }
+    return withTimes.map((item, i) => ({
+      ...item,
+      columnIndex: columns[i],
+      totalColumns: maxCols,
+    }))
+  }, [appointments, day, dayViewStartMin, dayViewEndMin])
+
   return (
     <>
       <div className="relative grid grid-cols-[56px_1fr] min-h-[400px]">
-        <div className="border-r border-gray-200 bg-gray-50/80">
-          {timeLabels.map(({ min, label, isMajor }) => (
+        <div className="border-r border-gray-200 bg-gray-50/80 flex flex-col">
+          {timeLabels.map(({ min, label }) => (
             <div
               key={min}
-              className={cn(
-                'border-b border-gray-100 pr-1 text-right',
-                isMajor ? 'text-xs font-medium text-gray-700' : 'text-[10px] text-gray-400'
-              )}
-              style={{ height: SLOT_HEIGHT_PX }}
+              className="border-t-2 border-gray-300 pr-1 pt-0.5 text-right text-xs font-medium text-gray-700 flex-shrink-0"
+              style={{ height: HOUR_HEIGHT_PX }}
             >
-              {isMajor ? label : ''}
+              {label}
             </div>
           ))}
         </div>
         <div className="relative overflow-hidden">
+          <div className="absolute inset-0">
+            {closedHourRuns.map((run, i) => (
+              <div
+                key={i}
+                className="absolute left-0 right-0 bg-gray-200/70"
+                style={{
+                  top: run.start * SLOT_HEIGHT_PX,
+                  height: (run.end - run.start) * SLOT_HEIGHT_PX,
+                }}
+              />
+            ))}
+          </div>
           <div className="absolute inset-0 flex flex-col">
-            {Array.from({ length: TOTAL_SLOTS }).map((_, slotIndex) => {
-              const closed = isSlotClosed(slotIndex)
-              return (
-                <DaySlot
-                  key={slotIndex}
-                  slotIndex={slotIndex}
-                  closed={closed}
-                  isOver={overSlot === slotIndex}
-                  slotHeightPx={SLOT_HEIGHT_PX}
-                />
-              )
-            })}
+            {Array.from({ length: totalSlots }).map((_, slotIndex) => (
+              <DaySlot
+                key={slotIndex}
+                slotIndex={slotIndex}
+                isOver={overSlot === slotIndex}
+                slotHeightPx={SLOT_HEIGHT_PX}
+                isHourStart={slotIndex % SLOTS_PER_HOUR === 0}
+              />
+            ))}
           </div>
           <div className="absolute inset-0 pointer-events-none">
             <div className="relative w-full h-full pointer-events-auto">
-              {appointments.map((apt) => {
-                const start = parseISO(apt.start_time)
-                if (!isSameDay(start, day)) return null
-                const startMin = start.getHours() * 60 + start.getMinutes()
-                if (startMin < DAY_VIEW_START_MIN || startMin >= DAY_VIEW_END_MIN) return null
-                const slotIndex = Math.floor((startMin - DAY_VIEW_START_MIN) / MINUTES_PER_SLOT)
-                const end = parseISO(apt.end_time)
-                const durationMin = (end.getTime() - start.getTime()) / 60000
+              {appointmentsWithColumns.map(({ apt, startMin, endMin, columnIndex, totalColumns }) => {
+                const slotOffset = (startMin - dayViewStartMin) / MINUTES_PER_SLOT
+                const topPx = slotOffset * SLOT_HEIGHT_PX + 1
+                const durationMin = endMin - startMin
                 const heightSlots = Math.max(1, Math.round(durationMin / MINUTES_PER_SLOT))
                 const heightPx = heightSlots * SLOT_HEIGHT_PX - 2
+                const colWidth = totalColumns <= 0 ? 1 : 1 / totalColumns
+                const leftPct = columnIndex * colWidth
+                const widthPct = colWidth
                 return (
                   <DayDraggableAppointment
                     key={apt.id}
                     apt={apt}
-                    slotHeightPx={SLOT_HEIGHT_PX}
-                    dayStartMin={DAY_VIEW_START_MIN}
-                    slotIndex={slotIndex}
+                    slotHeightPx={HOUR_HEIGHT_PX}
+                    dayStartMin={dayViewStartMin}
+                    topPx={topPx}
                     onAppointmentClick={onAppointmentClick}
                     heightPx={heightPx}
+                    leftPct={leftPct}
+                    widthPct={widthPct}
                   />
                 )
               })}
@@ -660,14 +769,14 @@ function DayViewContent({
 
 function DaySlot({
   slotIndex,
-  closed,
   isOver,
   slotHeightPx,
+  isHourStart,
 }: {
   slotIndex: number
-  closed: boolean
   isOver: boolean
   slotHeightPx: number
+  isHourStart: boolean
 }) {
   const { setNodeRef, isOver: isOverDnd } = useDroppable({ id: `slot-${slotIndex}` })
   const showOver = isOver || isOverDnd
@@ -675,8 +784,8 @@ function DaySlot({
     <div
       ref={setNodeRef}
       className={cn(
-        'border-b border-gray-100 transition-colors shrink-0',
-        closed && 'bg-gray-100/80 bg-[repeating-linear-gradient(45deg,transparent,transparent_4px,rgba(0,0,0,.03)_4px,rgba(0,0,0,.03)_8px)]',
+        'transition-colors shrink-0',
+        isHourStart ? 'border-t-2 border-gray-300' : 'border-t border-gray-100',
         showOver && 'ring-1 ring-inset ring-blue-400 bg-blue-50/50'
       )}
       style={{ height: slotHeightPx }}
@@ -688,16 +797,20 @@ function DayDraggableAppointment({
   apt,
   slotHeightPx,
   dayStartMin,
-  slotIndex,
+  topPx,
   onAppointmentClick,
   heightPx,
+  leftPct,
+  widthPct,
 }: {
   apt: AppointmentNormalized
   slotHeightPx: number
   dayStartMin: number
-  slotIndex: number
+  topPx: number
   onAppointmentClick: (apt: AppointmentNormalized, e: React.MouseEvent) => void
   heightPx: number
+  leftPct: number
+  widthPct: number
 }) {
   const canDrag = apt.status !== 'completed' && apt.status !== 'cancelled'
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
@@ -714,13 +827,15 @@ function DayDraggableAppointment({
       {...(canDrag ? { ...attributes, ...listeners } : {})}
       title={!canDrag ? 'No se pueden mover citas completadas o canceladas' : undefined}
       className={cn(
-        'absolute left-1 right-1 rounded border-l-4 px-2 py-0.5 text-xs truncate text-left transition-shadow cursor-pointer',
+        'absolute rounded border-l-4 px-2 py-0.5 text-xs truncate text-left transition-shadow cursor-pointer',
         canDrag ? 'cursor-grab active:cursor-grabbing' : 'cursor-not-allowed opacity-90',
         isDragging && 'opacity-70 shadow-lg z-20',
         STATUS_COLORS[apt.status] ?? 'bg-gray-100'
       )}
       style={{
-        top: slotIndex * slotHeightPx + 1,
+        top: topPx,
+        left: `calc(${leftPct * 100}% + 4px)`,
+        width: `calc(${widthPct * 100}% - 8px)`,
         height: heightPx,
       }}
     >
@@ -760,7 +875,12 @@ function MonthView({
     if (!apt) return
     const fromDayKey = format(parseISO(apt.start_time), 'yyyy-MM-dd')
     if (fromDayKey === toDayKey) return
-    const toDate = new Date(toDayKey + 'T12:00:00')
+    const start = parseISO(apt.start_time)
+    const h = start.getHours()
+    const m = start.getMinutes()
+    const s = start.getSeconds()
+    const timePart = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+    const toDate = new Date(toDayKey + 'T' + timePart)
     if (isNaN(toDate.getTime())) return
     onDropAppointment(apt, toDate)
   }
