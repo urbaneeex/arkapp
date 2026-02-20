@@ -42,8 +42,8 @@ export default async function ClientDetailPage({
           </Button>
         </Link>
         <div className="flex-1">
-          <h1 className="text-2xl font-bold text-gray-900">{client.name}</h1>
-          <p className="text-gray-600 text-sm">Cliente</p>
+          <h1 className="text-2xl font-bold text-zinc-100">{client.name}</h1>
+          <p className="text-zinc-400 text-sm">Cliente</p>
         </div>
         <Link href={`/dashboard/clients/${client.id}/edit`} className="cursor-pointer">
           <Button className="cursor-pointer">
@@ -52,27 +52,27 @@ export default async function ClientDetailPage({
           </Button>
         </Link>
       </div>
-      <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+      <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-6 space-y-4">
         <div>
-          <p className="text-xs font-medium text-gray-500 uppercase">Teléfono</p>
-          <p className="text-gray-900">{client.phone}</p>
+          <p className="text-xs font-medium text-zinc-400 uppercase">Teléfono</p>
+          <p className="text-zinc-100">{client.phone}</p>
         </div>
         {client.email && (
           <div>
-            <p className="text-xs font-medium text-gray-500 uppercase">Email</p>
-            <p className="text-gray-900">{client.email}</p>
+            <p className="text-xs font-medium text-zinc-400 uppercase">Email</p>
+            <p className="text-zinc-100">{client.email}</p>
           </div>
         )}
         {client.address && (
           <div>
-            <p className="text-xs font-medium text-gray-500 uppercase">Dirección</p>
-            <p className="text-gray-900">{client.address}</p>
+            <p className="text-xs font-medium text-zinc-400 uppercase">Dirección</p>
+            <p className="text-zinc-100">{client.address}</p>
           </div>
         )}
         {client.notes && (
           <div>
-            <p className="text-xs font-medium text-gray-500 uppercase">Notas</p>
-            <p className="text-gray-900 whitespace-pre-wrap">{client.notes}</p>
+            <p className="text-xs font-medium text-zinc-400 uppercase">Notas</p>
+            <p className="text-zinc-100 whitespace-pre-wrap">{client.notes}</p>
           </div>
         )}
       </div>

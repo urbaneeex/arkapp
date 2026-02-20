@@ -1,0 +1,268 @@
+'use client'
+
+import { useState } from 'react'
+import { createClient } from '@/lib/supabase/client'
+import { useRouter } from 'next/navigation'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { Plus, Trash2, Loader2 } from 'lucide-react'
+import { cn } from '@/lib/utils'
+
+type Role = {
+  id: string
+  business_id: string
+  name: string
+  description: string | null
+  permissions: Record<string, any> | null
+  created_at: string | null
+}
+
+type StaffMember = {
+  id: string
+  name: string
+  role_id: string | null
+}
+
+export function RolesManagement({
+  businessId,
+  initialRoles,
+  initialStaff,
+}: {
+  businessId: string
+  initialRoles: Role[]
+  initialStaff: StaffMember[]
+}) {
+  const router = useRouter()
+  const supabase = createClient()
+  const [roles, setRoles] = useState<Role[]>(initialRoles)
+  const [staff, setStaff] = useState<StaffMember[]>(initialStaff)
+  const [showCreateForm, setShowCreateForm] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [form, setForm] = useState({
+    name: '',
+    description: '',
+  })
+
+  const handleCreateRole = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+    
+    if (!form.name.trim()) {
+      setError('El nombre del rol es obligatorio')
+      return
+    }
+
+    setLoading(true)
+
+    try {
+      const { data, error: insertError } = await supabase
+        .from('roles')
+        .insert({
+          business_id: businessId,
+          name: form.name.trim(),
+          description: form.description.trim() || null,
+        })
+        .select()
+        .single()
+
+      if (insertError) {
+        if (insertError.code === '23505') {
+          setError('Ya existe un rol con ese nombre')
+        } else {
+          setError(insertError.message)
+        }
+        setLoading(false)
+        return
+      }
+
+      setRoles([...roles, data])
+      setForm({ name: '', description: '' })
+      setShowCreateForm(false)
+      router.refresh()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al crear el rol')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleDeleteRole = async (roleId: string) => {
+    const role = roles.find((r) => r.id === roleId)
+    if (!role) return
+
+    const staffWithRole = staff.filter((s) => s.role_id === roleId)
+    if (staffWithRole.length > 0) {
+      const confirmed = window.confirm(
+        `Este rol está asignado a ${staffWithRole.length} empleado(s). ¿Estás seguro de que quieres eliminarlo? Los empleados quedarán sin rol asignado.`
+      )
+      if (!confirmed) return
+    } else {
+      const confirmed = window.confirm(
+        `¿Estás seguro de que quieres eliminar el rol "${role.name}"? Esta acción no se puede deshacer.`
+      )
+      if (!confirmed) return
+    }
+
+    setDeletingId(roleId)
+
+    try {
+      const { error: deleteError } = await supabase
+        .from('roles')
+        .delete()
+        .eq('id', roleId)
+        .eq('business_id', businessId)
+
+      if (deleteError) {
+        setError(deleteError.message)
+        setDeletingId(null)
+        return
+      }
+
+      setRoles(roles.filter((r) => r.id !== roleId))
+      router.refresh()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al eliminar el rol')
+      setDeletingId(null)
+    }
+  }
+
+  const getStaffCountForRole = (roleId: string) => {
+    return staff.filter((s) => s.role_id === roleId).length
+  }
+
+  return (
+    <div className="space-y-6">
+      {error && (
+        <div className="p-3 rounded-lg bg-red-950/50 text-red-300 text-sm">
+          {error}
+        </div>
+      )}
+
+      <div className="flex justify-between items-center">
+        <h2 className="text-xl font-semibold text-zinc-100">Roles disponibles</h2>
+        <Button
+          onClick={() => setShowCreateForm(!showCreateForm)}
+          variant="outline"
+        >
+          <Plus className="w-4 h-4 mr-2" />
+          Crear rol
+        </Button>
+      </div>
+
+      {showCreateForm && (
+        <div className="bg-zinc-900 rounded-lg border border-zinc-800 p-6">
+          <h3 className="text-lg font-semibold text-zinc-100 mb-4">Nuevo rol</h3>
+          <form onSubmit={handleCreateRole} className="space-y-4">
+            <div>
+              <Label htmlFor="role-name">Nombre del rol *</Label>
+              <Input
+                id="role-name"
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                required
+                className="mt-1"
+                placeholder="Ej: Recepcionista, Profesional..."
+              />
+            </div>
+            <div>
+              <Label htmlFor="role-description">Descripción (opcional)</Label>
+              <Input
+                id="role-description"
+                value={form.description}
+                onChange={(e) => setForm({ ...form, description: e.target.value })}
+                className="mt-1"
+                placeholder="Descripción del rol"
+              />
+            </div>
+            <div className="flex gap-3">
+              <Button type="submit" disabled={loading}>
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Creando...
+                  </>
+                ) : (
+                  'Crear rol'
+                )}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setShowCreateForm(false)
+                  setForm({ name: '', description: '' })
+                  setError('')
+                }}
+              >
+                Cancelar
+              </Button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {roles.length === 0 ? (
+        <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-12 text-center text-zinc-400">
+          No hay roles creados. Crea el primero usando el botón "Crear rol".
+        </div>
+      ) : (
+        <div className="rounded-lg border border-zinc-800 bg-zinc-900 overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Nombre</TableHead>
+                <TableHead>Descripción</TableHead>
+                <TableHead>Empleados asignados</TableHead>
+                <TableHead className="text-right">Acciones</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {roles.map((role) => {
+                const staffCount = getStaffCountForRole(role.id)
+                return (
+                  <TableRow key={role.id}>
+                    <TableCell className="font-medium text-zinc-100">{role.name}</TableCell>
+                    <TableCell className="text-zinc-400">{role.description || '-'}</TableCell>
+                    <TableCell className="text-zinc-400">{staffCount}</TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleDeleteRole(role.id)}
+                        disabled={deletingId === role.id}
+                        className="text-red-400 hover:text-red-300 hover:bg-red-900/50 border-red-700"
+                      >
+                        {deletingId === role.id ? (
+                          <>
+                            <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                            Eliminando...
+                          </>
+                        ) : (
+                          <>
+                            <Trash2 className="w-3 h-3 mr-1" />
+                            Eliminar
+                          </>
+                        )}
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+    </div>
+  )
+}

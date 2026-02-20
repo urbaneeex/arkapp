@@ -46,7 +46,7 @@ export function MoveAppointmentDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3 py-2">
-          <p className="text-sm text-gray-700">
+          <p className="text-sm text-zinc-300">
             <span className="font-medium">{appointment.client_name ?? 'Sin cliente'}</span>
             {appointment.service_name && (
               <> · {appointment.service_name}</>
@@ -54,20 +54,20 @@ export function MoveAppointmentDialog({
           </p>
           <div className="flex flex-wrap gap-4 text-sm">
             <div>
-              <span className="text-gray-500">{sameDay ? 'Hora actual: ' : 'Fecha actual: '}</span>
+              <span className="text-zinc-400">{sameDay ? 'Hora actual: ' : 'Fecha actual: '}</span>
               <span className="font-medium">
                 {sameDay ? format(fromDate, 'HH:mm') : format(fromDate, "EEEE d MMMM", { locale: es })}
               </span>
             </div>
             <div>
-              <span className="text-gray-500">{sameDay ? 'Nueva hora: ' : 'Nueva fecha: '}</span>
+              <span className="text-zinc-400">{sameDay ? 'Nueva hora: ' : 'Nueva fecha: '}</span>
               <span className="font-medium text-blue-600">
                 {sameDay ? format(toDate, 'HH:mm') : format(toDate, "EEEE d MMMM", { locale: es })}
               </span>
             </div>
           </div>
           {conflictWarning && (
-            <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+            <p className="text-sm text-amber-700 bg-amber-950/50 border border-amber-800 rounded-md px-3 py-2">
               {conflictWarning}
             </p>
           )}

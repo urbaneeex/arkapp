@@ -415,22 +415,34 @@ export function NewAppointmentForm({
         if (conflict.existingService) metadata.conflict_existing_service = conflict.existingService
       }
 
-      const { error: insertAptErr } = await supabase.from('appointments').insert({
-        business_id: businessId,
-        client_id: clientId,
-        service_id: service_id || null,
-        staff_id: staff_id || null,
-        start_time: start.toISOString(),
-        end_time: end.toISOString(),
-        status,
-        price_total: price,
-        metadata: Object.keys(metadata).length > 0 ? metadata : null,
-      })
+      const { data: insertedAppointment, error: insertAptErr } = await supabase
+        .from('appointments')
+        .insert({
+          business_id: businessId,
+          client_id: clientId,
+          service_id: service_id || null,
+          staff_id: staff_id || null,
+          start_time: start.toISOString(),
+          end_time: end.toISOString(),
+          status,
+          price_total: price,
+          metadata: Object.keys(metadata).length > 0 ? metadata : null,
+        })
+        .select('id')
+        .single()
 
       if (insertAptErr) {
         setError(insertAptErr.message)
         setLoading(false)
         return
+      }
+
+      if (insertedAppointment?.id) {
+        fetch('/api/webhooks/n8n-appointment', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ appointmentId: insertedAppointment.id }),
+        }).catch(() => {})
       }
 
       onToastFn?.(
@@ -454,7 +466,7 @@ export function NewAppointmentForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       {error && (
-        <div className="p-3 rounded-lg bg-red-50 text-red-700 text-sm border border-red-200">
+        <div className="p-3 rounded-lg bg-red-950/50 text-red-300 text-sm border border-red-800">
           {error}
         </div>
       )}
@@ -489,7 +501,7 @@ export function NewAppointmentForm({
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-8">
         <div className="space-y-4">
           <div>
-            <Label className="text-gray-900 font-medium">Cliente</Label>
+            <Label className="text-zinc-100 font-medium">Cliente</Label>
             <ClientSearchCombobox
               businessId={businessId}
               recentClients={recentClients}
@@ -498,29 +510,29 @@ export function NewAppointmentForm({
               onSelectExisting={handleSelectExistingClient}
               onSelectNew={handleSelectNewClient}
               disabled={false}
-              className="mt-1 [&_input]:text-gray-900 [&_input]:font-medium"
+              className="mt-1 [&_input]:text-zinc-100 [&_input]:font-medium"
             />
             {selectedClient && !isNewClient && (
-              <div className="mt-3 space-y-3 rounded-lg border border-gray-200 bg-gray-50/50 p-4">
-                <p className="text-xs font-medium text-gray-700 mb-2">Actualizar datos del cliente</p>
+              <div className="mt-3 space-y-3 rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
+                <p className="text-xs font-medium text-zinc-300 mb-2">Actualizar datos del cliente</p>
                 <div>
-                  <Label htmlFor="existing-client-phone" className="text-gray-900 font-medium">Teléfono</Label>
+                  <Label htmlFor="existing-client-phone" className="text-zinc-100 font-medium">Teléfono</Label>
                   <Input
                     id="existing-client-phone"
                     value={existingClientPhone}
                     onChange={(e) => setExistingClientPhone(e.target.value)}
-                    className="mt-1 text-gray-900 font-medium"
+                    className="mt-1 text-zinc-100 font-medium"
                     placeholder="Ej: 612345678"
                   />
                 </div>
                 <div>
-                  <Label htmlFor="existing-client-email" className="text-gray-900 font-medium">Email</Label>
+                  <Label htmlFor="existing-client-email" className="text-zinc-100 font-medium">Email</Label>
                   <Input
                     id="existing-client-email"
                     type="email"
                     value={existingClientEmail}
                     onChange={(e) => setExistingClientEmail(e.target.value)}
-                    className="mt-1 text-gray-900 font-medium"
+                    className="mt-1 text-zinc-100 font-medium"
                     placeholder="email@ejemplo.com"
                   />
                 </div>
@@ -548,7 +560,7 @@ export function NewAppointmentForm({
               id="service_id"
               value={service_id}
               onChange={(e) => setService_id(e.target.value)}
-              className="mt-1 flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] focus-visible:ring-offset-2"
+              className="mt-1 flex h-10 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6] focus-visible:ring-offset-2"
             >
               <option value="">Seleccionar servicio</option>
               {services.map((s) => (
@@ -558,7 +570,7 @@ export function NewAppointmentForm({
               ))}
             </select>
             {selectedService && (
-              <p className="text-xs text-gray-500 mt-1">Precio: {selectedService.price}€ · Duración: {selectedService.duration} min</p>
+              <p className="text-xs text-zinc-400 mt-1">Precio: {selectedService.price}€ · Duración: {selectedService.duration} min</p>
             )}
           </div>
 
@@ -569,7 +581,7 @@ export function NewAppointmentForm({
               value={staff_id}
               onChange={(e) => setStaff_id(e.target.value)}
               disabled={!service_id}
-              className="mt-1 flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="mt-1 flex h-10 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6] focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <option value="">Seleccionar empleado</option>
               {staff.map((s) => (
@@ -595,8 +607,8 @@ export function NewAppointmentForm({
           </div>
 
           <div>
-            <Label className="flex items-center gap-2 text-gray-900 font-medium">
-              <Calculator className="h-4 w-4 text-gray-500" />
+            <Label className="flex items-center gap-2 text-zinc-100 font-medium">
+              <Calculator className="h-4 w-4 text-zinc-400" />
               Hora fin (calculado)
             </Label>
             <div className="mt-1 flex items-center gap-2">
@@ -605,12 +617,12 @@ export function NewAppointmentForm({
                   type="datetime-local"
                   value={customEndDateTime}
                   onChange={(e) => setCustomEndDateTime(e.target.value)}
-                  className="flex-1 text-gray-900 font-medium"
+                  className="flex-1 text-zinc-100 font-medium"
                 />
               ) : (
                 <div
                   className={cn(
-                    'flex-1 min-h-10 px-3 py-2 rounded-md border border-gray-300 bg-gray-50 text-base font-medium text-gray-900',
+                    'flex-1 min-h-10 px-3 py-2 rounded-md border border-zinc-700 bg-zinc-950 text-base font-medium text-zinc-100',
                     'cursor-default'
                   )}
                 >
@@ -642,7 +654,7 @@ export function NewAppointmentForm({
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <Label htmlFor="price_total" className="text-gray-900 font-medium">Precio total (€)</Label>
+              <Label htmlFor="price_total" className="text-zinc-100 font-medium">Precio total (€)</Label>
               <Input
                 id="price_total"
                 type="number"
@@ -650,7 +662,7 @@ export function NewAppointmentForm({
                 value={price_total}
                 onChange={(e) => setPrice_total(e.target.value)}
                 placeholder={selectedService?.price?.toString()}
-                className="mt-1 text-gray-900 font-medium text-base"
+                className="mt-1 text-zinc-100 font-medium text-base"
               />
             </div>
             <div>
@@ -659,7 +671,7 @@ export function NewAppointmentForm({
                 id="status"
                 value={status}
                 onChange={(e) => setStatus(e.target.value)}
-                className="mt-1 flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] focus-visible:ring-offset-2"
+                className="mt-1 flex h-10 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6] focus-visible:ring-offset-2"
               >
                 {STATUS_OPTIONS.map((o) => (
                   <option key={o.value} value={o.value}>
@@ -676,9 +688,9 @@ export function NewAppointmentForm({
                 type="checkbox"
                 checked={depositPaid}
                 onChange={(e) => setDepositPaid(e.target.checked)}
-                className="rounded border-gray-300 text-[#2563eb] focus:ring-[#2563eb]"
+                className="rounded border-zinc-700 text-[#3B82F6] focus:ring-[#3B82F6]"
               />
-              <span className="text-sm text-gray-700">Depósito pagado{selectedService.deposit_amount ? ` (${selectedService.deposit_amount}€)` : ''}</span>
+              <span className="text-sm text-zinc-300">Depósito pagado{selectedService.deposit_amount ? ` (${selectedService.deposit_amount}€)` : ''}</span>
             </label>
           )}
 
@@ -695,28 +707,28 @@ export function NewAppointmentForm({
         <div className="lg:border-l lg:pl-6">
           <button
             type="button"
-            className="flex items-center justify-between w-full lg:justify-start text-left font-medium text-gray-900 mb-2"
+            className="flex items-center justify-between w-full lg:justify-start text-left font-medium text-zinc-100 mb-2"
             onClick={() => setAvailabilityPanelOpen((o) => !o)}
           >
             Disponibilidad {selectedDate && staff_id ? ` · ${format(selectedDate, 'd MMM', { locale: es })} · ${staff.find((s) => s.id === staff_id)?.name ?? ''}` : ''}
             {availabilityPanelOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
           </button>
           {availabilityPanelOpen && (
-            <div className="rounded-lg border border-gray-200 bg-gray-50/50 p-4 max-h-[400px] overflow-y-auto">
+            <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4 max-h-[400px] overflow-y-auto">
               {!staff_id || !selectedDate ? (
-                <p className="text-sm text-gray-500">Selecciona empleado y fecha para ver disponibilidad.</p>
+                <p className="text-sm text-zinc-400">Selecciona empleado y fecha para ver disponibilidad.</p>
               ) : !selectedService ? (
-                <p className="text-sm text-gray-500">Selecciona un servicio para ver slots.</p>
+                <p className="text-sm text-zinc-400">Selecciona un servicio para ver slots.</p>
               ) : openRanges.length === 0 ? (
                 <p className="text-sm text-amber-700">El negocio está cerrado este día.</p>
               ) : filteredSlots.filter((s) => !s.occupied).length === 0 ? (
                 <div className="space-y-3">
-                  <p className="text-sm font-medium text-gray-900">
+                  <p className="text-sm font-medium text-zinc-100">
                     {isToday(selectedDate ?? new Date()) ? 'No hay horarios disponibles para hoy.' : `No hay horarios disponibles para ${format(selectedDate ?? new Date(), "d 'de' MMMM", { locale: es })}.`}
                   </p>
                   {alternativeSlots.length > 0 && (
                     <div>
-                      <p className="text-xs text-gray-600 mb-2">Sugerencias para días próximos:</p>
+                      <p className="text-xs text-zinc-400 mb-2">Sugerencias para días próximos:</p>
                       <ul className="space-y-1">
                         {alternativeSlots.map((alt, idx) => (
                           <li key={idx}>
@@ -726,7 +738,7 @@ export function NewAppointmentForm({
                                 setDateStr(alt.date)
                                 setStartTimeStr(alt.time)
                               }}
-                              className="w-full text-left px-3 py-2 rounded text-sm bg-blue-50 text-blue-800 hover:bg-blue-100 border border-blue-200"
+                              className="w-full text-left px-3 py-2 rounded text-sm bg-blue-900/50 text-blue-200 hover:bg-blue-800 border border-blue-800"
                             >
                               <span className="font-medium">{alt.label}</span>
                             </button>
@@ -748,9 +760,9 @@ export function NewAppointmentForm({
                           onClick={() => !slot.occupied && handleSlotClick(slot.start_min)}
                           className={cn(
                             'w-full text-left px-3 py-2 rounded text-sm',
-                            slot.occupied && 'bg-red-50 text-red-800 cursor-not-allowed',
+                            slot.occupied && 'bg-red-950/50 text-red-300 cursor-not-allowed',
                             !slot.occupied && isSelected && 'bg-blue-100 text-blue-800 ring-1 ring-blue-300',
-                            !slot.occupied && !isSelected && 'hover:bg-gray-100 text-gray-800'
+                            !slot.occupied && !isSelected && 'hover:bg-zinc-800 text-zinc-200'
                           )}
                         >
                           <span className="font-medium">{slot.label}</span>

@@ -46,8 +46,8 @@ export function DateNavigator({
   return (
     <div className={cn('space-y-1', className)}>
       <div className="flex items-center gap-2">
-        <Calendar className="h-4 w-4 text-gray-500" />
-        <label className="text-sm font-medium text-gray-700">Fecha</label>
+        <Calendar className="h-4 w-4 text-zinc-400" />
+        <label className="text-sm font-medium text-zinc-300">Fecha</label>
       </div>
       <div className="flex items-center gap-2 relative">
         <Button
@@ -63,7 +63,7 @@ export function DateNavigator({
         <button
           type="button"
           onClick={openNativePicker}
-          className="flex-1 h-10 px-4 rounded-md border border-gray-300 bg-white text-sm font-medium text-gray-900 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#2563eb] focus:ring-offset-2 cursor-pointer transition-colors"
+          className="flex-1 h-10 px-4 rounded-md border border-zinc-700 bg-zinc-900 text-sm font-medium text-zinc-100 hover:bg-zinc-950 focus:outline-none focus:ring-2 focus:ring-[#3B82F6] focus:ring-offset-2 cursor-pointer transition-colors"
         >
           {format(date, "d 'de' MMMM yyyy", { locale: es })}
         </button>

@@ -1,6 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { FinancesPageClient } from '@/components/finances/FinancesPageClient'
+import { RequirePermission } from '@/components/auth/RequirePermission'
+import { getBusinessIdForUser } from '@/lib/supabase/business'
 import {
   startOfMonth,
   endOfMonth,
@@ -16,13 +18,8 @@ export default async function FinancesPage() {
   } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: business } = await supabase
-    .from('businesses')
-    .select('id')
-    .eq('owner_uid', user.id)
-    .single()
-
-  if (!business) redirect('/dashboard')
+  const businessId = await getBusinessIdForUser(user.id)
+  if (!businessId) redirect('/dashboard')
 
   const monthStart = startOfMonth(new Date()).toISOString()
   const monthEnd = endOfMonth(new Date()).toISOString()
@@ -36,7 +33,7 @@ export default async function FinancesPage() {
       .select(
         'id, start_time, price_total, payment_status, clients(name), services(name), staff(name)'
       )
-      .eq('business_id', business.id)
+      .eq('business_id', businessId)
       .eq('status', 'completed')
       .gte('start_time', monthStart)
       .lte('start_time', monthEnd)
@@ -44,7 +41,7 @@ export default async function FinancesPage() {
     supabase
       .from('expenses')
       .select('*')
-      .eq('business_id', business.id)
+      .eq('business_id', businessId)
       .order('date', { ascending: false }),
   ])
 
@@ -69,13 +66,14 @@ export default async function FinancesPage() {
       : 0
 
   return (
-    <div>
-      <h1 className="text-2xl font-bold text-gray-900 mb-1">Finanzas</h1>
-      <p className="text-gray-600 mb-8">
-        Resumen, ingresos, gastos y reportes
-      </p>
-      <FinancesPageClient
-        businessId={business.id}
+    <RequirePermission permission="finances_view">
+      <div>
+        <h1 className="text-2xl font-bold text-zinc-100 mb-1">Finanzas</h1>
+        <p className="text-zinc-400 mb-8">
+          Resumen, ingresos, gastos y reportes
+        </p>
+        <FinancesPageClient
+          businessId={businessId}
         incomeData={incomeData}
         expenses={expenses ?? []}
         kpis={{
@@ -85,6 +83,7 @@ export default async function FinancesPage() {
           marginPercent: margin,
         }}
       />
-    </div>
+      </div>
+    </RequirePermission>
   )
 }

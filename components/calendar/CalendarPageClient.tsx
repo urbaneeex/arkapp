@@ -1,0 +1,82 @@
+'use client'
+
+import Link from 'next/link'
+import { Button } from '@/components/ui/button'
+import { Plus } from 'lucide-react'
+import { CalendarView } from '@/components/calendar/CalendarView'
+import { usePermissions } from '@/hooks/usePermissions'
+
+type AppointmentRow = {
+  id: string
+  start_time: string
+  end_time: string
+  status: string | null
+  price_total: number | null
+  client_id: string | null
+  service_id: string | null
+  staff_id: string | null
+  clients: { name: string; phone?: string } | { name: string; phone?: string }[] | null
+  services: { name: string; duration: number; price: number } | { name: string; duration: number; price: number }[] | null
+  staff: { name: string } | { name: string }[] | null
+}
+
+type Client = { id: string; name: string }
+type Service = { id: string; name: string; duration: number; price: number }
+type Staff = { id: string; name: string }
+type Shift = { open_time: string; close_time: string; is_closed: boolean }
+
+export function CalendarPageClient({
+  appointments,
+  clients,
+  services,
+  staff,
+  businessId,
+  shiftsByDay,
+}: {
+  appointments: AppointmentRow[]
+  clients: Client[]
+  services: Service[]
+  staff: Staff[]
+  businessId: string
+  shiftsByDay: Record<number, Shift[]>
+}) {
+  const { hasPermission, loading } = usePermissions()
+  const canCreateAppointments = hasPermission('appointments_create')
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <p className="text-zinc-400">Cargando permisos...</p>
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      <div className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center mb-6">
+        <div>
+          <h1 className="text-3xl font-bold text-zinc-100">Calendario</h1>
+          <p className="text-zinc-400 mt-1">
+            Vista día, semana, mes o año
+          </p>
+        </div>
+        {canCreateAppointments && (
+          <Link href="/dashboard/appointments/new" className="cursor-pointer">
+            <Button className="cursor-pointer">
+              <Plus className="w-4 h-4 mr-2" />
+              Nueva cita
+            </Button>
+          </Link>
+        )}
+      </div>
+      <CalendarView
+        appointments={appointments}
+        clients={clients}
+        services={services}
+        staff={staff}
+        businessId={businessId}
+        shiftsByDay={shiftsByDay}
+      />
+    </div>
+  )
+}

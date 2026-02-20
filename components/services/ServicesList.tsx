@@ -23,14 +23,14 @@ export function ServicesList({
 }) {
   if (services.length === 0) {
     return (
-      <div className="rounded-lg border border-gray-200 bg-white p-12 text-center text-gray-500">
+      <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-12 text-center text-zinc-400">
         No hay servicios. Crea el primero desde &quot;Nuevo servicio&quot;.
       </div>
     )
   }
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white overflow-hidden">
+    <div className="rounded-lg border border-zinc-800 bg-zinc-900 overflow-hidden">
       <Table>
         <TableHeader>
           <TableRow>
@@ -43,9 +43,9 @@ export function ServicesList({
         <TableBody>
           {services.map((s) => (
             <TableRow key={s.id} className="cursor-pointer">
-              <TableCell className="font-medium text-gray-900">{s.name}</TableCell>
-              <TableCell className="text-gray-800">{s.duration} min</TableCell>
-              <TableCell className="text-gray-800">
+              <TableCell className="font-medium text-zinc-100">{s.name}</TableCell>
+              <TableCell className="text-zinc-200">{s.duration} min</TableCell>
+              <TableCell className="text-zinc-200">
                 {new Intl.NumberFormat('es-ES', {
                   style: 'currency',
                   currency: 'EUR',

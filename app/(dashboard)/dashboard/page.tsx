@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import { getBusinessForUser } from '@/lib/supabase/business'
 import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -31,15 +32,10 @@ export default async function DashboardPage() {
   } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: business } = await supabase
-    .from('businesses')
-    .select('id, name')
-    .eq('owner_uid', user.id)
-    .single()
-
-  if (!business) {
+  const businessResult = await getBusinessForUser(user.id)
+  if (!businessResult) {
     return (
-      <div className="rounded-lg border border-amber-200 bg-amber-50 p-6 text-amber-800">
+      <div className="rounded-lg border border-amber-200 bg-amber-950/50 p-6 text-amber-200">
         <p className="font-medium">No tienes un negocio configurado</p>
         <p className="mt-1 text-sm">
           Contacta al administrador para asociar tu cuenta a un negocio.
@@ -47,6 +43,8 @@ export default async function DashboardPage() {
       </div>
     )
   }
+
+  const business = businessResult.business
 
   const todayStart = startOfToday().toISOString()
   const todayEnd = endOfToday().toISOString()
@@ -135,7 +133,7 @@ export default async function DashboardPage() {
       value: todayCount ?? 0,
       icon: Calendar,
       href: '/dashboard/calendar',
-      color: 'bg-[#2563eb] text-white',
+      color: 'bg-[#3B82F6] text-white',
     },
     {
       title: 'Citas esta semana',
@@ -179,17 +177,17 @@ export default async function DashboardPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900 mb-1">
+      <h1 className="text-2xl font-bold text-zinc-100 mb-1">
         Hola, {business.name}
       </h1>
-      <p className="text-gray-600 mb-8">Resumen de tu negocio</p>
+      <p className="text-zinc-400 mb-8">Resumen de tu negocio</p>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-8">
         {stats.map(({ title, value, icon: Icon, href, color }) => (
           <Link key={title} href={href} className="cursor-pointer">
             <Card className="h-32 p-6 hover:shadow-md transition-shadow flex flex-col">
               <CardHeader className="flex flex-row items-center justify-between pb-2 p-0">
-                <CardTitle className="text-sm font-medium text-gray-600">
+                <CardTitle className="text-sm font-medium text-zinc-400">
                   {title}
                 </CardTitle>
                 <div className={`rounded-lg p-2 shrink-0 ${color}`}>
@@ -223,13 +221,13 @@ export default async function DashboardPage() {
                     <li key={apt.id}>
                       <Link
                         href={`/dashboard/appointments/${apt.id}/edit`}
-                        className="cursor-pointer flex items-center justify-between rounded-lg border border-gray-200 p-3 hover:bg-gray-50"
+                        className="cursor-pointer flex items-center justify-between rounded-lg border border-zinc-800 p-3 hover:bg-zinc-950"
                       >
                         <div>
-                          <p className="font-medium text-gray-900">
+                          <p className="font-medium text-zinc-100">
                             {clientName ?? 'Sin cliente'}
                           </p>
-                          <p className="text-sm text-gray-500">
+                          <p className="text-sm text-zinc-400">
                             {serviceName ?? 'Sin servicio'} ·{' '}
                             {format(
                               new Date(apt.start_time),
@@ -247,13 +245,13 @@ export default async function DashboardPage() {
                 })}
               </ul>
             ) : (
-              <p className="text-sm text-gray-500 py-4">
+              <p className="text-sm text-zinc-400 py-4">
                 No hay citas programadas para hoy.
               </p>
             )}
             <Link
               href="/dashboard/calendar"
-              className="mt-4 inline-block text-sm font-medium text-[#2563eb] hover:underline cursor-pointer"
+              className="mt-4 inline-block text-sm font-medium text-[#3B82F6] hover:underline cursor-pointer"
             >
               Ver calendario →
             </Link>
@@ -268,37 +266,37 @@ export default async function DashboardPage() {
             <div className="grid grid-cols-2 gap-3">
               <Link
                 href="/dashboard/appointments/new"
-                className="cursor-pointer rounded-lg border border-gray-200 p-4 text-center hover:bg-gray-50"
+                className="cursor-pointer rounded-lg border border-zinc-800 p-4 text-center hover:bg-zinc-950"
               >
-                <Calendar className="mx-auto h-6 w-6 text-[#2563eb]" />
-                <p className="mt-2 text-sm font-medium text-gray-900">
+                <Calendar className="mx-auto h-6 w-6 text-[#3B82F6]" />
+                <p className="mt-2 text-sm font-medium text-zinc-100">
                   Nueva cita
                 </p>
               </Link>
               <Link
                 href="/dashboard/clients/new"
-                className="cursor-pointer rounded-lg border border-gray-200 p-4 text-center hover:bg-gray-50"
+                className="cursor-pointer rounded-lg border border-zinc-800 p-4 text-center hover:bg-zinc-950"
               >
                 <Users className="mx-auto h-6 w-6 text-emerald-600" />
-                <p className="mt-2 text-sm font-medium text-gray-900">
+                <p className="mt-2 text-sm font-medium text-zinc-100">
                   Nuevo cliente
                 </p>
               </Link>
               <Link
                 href="/dashboard/services"
-                className="cursor-pointer rounded-lg border border-gray-200 p-4 text-center hover:bg-gray-50"
+                className="cursor-pointer rounded-lg border border-zinc-800 p-4 text-center hover:bg-zinc-950"
               >
                 <Briefcase className="mx-auto h-6 w-6 text-violet-600" />
-                <p className="mt-2 text-sm font-medium text-gray-900">
+                <p className="mt-2 text-sm font-medium text-zinc-100">
                   Servicios
                 </p>
               </Link>
               <Link
                 href="/dashboard/settings"
-                className="cursor-pointer rounded-lg border border-gray-200 p-4 text-center hover:bg-gray-50"
+                className="cursor-pointer rounded-lg border border-zinc-800 p-4 text-center hover:bg-zinc-950"
               >
                 <Settings className="mx-auto h-6 w-6 text-amber-600" />
-                <p className="mt-2 text-sm font-medium text-gray-900">
+                <p className="mt-2 text-sm font-medium text-zinc-100">
                   Configuración
                 </p>
               </Link>

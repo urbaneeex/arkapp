@@ -32,11 +32,11 @@ type AppointmentRow = {
 
 const STATUS_COLORS: Record<string, string> = {
   pending: 'bg-amber-100 text-amber-800 border-amber-200',
-  confirmed: 'bg-blue-100 text-blue-800 border-blue-200',
+  confirmed: 'bg-blue-100 text-blue-800 border-blue-800',
   in_progress: 'bg-violet-100 text-violet-800 border-violet-200',
   completed: 'bg-emerald-100 text-emerald-800 border-emerald-200',
-  cancelled: 'bg-gray-100 text-gray-600 border-gray-200',
-  no_show: 'bg-red-100 text-red-800 border-red-200',
+  cancelled: 'bg-zinc-800 text-zinc-400 border-zinc-800',
+  no_show: 'bg-red-100 text-red-300 border-red-800',
 }
 
 export function AppointmentsCalendar({
@@ -112,9 +112,9 @@ export function AppointmentsCalendar({
 
   return (
     <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+    <div className="bg-zinc-900 rounded-xl border border-zinc-800 overflow-hidden">
       {!hideToolbar && (
-        <div className="flex items-center justify-between p-4 border-b border-gray-200 flex-wrap gap-2">
+        <div className="flex items-center justify-between p-4 border-b border-zinc-800 flex-wrap gap-2">
           <div className="flex items-center gap-2">
             <Button variant="outline" size="icon" onClick={prevWeek}>
               <ChevronLeft className="h-4 w-4" />
@@ -126,22 +126,22 @@ export function AppointmentsCalendar({
               Hoy
             </Button>
           </div>
-          <h2 className="text-lg font-semibold text-gray-900 capitalize">
+          <h2 className="text-lg font-semibold text-zinc-100 capitalize">
             {format(weekStart, "d 'de' MMMM", { locale: es })} –{' '}
             {format(addDays(weekStart, 6), "d 'de' MMMM yyyy", { locale: es })}
           </h2>
         </div>
       )}
-      <div className="grid grid-cols-7 min-[900px]:grid-cols-7 border-b border-gray-200">
+      <div className="grid grid-cols-7 min-[900px]:grid-cols-7 border-b border-zinc-800">
         {days.map((day) => (
           <div
             key={day.toISOString()}
-            className={`p-2 text-center text-sm font-medium border-r border-gray-200 last:border-r-0 ${
-              isSameMonth(day, current) ? 'text-gray-900' : 'text-gray-400'
-            } ${isSameDay(day, new Date()) ? 'bg-[#2563eb]/10' : ''}`}
+            className={`p-2 text-center text-sm font-medium border-r border-zinc-800 last:border-r-0 ${
+              isSameMonth(day, current) ? 'text-zinc-100' : 'text-zinc-400'
+            } ${isSameDay(day, new Date()) ? 'bg-[#3B82F6]/10' : ''}`}
           >
             {format(day, 'EEE', { locale: es })}
-            <div className="text-xs text-gray-500 mt-0.5">
+            <div className="text-xs text-zinc-400 mt-0.5">
               {format(day, 'd')}
             </div>
           </div>
@@ -184,9 +184,9 @@ function WeekDayCell({
     <div
       ref={setNodeRef}
       className={cn(
-        'border-r border-gray-200 last:border-r-0 p-2 min-h-[120px]',
-        isToday && 'bg-[#2563eb]/5',
-        !isToday && 'bg-gray-50/50',
+        'border-r border-zinc-800 last:border-r-0 p-2 min-h-[120px]',
+        isToday && 'bg-[#3B82F6]/5',
+        !isToday && 'bg-zinc-900/50',
         isOver && 'ring-2 ring-blue-400 ring-inset'
       )}
     >
@@ -218,7 +218,7 @@ function DraggableAppointmentCard({
         'cursor-pointer w-full text-left block rounded-lg border p-2 mb-2 text-xs truncate transition-opacity hover:opacity-90',
         canDrag && 'cursor-grab active:cursor-grabbing',
         isDragging && 'opacity-50 shadow-lg',
-        statusColors[appointment.status ?? 'pending'] ?? 'bg-gray-100'
+        statusColors[appointment.status ?? 'pending'] ?? 'bg-zinc-800'
       )}
       title={`${Array.isArray(appointment.clients) ? appointment.clients[0]?.name : appointment.clients?.name ?? 'Sin cliente'} - ${Array.isArray(appointment.services) ? appointment.services[0]?.name : appointment.services?.name ?? 'Sin servicio'}`}
     >

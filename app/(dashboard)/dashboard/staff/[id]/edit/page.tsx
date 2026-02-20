@@ -31,11 +31,17 @@ export default async function EditStaffPage({
 
   if (error || !staff) notFound()
 
+  const { data: roles } = await supabase
+    .from('roles')
+    .select('id, name, description')
+    .eq('business_id', business.id)
+    .order('name')
+
   return (
     <div className="max-w-xl">
-      <h1 className="text-3xl font-bold text-gray-900 mb-2">Editar empleado</h1>
-      <p className="text-gray-600 mb-8">{staff.name}</p>
-      <StaffForm businessId={business.id} staff={staff} />
+      <h1 className="text-3xl font-bold text-zinc-100 mb-2">Editar empleado</h1>
+      <p className="text-zinc-400 mb-8">{staff.name}</p>
+      <StaffForm businessId={business.id} staff={staff} initialRoles={roles ?? []} />
     </div>
   )
 }

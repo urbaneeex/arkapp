@@ -31,14 +31,14 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="bg-white rounded-xl shadow-lg p-8">
-      <h1 className="text-2xl font-bold text-gray-900 mb-2">Iniciar sesión</h1>
-      <p className="text-gray-600 mb-6">
+    <div className="bg-zinc-900 rounded-xl shadow-lg p-8">
+      <h1 className="text-2xl font-bold text-zinc-100 mb-2">Iniciar sesión</h1>
+      <p className="text-zinc-400 mb-6">
         Accede a tu panel de citas
       </p>
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && (
-          <div className="p-3 rounded-lg bg-red-50 text-red-700 text-sm">
+          <div className="p-3 rounded-lg bg-red-950/50 text-red-300 text-sm">
             {error}
           </div>
         )}
@@ -69,9 +69,9 @@ export default function LoginPage() {
           {loading ? 'Entrando...' : 'Entrar'}
         </Button>
       </form>
-      <p className="mt-6 text-center text-sm text-gray-600">
+      <p className="mt-6 text-center text-sm text-zinc-400">
         ¿No tienes cuenta?{' '}
-        <Link href="/register" className="text-[#2563eb] font-medium hover:underline cursor-pointer">
+        <Link href="/register" className="text-[#3B82F6] font-medium hover:underline cursor-pointer">
           Regístrate
         </Link>
       </p>

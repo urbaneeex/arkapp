@@ -22,7 +22,7 @@ export function ToastSimple({
   return (
     <div
       className={cn(
-        'fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] px-4 py-2 rounded-lg shadow-lg text-sm font-medium text-white',
+        'fixed top-6 left-1/2 -translate-x-1/2 z-[100] px-6 py-3 rounded-lg shadow-xl text-sm font-medium text-white animate-in fade-in slide-in-from-top-4',
         type === 'success' && 'bg-emerald-600',
         type === 'error' && 'bg-red-600'
       )}

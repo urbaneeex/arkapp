@@ -92,16 +92,16 @@ export default function ClientForm({ client }: ClientFormProps) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="bg-white p-6 rounded-lg border border-gray-200 space-y-6">
+    <form onSubmit={handleSubmit} className="bg-zinc-900 p-6 rounded-lg border border-zinc-800 space-y-6">
       {error && (
-        <div className="bg-red-50 text-red-600 p-4 rounded-lg">
+        <div className="bg-red-950/50 text-red-300 p-4 rounded-lg">
           {error}
         </div>
       )}
 
       {/* Nombre */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
+        <label className="block text-sm font-medium text-zinc-300 mb-2">
           Nombre completo *
         </label>
         <input
@@ -110,14 +110,14 @@ export default function ClientForm({ client }: ClientFormProps) {
           required
           value={formData.name}
           onChange={handleChange}
-          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full px-4 py-2 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
           placeholder="Juan Pérez"
         />
       </div>
 
       {/* Teléfono */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
+        <label className="block text-sm font-medium text-zinc-300 mb-2">
           Teléfono *
         </label>
         <input
@@ -126,14 +126,14 @@ export default function ClientForm({ client }: ClientFormProps) {
           required
           value={formData.phone}
           onChange={handleChange}
-          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full px-4 py-2 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
           placeholder="+34 612 34 56 78"
         />
       </div>
 
       {/* Email */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
+        <label className="block text-sm font-medium text-zinc-300 mb-2">
           Email
         </label>
         <input
@@ -141,14 +141,14 @@ export default function ClientForm({ client }: ClientFormProps) {
           name="email"
           value={formData.email}
           onChange={handleChange}
-          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full px-4 py-2 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
           placeholder="juan@ejemplo.com"
         />
       </div>
 
       {/* Dirección */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
+        <label className="block text-sm font-medium text-zinc-300 mb-2">
           Dirección
         </label>
         <input
@@ -156,14 +156,14 @@ export default function ClientForm({ client }: ClientFormProps) {
           name="address"
           value={formData.address}
           onChange={handleChange}
-          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full px-4 py-2 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
           placeholder="Calle Principal 123, Sevilla"
         />
       </div>
 
       {/* Notas */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
+        <label className="block text-sm font-medium text-zinc-300 mb-2">
           Notas
         </label>
         <textarea
@@ -171,7 +171,7 @@ export default function ClientForm({ client }: ClientFormProps) {
           rows={3}
           value={formData.notes}
           onChange={handleChange}
-          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full px-4 py-2 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
           placeholder="Alergias, preferencias, etc."
         />
       </div>

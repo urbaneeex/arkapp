@@ -56,8 +56,8 @@ export default async function EditAppointmentPage({
 
   return (
     <div className="max-w-xl">
-      <h1 className="text-3xl font-bold text-gray-900 mb-2">Editar cita</h1>
-      <p className="text-gray-600 mb-8">
+      <h1 className="text-3xl font-bold text-zinc-100 mb-2">Editar cita</h1>
+      <p className="text-zinc-400 mb-8">
         {new Date(appointment.start_time).toLocaleString('es')}
       </p>
       <AppointmentForm

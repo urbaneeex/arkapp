@@ -37,6 +37,8 @@ const DAYS = [
 const LOGO_MAX_SIZE_MB = 2
 const LOGO_ACCEPT = 'image/jpeg,image/png,image/webp'
 
+export type WaStatus = 'disconnected' | 'pending_qr' | 'connected'
+
 interface BusinessData {
   id: string
   name: string
@@ -53,6 +55,8 @@ interface BusinessData {
   notification_settings: Record<string, unknown>
   plan: string
   logo_url: string
+  wa_instance_name?: string | null
+  wa_status?: WaStatus
 }
 
 interface ShiftRow {
@@ -121,6 +125,8 @@ export function SettingsClient({
   const [reminder24h, setReminder24h] = useState(!!notif.reminder_24h)
   const [reminder1h, setReminder1h] = useState(!!notif.reminder_1h)
   const [webhookUrl, setWebhookUrl] = useState((notif.webhook_url as string) ?? '')
+  const [waStatus, setWaStatus] = useState<WaStatus>(business.wa_status ?? 'disconnected')
+  const [waConnecting, setWaConnecting] = useState(false)
 
   const supabase = createClient()
   const setBusiness = useBusinessStore((s) => s.setBusiness)
@@ -362,7 +368,7 @@ export function SettingsClient({
   return (
     <div>
       {error && (
-        <div className="rounded-md bg-red-50 border border-red-200 text-red-800 px-4 py-2 text-sm mb-4">
+        <div className="rounded-md bg-red-950/50 border border-red-800 text-red-300 px-4 py-2 text-sm mb-4">
           {error}
         </div>
       )}
@@ -373,7 +379,7 @@ export function SettingsClient({
       )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="flex w-full flex-row flex-wrap justify-start gap-2 h-auto p-1 bg-gray-100 cursor-default">
+        <TabsList className="flex w-full flex-row flex-wrap justify-start gap-2 h-auto p-1 bg-zinc-800 cursor-default">
           {[
             { value: 'general', icon: Building2, label: 'General' },
             { value: 'account', icon: User, label: 'Mi cuenta' },
@@ -398,12 +404,12 @@ export function SettingsClient({
             <Card>
               <CardHeader>
                 <CardTitle>Información general</CardTitle>
-                <p className="text-sm text-gray-500">Datos públicos de tu negocio</p>
+                <p className="text-sm text-zinc-400">Datos públicos de tu negocio</p>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div>
                   <Label>Logo de la empresa</Label>
-                  <p className="text-xs text-gray-500 mt-0.5 mb-2">
+                  <p className="text-xs text-zinc-400 mt-0.5 mb-2">
                     JPG, PNG o WebP. Máximo {LOGO_MAX_SIZE_MB} MB. Se muestra en el menú del CRM.
                   </p>
                   <div className="flex items-center gap-4 flex-wrap">
@@ -412,7 +418,7 @@ export function SettingsClient({
                         <img
                           src={logoUrl}
                           alt="Logo"
-                          className="h-16 w-16 rounded-full object-cover border border-gray-200"
+                          className="h-16 w-16 rounded-full object-cover border border-zinc-800"
                         />
                         <div className="flex gap-2">
                           <input
@@ -485,7 +491,7 @@ export function SettingsClient({
                     id="industry"
                     value={industry}
                     onChange={(e) => setIndustry(e.target.value)}
-                    className="mt-1 flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] focus-visible:ring-offset-2"
+                    className="mt-1 flex h-10 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6] focus-visible:ring-offset-2"
                   >
                     {INDUSTRIES.map((i) => (
                       <option key={i} value={i}>
@@ -538,7 +544,7 @@ export function SettingsClient({
                       placeholder="mi-negocio"
                       className="font-mono"
                     />
-                    <p className="text-xs text-gray-500">Vista previa: {slugPath}</p>
+                    <p className="text-xs text-zinc-400">Vista previa: {slugPath}</p>
                   </div>
                 </div>
                 <div>
@@ -585,7 +591,7 @@ export function SettingsClient({
             <Card>
               <CardHeader>
                 <CardTitle>Mi cuenta</CardTitle>
-                <p className="text-sm text-gray-500">Datos del propietario y contraseña</p>
+                <p className="text-sm text-zinc-400">Datos del propietario y contraseña</p>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div>
@@ -605,12 +611,12 @@ export function SettingsClient({
                     type="email"
                     value={ownerEmail}
                     disabled
-                    className="mt-1 bg-gray-50 cursor-not-allowed"
+                    className="mt-1 bg-zinc-950 cursor-not-allowed"
                   />
-                  <p className="text-xs text-gray-500 mt-1">No editable</p>
+                  <p className="text-xs text-zinc-400 mt-1">No editable</p>
                 </div>
                 <div className="pt-4 border-t">
-                  <h4 className="font-medium text-gray-900 mb-2">Cambiar contraseña</h4>
+                  <h4 className="font-medium text-zinc-100 mb-2">Cambiar contraseña</h4>
                   <div className="space-y-2 max-w-sm">
                     <Input
                       type="password"
@@ -637,7 +643,7 @@ export function SettingsClient({
             <Card>
               <CardHeader>
                 <CardTitle>Horarios de operación</CardTitle>
-                <p className="text-sm text-gray-500">
+                <p className="text-sm text-zinc-400">
                   Define cuándo aceptas reservas. Puedes añadir turnos partidos (varios tramos por día).
                 </p>
               </CardHeader>
@@ -647,10 +653,10 @@ export function SettingsClient({
                   return (
                     <div
                       key={day_of_week}
-                      className="rounded-lg border border-gray-200 p-4 space-y-3"
+                      className="rounded-lg border border-zinc-800 p-4 space-y-3"
                     >
                       <div className="flex items-center justify-between flex-wrap gap-2">
-                        <span className="font-medium text-gray-900">{dayLabel}</span>
+                        <span className="font-medium text-zinc-100">{dayLabel}</span>
                         <Button
                           type="button"
                           variant="outline"
@@ -664,7 +670,7 @@ export function SettingsClient({
                       {shifts.map((shift, idx) => (
                         <div
                           key={idx}
-                          className="flex flex-wrap items-center gap-3 pl-2 border-l-2 border-gray-100"
+                          className="flex flex-wrap items-center gap-3 pl-2 border-l-2 border-zinc-700"
                         >
                           <Input
                             type="time"
@@ -673,7 +679,7 @@ export function SettingsClient({
                             disabled={shift.is_closed}
                             onChange={(e) => updateShift(day_of_week, idx, 'open_time', e.target.value)}
                           />
-                          <span className="text-gray-500">a</span>
+                          <span className="text-zinc-400">a</span>
                           <Input
                             type="time"
                             className="w-28"
@@ -681,7 +687,7 @@ export function SettingsClient({
                             disabled={shift.is_closed}
                             onChange={(e) => updateShift(day_of_week, idx, 'close_time', e.target.value)}
                           />
-                          <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+                          <label className="flex items-center gap-2 text-sm text-zinc-400 cursor-pointer">
                             <input
                               type="checkbox"
                               className="rounded cursor-pointer"
@@ -695,7 +701,7 @@ export function SettingsClient({
                               type="button"
                               variant="ghost"
                               size="icon"
-                              className="text-gray-500 hover:text-red-600"
+                              className="text-zinc-400 hover:text-red-600"
                               onClick={() => removeShift(day_of_week, idx)}
                               title="Quitar turno"
                             >
@@ -718,7 +724,7 @@ export function SettingsClient({
             <Card>
               <CardHeader>
                 <CardTitle>Reservas online</CardTitle>
-                <p className="text-sm text-gray-500">URL pública y opciones del widget</p>
+                <p className="text-sm text-zinc-400">URL pública y opciones del widget</p>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div>
@@ -784,11 +790,11 @@ export function SettingsClient({
             <Card>
               <CardHeader>
                 <CardTitle>Notificaciones y automatizaciones</CardTitle>
-                <p className="text-sm text-gray-500">WhatsApp, email y webhooks</p>
+                <p className="text-sm text-zinc-400">WhatsApp, email y webhooks</p>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div>
-                  <h4 className="font-medium text-gray-900 mb-2">WhatsApp</h4>
+                  <h4 className="font-medium text-zinc-100 mb-2">WhatsApp</h4>
                   <div className="space-y-2">
                     <Input
                       placeholder="API Key"
@@ -832,7 +838,7 @@ export function SettingsClient({
                   </div>
                 </div>
                 <div>
-                  <h4 className="font-medium text-gray-900 mb-2">Webhooks</h4>
+                  <h4 className="font-medium text-zinc-100 mb-2">Webhooks</h4>
                   <Input
                     placeholder="URL webhook nueva cita"
                     value={webhookUrl}
@@ -851,21 +857,21 @@ export function SettingsClient({
             <Card>
               <CardHeader>
                 <CardTitle>Facturación y plan</CardTitle>
-                <p className="text-sm text-gray-500">Plan actual y método de pago</p>
+                <p className="text-sm text-zinc-400">Plan actual y método de pago</p>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="rounded-lg border border-gray-200 p-4">
-                  <p className="font-medium text-gray-900">
+                <div className="rounded-lg border border-zinc-800 p-4">
+                  <p className="font-medium text-zinc-100">
                     Plan actual: {business.plan === 'pro' ? 'Pro' : 'Free'}
                   </p>
-                  <p className="text-sm text-gray-500 mt-1">
+                  <p className="text-sm text-zinc-400 mt-1">
                     {business.plan === 'pro'
                       ? 'Citas: ilimitadas · Empleados: ilimitados · Clientes: ilimitados'
                       : 'Citas: ilimitadas · Empleados: 1 · Clientes: ilimitados'}
                   </p>
                   <Button className="mt-4 cursor-pointer">Mejorar plan</Button>
                 </div>
-                <p className="text-sm text-gray-500">Próximo cobro: —</p>
+                <p className="text-sm text-zinc-400">Próximo cobro: —</p>
               </CardContent>
             </Card>
           </TabsContent>
@@ -874,31 +880,100 @@ export function SettingsClient({
             <Card>
               <CardHeader>
                 <CardTitle>Integraciones</CardTitle>
-                <p className="text-sm text-gray-500">Conecta con Google Calendar, Stripe y más</p>
+                <p className="text-sm text-zinc-400">Conecta con WhatsApp (Evolution API), Google Calendar, Stripe y más</p>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="flex items-center justify-between rounded-lg border border-gray-200 p-4">
+                {/* WhatsApp (Evolution API) */}
+                <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-zinc-800 p-4">
+                  <div className="flex items-center gap-4 min-w-0">
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#25D366]/10 text-[#25D366]">
+                      <svg viewBox="0 0 24 24" className="h-7 w-7" fill="currentColor" aria-hidden>
+                        <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.865 9.865 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+                      </svg>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-medium text-zinc-100 dark:text-zinc-100">WhatsApp (Evolution API)</p>
+                      <p className="text-sm text-zinc-400">Envía recordatorios automáticos de citas a tus clientes</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {waStatus === 'connected' ? (
+                      <>
+                        <span className="inline-flex items-center gap-1.5 rounded-md bg-emerald-500/20 px-2.5 py-1.5 text-sm font-medium text-emerald-400 border border-emerald-500/30">
+                          Conectado
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="cursor-pointer border-zinc-600 text-zinc-300 hover:bg-red-950/30 hover:border-red-800 hover:text-red-400"
+                          onClick={async () => {
+                            setWaConnecting(true)
+                            const { error } = await supabase
+                              .from('businesses')
+                              .update({ wa_status: 'disconnected', wa_instance_name: null })
+                              .eq('id', business.id)
+                            setWaConnecting(false)
+                            if (!error) {
+                              setWaStatus('disconnected')
+                              showFeedback('success', 'WhatsApp desconectado.')
+                              router.refresh()
+                            } else showFeedback('error', error.message)
+                          }}
+                          disabled={waConnecting}
+                        >
+                          Desconectar
+                        </Button>
+                      </>
+                    ) : waStatus === 'pending_qr' || waConnecting ? (
+                      <div className="rounded-md border border-zinc-700 bg-zinc-800/50 px-4 py-2.5 text-sm text-zinc-400">
+                        Cargando QR…
+                      </div>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        className="cursor-pointer"
+                        onClick={async () => {
+                          setWaConnecting(true)
+                          const { error } = await supabase
+                            .from('businesses')
+                            .update({ wa_status: 'pending_qr' })
+                            .eq('id', business.id)
+                          setWaConnecting(false)
+                          if (!error) {
+                            setWaStatus('pending_qr')
+                            showFeedback('success', 'Iniciando conexión. Aquí se mostrará el QR cuando integres Evolution API.')
+                            router.refresh()
+                          } else showFeedback('error', error.message)
+                        }}
+                        disabled={waConnecting}
+                      >
+                        Conectar
+                      </Button>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center justify-between rounded-lg border border-zinc-800 p-4">
                   <div>
-                    <p className="font-medium text-gray-900">Google Calendar</p>
-                    <p className="text-sm text-gray-500">Sincronizar citas</p>
+                    <p className="font-medium text-zinc-100">Google Calendar</p>
+                    <p className="text-sm text-zinc-400">Sincronizar citas</p>
                   </div>
                   <Button variant="outline" className="cursor-pointer">
                     Conectar
                   </Button>
                 </div>
-                <div className="flex items-center justify-between rounded-lg border border-gray-200 p-4">
+                <div className="flex items-center justify-between rounded-lg border border-zinc-800 p-4">
                   <div>
-                    <p className="font-medium text-gray-900">Stripe</p>
-                    <p className="text-sm text-gray-500">Pagos y depósitos</p>
+                    <p className="font-medium text-zinc-100">Stripe</p>
+                    <p className="text-sm text-zinc-400">Pagos y depósitos</p>
                   </div>
                   <Button variant="outline" className="cursor-pointer">
                     Conectar
                   </Button>
                 </div>
-                <div className="flex items-center justify-between rounded-lg border border-gray-200 p-4">
+                <div className="flex items-center justify-between rounded-lg border border-zinc-800 p-4">
                   <div>
-                    <p className="font-medium text-gray-900">Webhooks</p>
-                    <p className="text-sm text-gray-500">URLs para eventos</p>
+                    <p className="font-medium text-zinc-100">Webhooks</p>
+                    <p className="text-sm text-zinc-400">URLs para eventos</p>
                   </div>
                   <Button variant="outline" className="cursor-pointer">
                     Configurar

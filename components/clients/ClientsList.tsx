@@ -11,8 +11,8 @@ export default function ClientsList({ clients }: ClientsListProps) {
   if (clients.length === 0) {
     return (
       <div className="text-center py-12">
-        <p className="text-gray-500 text-lg">No hay clientes registrados</p>
-        <p className="text-gray-400 text-sm mt-2">
+        <p className="text-zinc-400 text-lg">No hay clientes registrados</p>
+        <p className="text-zinc-400 text-sm mt-2">
           Comienza agregando tu primer cliente
         </p>
       </div>
@@ -20,43 +20,43 @@ export default function ClientsList({ clients }: ClientsListProps) {
   }
 
   return (
-    <div className="bg-white rounded-lg shadow overflow-hidden">
+    <div className="bg-zinc-900 rounded-lg shadow overflow-hidden">
       <table className="min-w-full divide-y divide-gray-200">
-        <thead className="bg-gray-50">
+        <thead className="bg-zinc-950">
           <tr>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+            <th className="px-6 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">
               Nombre
             </th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+            <th className="px-6 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">
               Teléfono
             </th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+            <th className="px-6 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">
               Email
             </th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+            <th className="px-6 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">
               Dirección
             </th>
-            <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+            <th className="px-6 py-3 text-right text-xs font-medium text-zinc-400 uppercase tracking-wider">
               Acciones
             </th>
           </tr>
         </thead>
-        <tbody className="bg-white divide-y divide-gray-200">
+        <tbody className="bg-zinc-900 divide-y divide-gray-200">
           {clients.map((client) => (
-            <tr key={client.id} className="hover:bg-gray-50 cursor-pointer">
+            <tr key={client.id} className="hover:bg-zinc-950 cursor-pointer">
               <td className="px-6 py-4 whitespace-nowrap">
-                <div className="text-sm font-medium text-gray-900">
+                <div className="text-sm font-medium text-zinc-100">
                   {client.name}
                 </div>
               </td>
               <td className="px-6 py-4 whitespace-nowrap">
-                <div className="text-sm text-gray-500">{client.phone}</div>
+                <div className="text-sm text-zinc-400">{client.phone}</div>
               </td>
               <td className="px-6 py-4 whitespace-nowrap">
-                <div className="text-sm text-gray-500">{client.email || '-'}</div>
+                <div className="text-sm text-zinc-400">{client.email || '-'}</div>
               </td>
               <td className="px-6 py-4">
-                <div className="text-sm text-gray-500">
+                <div className="text-sm text-zinc-400">
                   {client.address || '-'}
                 </div>
               </td>

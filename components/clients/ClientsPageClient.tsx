@@ -38,7 +38,7 @@ export function ClientsPageClient({ clients }: ClientsPageClientProps) {
         action={
           <a
             href="/dashboard/clients/new"
-            className="inline-flex items-center justify-center rounded-md bg-[#2563eb] px-4 py-2 text-sm font-medium text-white hover:bg-[#1d4ed8]"
+            className="inline-flex items-center justify-center rounded-md bg-[#3B82F6] px-4 py-2 text-sm font-medium text-white hover:bg-[#1d4ed8]"
           >
             Nuevo cliente
           </a>
@@ -50,7 +50,7 @@ export function ClientsPageClient({ clients }: ClientsPageClientProps) {
   return (
     <div className="space-y-4">
       <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
         <Input
           type="search"
           placeholder="Buscar por nombre, teléfono, email..."
@@ -61,7 +61,7 @@ export function ClientsPageClient({ clients }: ClientsPageClientProps) {
       </div>
       <ClientsList clients={filtered} />
       {filtered.length === 0 && (
-        <p className="text-sm text-gray-500">Ningún cliente coincide con la búsqueda.</p>
+        <p className="text-sm text-zinc-400">Ningún cliente coincide con la búsqueda.</p>
       )}
     </div>
   )

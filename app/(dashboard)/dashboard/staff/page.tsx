@@ -1,9 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
-import Link from 'next/link'
-import { Button } from '@/components/ui/button'
-import { Plus } from 'lucide-react'
-import { StaffList } from '@/components/staff/StaffList'
+import { StaffClient } from '@/components/staff/StaffClient'
+import { RequirePermission } from '@/components/auth/RequirePermission'
+import { getBusinessIdForUser } from '@/lib/supabase/business'
 
 export default async function StaffPage() {
   const supabase = await createClient()
@@ -12,44 +11,45 @@ export default async function StaffPage() {
   } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: business } = await supabase
-    .from('businesses')
-    .select('id')
-    .eq('owner_uid', user.id)
-    .single()
-
-  if (!business) {
+  const businessId = await getBusinessIdForUser(user.id)
+  if (!businessId) {
     return <div>No tienes un negocio configurado</div>
   }
 
-  const { data: staff, error } = await supabase
-    .from('staff')
-    .select('*')
-    .eq('business_id', business.id)
-    .order('name')
+  const [staffResult, rolesResult] = await Promise.all([
+    supabase
+      .from('staff')
+      .select('*')
+      .eq('business_id', businessId)
+      .order('name'),
+    supabase
+      .from('roles')
+      .select('id, business_id, name, description, created_at')
+      .eq('business_id', businessId)
+      .order('name'),
+  ])
 
-  if (error) {
-    console.error(error)
-    return <div>Error al cargar empleados</div>
+  if (staffResult.error) {
+    return (
+      <div className="p-4 bg-red-950/50 text-red-300 rounded-lg">
+        Error al cargar empleados: {staffResult.error.message || 'Error desconocido'}
+      </div>
+    )
   }
 
   return (
-    <div>
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Empleados</h1>
-          <p className="text-gray-600 mt-1">
-            Empleados y profesionales ({staff?.length ?? 0})
-          </p>
-        </div>
-        <Link href="/dashboard/staff/new" className="cursor-pointer">
-          <Button>
-            <Plus className="w-4 h-4 mr-2" />
-            Nuevo empleado
-          </Button>
-        </Link>
+    <RequirePermission permission="staff_view">
+      <div>
+        <h1 className="text-2xl font-bold text-zinc-100 mb-1">Equipo</h1>
+        <p className="text-zinc-400 mb-8">
+          Gestiona empleados, turnos, roles y permisos
+        </p>
+        <StaffClient
+          staff={staffResult.data ?? []}
+          businessId={businessId}
+          roles={rolesResult.data ?? []}
+        />
       </div>
-      <StaffList staff={staff ?? []} businessId={business.id} />
-    </div>
+    </RequirePermission>
   )
 }

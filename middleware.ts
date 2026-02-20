@@ -28,8 +28,22 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser()
 
   const isAuthRoute =
-    request.nextUrl.pathname === '/login' || request.nextUrl.pathname === '/register'
-  const isPublicRoute = request.nextUrl.pathname === '/' || isAuthRoute
+    request.nextUrl.pathname === '/login' ||
+    request.nextUrl.pathname === '/register' ||
+    request.nextUrl.pathname.startsWith('/register/')
+  const isCallbackRoute = request.nextUrl.pathname === '/auth/callback'
+  const isSetPasswordRoute = request.nextUrl.pathname === '/auth/set-password'
+  const isAcceptInviteRoute = request.nextUrl.pathname === '/auth/accept-invite'
+  const isExpiredRoute = request.nextUrl.pathname === '/auth/expired'
+  const isInviteRoute = request.nextUrl.pathname.startsWith('/invite/')
+  const isPublicRoute =
+    request.nextUrl.pathname === '/' || 
+    isAuthRoute || 
+    isCallbackRoute || 
+    isInviteRoute || 
+    isSetPasswordRoute || 
+    isAcceptInviteRoute ||
+    isExpiredRoute
 
   if (user && isAuthRoute) {
     return NextResponse.redirect(new URL('/dashboard', request.url))

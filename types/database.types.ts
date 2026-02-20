@@ -187,6 +187,9 @@ export type Database = {
           booking_settings: Json | null
           notification_settings: Json | null
           plan: string | null
+          permission_matrix: Json | null
+          wa_instance_name: string | null
+          wa_status: string | null
         }
         Insert: {
           config_json?: Json | null
@@ -211,6 +214,9 @@ export type Database = {
           booking_settings?: Json | null
           notification_settings?: Json | null
           plan?: string | null
+          permission_matrix?: Json | null
+          wa_instance_name?: string | null
+          wa_status?: string | null
         }
         Update: {
           config_json?: Json | null
@@ -235,6 +241,9 @@ export type Database = {
           booking_settings?: Json | null
           notification_settings?: Json | null
           plan?: string | null
+          permission_matrix?: Json | null
+          wa_instance_name?: string | null
+          wa_status?: string | null
         }
         Relationships: []
       }

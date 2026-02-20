@@ -19,8 +19,8 @@ export default async function NewServicePage() {
 
   return (
     <div className="max-w-xl">
-      <h1 className="text-3xl font-bold text-gray-900 mb-2">Nuevo servicio</h1>
-      <p className="text-gray-600 mb-8">Añade un servicio con precio y duración</p>
+      <h1 className="text-3xl font-bold text-zinc-100 mb-2">Nuevo servicio</h1>
+      <p className="text-zinc-400 mb-8">Añade un servicio con precio y duración</p>
       <ServiceForm businessId={business.id} />
     </div>
   )

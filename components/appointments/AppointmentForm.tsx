@@ -108,11 +108,22 @@ export function AppointmentForm({
       if (redirectOnSuccess) router.push('/dashboard/calendar')
       else onSuccess?.()
     } else {
-      const { error: err } = await supabase.from('appointments').insert(payload)
+      const { data: inserted, error: err } = await supabase
+        .from('appointments')
+        .insert(payload)
+        .select('id')
+        .single()
       if (err) {
         setError(err.message)
         setLoading(false)
         return
+      }
+      if (inserted?.id) {
+        fetch('/api/webhooks/n8n-appointment', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ appointmentId: inserted.id }),
+        }).catch(() => {})
       }
       if (redirectOnSuccess) router.push('/dashboard/calendar')
       else onSuccess?.()
@@ -124,7 +135,7 @@ export function AppointmentForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       {error && (
-        <div className="p-3 rounded-lg bg-red-50 text-red-700 text-sm">
+        <div className="p-3 rounded-lg bg-red-950/50 text-red-300 text-sm">
           {error}
         </div>
       )}
@@ -134,7 +145,7 @@ export function AppointmentForm({
           id="client_id"
           value={form.client_id}
           onChange={(e) => setForm((f) => ({ ...f, client_id: e.target.value }))}
-          className="mt-1 flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] focus-visible:ring-offset-2"
+          className="mt-1 flex h-10 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6] focus-visible:ring-offset-2"
         >
           <option value="">Seleccionar cliente</option>
           {clients.map((c) => (
@@ -156,7 +167,7 @@ export function AppointmentForm({
               end_time: '',
             }))
           }}
-          className="mt-1 flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] focus-visible:ring-offset-2"
+          className="mt-1 flex h-10 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6] focus-visible:ring-offset-2"
         >
           <option value="">Seleccionar servicio</option>
           {services.map((s) => (
@@ -172,7 +183,7 @@ export function AppointmentForm({
           id="staff_id"
           value={form.staff_id}
           onChange={(e) => setForm((f) => ({ ...f, staff_id: e.target.value }))}
-          className="mt-1 flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] focus-visible:ring-offset-2"
+          className="mt-1 flex h-10 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6] focus-visible:ring-offset-2"
         >
           <option value="">Seleccionar empleado</option>
           {staff.map((s) => (
@@ -184,24 +195,24 @@ export function AppointmentForm({
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <Label htmlFor="start_time" className="text-gray-900 font-medium">Inicio</Label>
+          <Label htmlFor="start_time" className="text-zinc-100 font-medium">Inicio</Label>
           <Input
             id="start_time"
             type="datetime-local"
             value={form.start_time}
             onChange={(e) => setForm((f) => ({ ...f, start_time: e.target.value }))}
             required
-            className="mt-1 text-gray-900 font-medium"
+            className="mt-1 text-zinc-100 font-medium"
           />
         </div>
         <div>
-          <Label htmlFor="end_time" className="text-gray-900 font-medium">Fin</Label>
+          <Label htmlFor="end_time" className="text-zinc-100 font-medium">Fin</Label>
           <Input
             id="end_time"
             type="datetime-local"
             value={form.end_time || suggestedEnd}
             onChange={(e) => setForm((f) => ({ ...f, end_time: e.target.value }))}
-            className="mt-1 text-gray-900 font-medium"
+            className="mt-1 text-zinc-100 font-medium"
           />
         </div>
       </div>
@@ -212,7 +223,7 @@ export function AppointmentForm({
             id="status"
             value={form.status}
             onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
-            className="mt-1 flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] focus-visible:ring-offset-2"
+            className="mt-1 flex h-10 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6] focus-visible:ring-offset-2"
           >
             {STATUS_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>
@@ -222,7 +233,7 @@ export function AppointmentForm({
           </select>
         </div>
         <div>
-          <Label htmlFor="price_total" className="text-gray-900 font-medium">Precio total (€)</Label>
+          <Label htmlFor="price_total" className="text-zinc-100 font-medium">Precio total (€)</Label>
           <Input
             id="price_total"
             type="number"
@@ -232,7 +243,7 @@ export function AppointmentForm({
               setForm((f) => ({ ...f, price_total: e.target.value }))
             }
             placeholder={selectedService?.price.toString()}
-            className="mt-1 text-gray-900 font-medium text-base"
+            className="mt-1 text-zinc-100 font-medium text-base"
           />
         </div>
       </div>

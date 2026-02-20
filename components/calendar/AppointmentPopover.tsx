@@ -40,6 +40,7 @@ export function AppointmentPopover({
   onStatusChange,
   onEdit,
   onToast,
+  canEdit,
 }: {
   appointment: AppointmentForPopover | null
   open: boolean
@@ -48,6 +49,7 @@ export function AppointmentPopover({
   onStatusChange: (id: string, status: string) => Promise<void>
   onEdit: (id: string) => void
   onToast: (message: string, type: 'success' | 'error') => void
+  canEdit?: boolean
 }) {
   const router = useRouter()
   const anchorRef = useRef<HTMLDivElement>(null)
@@ -94,14 +96,14 @@ export function AppointmentPopover({
       >
         <div className="space-y-3">
           <div className="text-sm">
-            <p className="font-medium text-gray-900">
+            <p className="font-medium text-zinc-100">
               {appointment.client_name ?? 'Sin cliente'}
             </p>
-            <p className="text-gray-600">{appointment.service_name ?? '—'}</p>
-            <p className="text-gray-500 text-xs mt-1">
+            <p className="text-zinc-400">{appointment.service_name ?? '—'}</p>
+            <p className="text-zinc-400 text-xs mt-1">
               {appointment.staff_name ? `Empleado: ${appointment.staff_name}` : ''}
             </p>
-            <p className="text-gray-500 text-xs">
+            <p className="text-zinc-400 text-xs">
               {format(parseISO(appointment.start_time), "HH:mm", { locale: es })} –{' '}
               {format(parseISO(appointment.end_time), "HH:mm", { locale: es })}
             </p>
@@ -111,7 +113,7 @@ export function AppointmentPopover({
             <select
               value={appointment.status}
               onChange={handleStatusSelect}
-              className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 cursor-pointer"
+              className="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 cursor-pointer"
             >
               {STATUS_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>
@@ -120,19 +122,21 @@ export function AppointmentPopover({
               ))}
             </select>
           </div>
-          <div className="flex justify-end pt-2 border-t border-gray-100">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                onOpenChange(false)
-                onEdit(appointment.id)
-              }}
-            >
-              <Pencil className="h-4 w-4 mr-2" />
-              Editar cita
-            </Button>
-          </div>
+          {canEdit !== false && (
+            <div className="flex justify-end pt-2 border-t border-zinc-700">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  onOpenChange(false)
+                  onEdit(appointment.id)
+                }}
+              >
+                <Pencil className="h-4 w-4 mr-2" />
+                Editar cita
+              </Button>
+            </div>
+          )}
         </div>
       </PopoverContent>
     </Popover>

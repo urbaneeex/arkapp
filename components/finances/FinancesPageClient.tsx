@@ -124,7 +124,7 @@ export function FinancesPageClient({
 
   return (
     <Tabs value={activeTab} onValueChange={setActiveTab}>
-      <TabsList className="flex w-full flex-row flex-wrap justify-start gap-2 h-auto p-1 bg-gray-100 cursor-default">
+      <TabsList className="flex w-full flex-row flex-wrap justify-start gap-2 h-auto p-1 bg-zinc-800 cursor-default">
         <TabsTrigger value="resumen" className="cursor-pointer gap-1.5">
           <DollarSign className="h-4 w-4" />
           Resumen
@@ -147,19 +147,19 @@ export function FinancesPageClient({
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           <Card className="cursor-default">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600">
+              <CardTitle className="text-sm font-medium text-zinc-400">
                 Balance del mes
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-bold text-gray-900">
+              <p className="text-2xl font-bold text-zinc-100">
                 {currency(kpis.balance)}
               </p>
             </CardContent>
           </Card>
           <Card className="cursor-default">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600">
+              <CardTitle className="text-sm font-medium text-zinc-400">
                 Ingresos del mes
               </CardTitle>
             </CardHeader>
@@ -171,7 +171,7 @@ export function FinancesPageClient({
           </Card>
           <Card className="cursor-default">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600">
+              <CardTitle className="text-sm font-medium text-zinc-400">
                 Gastos del mes
               </CardTitle>
             </CardHeader>
@@ -183,12 +183,12 @@ export function FinancesPageClient({
           </Card>
           <Card className="cursor-default">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600">
+              <CardTitle className="text-sm font-medium text-zinc-400">
                 Margen %
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-bold text-gray-900">
+              <p className="text-2xl font-bold text-zinc-100">
                 {kpis.marginPercent}%
               </p>
             </CardContent>
@@ -213,7 +213,7 @@ export function FinancesPageClient({
                     }px`,
                   }}
                 />
-                <span className="text-xs text-gray-500">Ingresos</span>
+                <span className="text-xs text-zinc-400">Ingresos</span>
               </div>
               <div className="flex-1 flex flex-col items-center gap-1">
                 <div
@@ -228,7 +228,7 @@ export function FinancesPageClient({
                     }px`,
                   }}
                 />
-                <span className="text-xs text-gray-500">Gastos</span>
+                <span className="text-xs text-zinc-400">Gastos</span>
               </div>
             </div>
           </CardContent>
@@ -246,7 +246,7 @@ export function FinancesPageClient({
           </CardHeader>
           <CardContent>
             {incomeData.length === 0 ? (
-              <p className="text-sm text-gray-500 py-8 text-center">
+              <p className="text-sm text-zinc-400 py-8 text-center">
                 No hay ingresos este mes
               </p>
             ) : (
@@ -265,19 +265,19 @@ export function FinancesPageClient({
                   <TableBody>
                     {incomeData.map((row) => (
                       <TableRow key={row.id} className="cursor-default">
-                        <TableCell className="text-gray-900">
+                        <TableCell className="text-zinc-100">
                           {format(new Date(row.date), 'dd/MM/yyyy HH:mm')}
                         </TableCell>
-                        <TableCell className="text-gray-900">
+                        <TableCell className="text-zinc-100">
                           {row.client ?? '-'}
                         </TableCell>
-                        <TableCell className="text-gray-900">
+                        <TableCell className="text-zinc-100">
                           {row.service ?? '-'}
                         </TableCell>
-                        <TableCell className="text-gray-900">
+                        <TableCell className="text-zinc-100">
                           {row.staff ?? '-'}
                         </TableCell>
-                        <TableCell className="font-medium text-gray-900">
+                        <TableCell className="font-medium text-zinc-100">
                           {currency(row.amount)}
                         </TableCell>
                         <TableCell>
@@ -297,7 +297,7 @@ export function FinancesPageClient({
                     ))}
                   </TableBody>
                 </Table>
-                <p className="mt-4 text-sm font-medium text-gray-900">
+                <p className="mt-4 text-sm font-medium text-zinc-100">
                   Total: {currency(incomeData.reduce((s, i) => s + i.amount, 0))}
                 </p>
               </>
@@ -322,7 +322,7 @@ export function FinancesPageClient({
             {showExpenseForm && (
               <form
                 onSubmit={handleAddExpense}
-                className="mb-6 p-4 rounded-lg border border-gray-200 bg-gray-50 space-y-4"
+                className="mb-6 p-4 rounded-lg border border-zinc-800 bg-zinc-950 space-y-4"
               >
                 {error && (
                   <p className="text-sm text-red-600">{error}</p>
@@ -349,7 +349,7 @@ export function FinancesPageClient({
                           category: e.target.value,
                         }))
                       }
-                      className="mt-1 flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] focus-visible:ring-offset-2"
+                      className="mt-1 flex h-10 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6] focus-visible:ring-offset-2"
                     >
                       {EXPENSE_CATEGORIES.map((c) => (
                         <option key={c} value={c}>
@@ -410,7 +410,7 @@ export function FinancesPageClient({
               </form>
             )}
             {expenses.length === 0 ? (
-              <p className="text-sm text-gray-500 py-8 text-center">
+              <p className="text-sm text-zinc-400 py-8 text-center">
                 No hay gastos registrados
               </p>
             ) : (
@@ -427,23 +427,23 @@ export function FinancesPageClient({
                   <TableBody>
                     {expenses.map((row) => (
                       <TableRow key={row.id} className="cursor-default">
-                        <TableCell className="text-gray-900">
+                        <TableCell className="text-zinc-100">
                           {format(new Date(row.date), 'dd/MM/yyyy')}
                         </TableCell>
-                        <TableCell className="text-gray-900">
+                        <TableCell className="text-zinc-100">
                           {row.category}
                         </TableCell>
-                        <TableCell className="text-gray-900">
+                        <TableCell className="text-zinc-100">
                           {row.description ?? '-'}
                         </TableCell>
-                        <TableCell className="font-medium text-gray-900 text-red-600">
+                        <TableCell className="font-medium text-zinc-100 text-red-600">
                           {currency(row.amount)}
                         </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
-                <p className="mt-4 text-sm font-medium text-gray-900">
+                <p className="mt-4 text-sm font-medium text-zinc-100">
                   Total gastos:{' '}
                   {currency(expenses.reduce((s, e) => s + Number(e.amount), 0))}
                 </p>
@@ -474,7 +474,7 @@ export function FinancesPageClient({
             </div>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-gray-500 py-8 text-center">
+            <p className="text-sm text-zinc-400 py-8 text-center">
               Gráficos por servicio, empleado, tendencia y gastos por categoría
               (próximamente).
             </p>

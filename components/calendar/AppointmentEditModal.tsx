@@ -48,6 +48,7 @@ export function AppointmentEditModal({
   staff: Staff[]
   onDeleted?: () => void
   onToast?: (message: string, type: 'success' | 'error') => void
+  canDelete?: boolean
 }) {
   const router = useRouter()
   const supabase = createClient()
@@ -84,8 +85,8 @@ export function AppointmentEditModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent showClose={true} className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-2xl font-bold text-gray-900">Editar cita</DialogTitle>
-          <p className="text-sm font-medium text-gray-700 mt-1">
+          <DialogTitle className="text-2xl font-bold text-zinc-100">Editar cita</DialogTitle>
+          <p className="text-sm font-medium text-zinc-300 mt-1">
             {format(parseISO(appointment.start_time), "EEEE d MMMM · HH:mm", { locale: es })}
           </p>
         </DialogHeader>
@@ -108,16 +109,18 @@ export function AppointmentEditModal({
           onSuccess={handleSuccess}
           onCancel={handleCancel}
         />
-        <div className="border-t pt-4 mt-4 flex justify-end">
-          <Button
-            type="button"
-            variant="outline"
-            className="text-red-600 border-red-200 hover:bg-red-50"
-            onClick={handleDelete}
-          >
-            Eliminar cita
-          </Button>
-        </div>
+        {canDelete !== false && (
+          <div className="border-t pt-4 mt-4 flex justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              className="text-red-600 border-red-800 hover:bg-red-900/50"
+              onClick={handleDelete}
+            >
+              Eliminar cita
+            </Button>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   )

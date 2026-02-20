@@ -1,6 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { SettingsClient } from '@/components/settings/SettingsClient'
+import { RequirePermission } from '@/components/auth/RequirePermission'
+import { getBusinessIdForUser } from '@/lib/supabase/business'
 
 export default async function SettingsPage() {
   const supabase = await createClient()
@@ -9,12 +11,15 @@ export default async function SettingsPage() {
   } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
+  const businessId = await getBusinessIdForUser(user.id)
+  if (!businessId) redirect('/dashboard')
+
   const { data: business } = await supabase
     .from('businesses')
     .select(
-      'id, name, owner_name, owner_phone, address, whatsapp_number, slug, industry, website, instagram, facebook, booking_settings, notification_settings, plan, logo_url'
+      'id, name, owner_name, owner_phone, address, whatsapp_number, slug, industry, website, instagram, facebook, booking_settings, notification_settings, plan, logo_url, wa_instance_name, wa_status'
     )
-    .eq('owner_uid', user.id)
+    .eq('id', businessId)
     .single()
 
   if (!business) redirect('/dashboard')
@@ -52,12 +57,13 @@ export default async function SettingsPage() {
   }))
 
   return (
-    <div>
-      <h1 className="text-2xl font-bold text-gray-900 mb-1">Configuración</h1>
-      <p className="text-gray-600 mb-8">
-        Gestiona la información de tu negocio y preferencias
-      </p>
-      <SettingsClient
+    <RequirePermission permission="settings_manage">
+      <div>
+        <h1 className="text-2xl font-bold text-zinc-100 mb-1">Configuración</h1>
+        <p className="text-zinc-400 mb-8">
+          Gestiona la información de tu negocio y preferencias
+        </p>
+        <SettingsClient
         business={{
           id: business.id,
           name: business.name ?? '',
@@ -74,10 +80,13 @@ export default async function SettingsPage() {
           notification_settings: business.notification_settings as Record<string, unknown> ?? {},
           plan: business.plan ?? 'free',
           logo_url: business.logo_url ?? '',
+          wa_instance_name: business.wa_instance_name ?? null,
+          wa_status: (business.wa_status as 'disconnected' | 'pending_qr' | 'connected') ?? 'disconnected',
         }}
         ownerEmail={user.email ?? ''}
         daysWithShifts={daysWithShifts}
       />
-    </div>
+      </div>
+    </RequirePermission>
   )
 }

@@ -66,8 +66,8 @@ export function TimeNavigator({
   return (
     <div className={cn('space-y-1', className)}>
       <div className="flex items-center gap-2">
-        <Clock className="h-4 w-4 text-gray-500" />
-        <label className="text-sm font-medium text-gray-700">Hora inicio</label>
+        <Clock className="h-4 w-4 text-zinc-400" />
+        <label className="text-sm font-medium text-zinc-300">Hora inicio</label>
       </div>
       <div className="flex items-center gap-2 relative">
         <Button
@@ -85,7 +85,7 @@ export function TimeNavigator({
           onClick={openNativePicker}
           disabled={disabled}
           className={cn(
-            'flex-1 h-10 px-4 rounded-md border border-gray-300 bg-white text-sm font-medium text-gray-900 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#2563eb] focus:ring-offset-2 transition-colors',
+            'flex-1 h-10 px-4 rounded-md border border-zinc-700 bg-zinc-900 text-sm font-medium text-zinc-100 hover:bg-zinc-950 focus:outline-none focus:ring-2 focus:ring-[#3B82F6] focus:ring-offset-2 transition-colors',
             disabled && 'opacity-50 cursor-not-allowed'
           )}
         >

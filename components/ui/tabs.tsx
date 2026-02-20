@@ -38,7 +38,7 @@ const TabsList = React.forwardRef<
   <div
     ref={ref}
     className={cn(
-      'inline-flex h-10 items-center justify-center rounded-lg bg-gray-100 p-1 text-gray-600',
+      'inline-flex h-10 items-center justify-center rounded-lg bg-zinc-800 p-1 text-zinc-400',
       className
     )}
     {...props}
@@ -59,8 +59,8 @@ const TabsTrigger = React.forwardRef<
       role="tab"
       aria-selected={isSelected}
       className={cn(
-        'inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 cursor-pointer',
-        isSelected ? 'bg-white text-gray-900 shadow-sm' : 'hover:text-gray-900',
+        'inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6] focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 disabled:pointer-events-none disabled:opacity-50 cursor-pointer',
+        isSelected ? 'bg-zinc-700 text-zinc-100 shadow-sm' : 'hover:text-zinc-100',
         className
       )}
       onClick={() => onValueChange(value)}

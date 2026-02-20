@@ -8,7 +8,7 @@ export function DashboardMain({ children }: { children: React.ReactNode }) {
   return (
     <main
       className={cn(
-        'min-h-screen transition-[padding] duration-200 ease-out',
+        'min-h-screen transition-[padding] duration-200 ease-out pt-16 bg-zinc-100 dark:bg-[#0d0d0d]',
         'lg:pl-64',
         collapsed && 'lg:pl-[4.5rem]'
       )}

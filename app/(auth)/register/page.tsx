@@ -110,6 +110,18 @@ export default function RegisterPage() {
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: form.email,
         password: form.password,
+        options: {
+          data: {
+            pending_business: {
+              owner_name: form.owner_name.trim(),
+              owner_phone: form.owner_phone.trim(),
+              business_name: form.business_name.trim(),
+              name: form.business_name.trim(),
+              slug: form.slug.trim(),
+            },
+          },
+          emailRedirectTo: `${typeof window !== 'undefined' ? window.location.origin : ''}/auth/callback`,
+        },
       })
 
       if (authError) {
@@ -128,36 +140,13 @@ export default function RegisterPage() {
         return
       }
 
-      const { error: businessError } = await supabase.from('businesses').insert({
-        owner_uid: authData.user.id,
-        owner_name: form.owner_name.trim(),
-        owner_phone: form.owner_phone.trim(),
-        business_name: form.business_name.trim(),
-        name: form.business_name.trim(),
-        slug: form.slug.trim(),
-        onboarding_completed: true,
-        currency: 'EUR',
-        timezone: 'Europe/Madrid',
-      })
-
-      if (businessError) {
-        if (businessError.code === '23505') {
-          setError('Este nombre de negocio ya está en uso')
-        } else {
-          setError(businessError.message)
-        }
-        setLoading(false)
-        return
-      }
-
       if (authData.session) {
         router.push('/dashboard')
         router.refresh()
         return
       }
-      setError(
-        'Cuenta creada. Revisa tu email para confirmar, o desactiva "Confirm email" en Supabase para entrar sin confirmar.'
-      )
+
+      router.push('/register/check-email')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error inesperado')
     } finally {
@@ -166,15 +155,15 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="bg-white rounded-xl shadow-lg p-6 sm:p-8 w-full max-w-md mx-auto">
-      <h1 className="text-2xl font-bold text-gray-900 mb-2">Crear cuenta</h1>
-      <p className="text-gray-600 mb-6">
+    <div className="bg-zinc-900 rounded-xl shadow-lg p-6 sm:p-8 w-full max-w-md mx-auto">
+      <h1 className="text-2xl font-bold text-zinc-100 mb-2">Crear cuenta</h1>
+      <p className="text-zinc-400 mb-6">
         Completa los datos y empieza a gestionar tu negocio
       </p>
 
       <form onSubmit={handleSubmit} className="space-y-5">
         {error && (
-          <div className="p-3 rounded-lg bg-red-50 text-red-700 text-sm">
+          <div className="p-3 rounded-lg bg-red-950/50 text-red-300 text-sm">
             {error}
           </div>
         )}
@@ -237,7 +226,7 @@ export default function RegisterPage() {
             required
             className="mt-1 font-mono text-sm"
           />
-          <p className="mt-1.5 text-xs text-gray-500">
+          <p className="mt-1.5 text-xs text-zinc-400">
             tuapp.com/book/{form.slug || 'tu-slug'}
           </p>
           {form.slug.length > 0 && !SLUG_REGEX.test(form.slug) && (
@@ -297,7 +286,7 @@ export default function RegisterPage() {
               className="pr-9"
             />
             {passwordsMatchTouched && (
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400">
                 {passwordsMatch ? (
                   <Check className="w-5 h-5 text-emerald-600" />
                 ) : (
@@ -320,9 +309,9 @@ export default function RegisterPage() {
         </Button>
       </form>
 
-      <p className="mt-6 text-center text-sm text-gray-600">
+      <p className="mt-6 text-center text-sm text-zinc-400">
         ¿Ya tienes cuenta?{' '}
-        <Link href="/login" className="text-[#2563eb] font-medium hover:underline cursor-pointer">
+        <Link href="/login" className="text-[#3B82F6] font-medium hover:underline cursor-pointer">
           Inicia sesión
         </Link>
       </p>

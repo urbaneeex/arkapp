@@ -82,8 +82,8 @@ export default async function NewAppointmentPage() {
 
   return (
     <div className="max-w-4xl">
-      <h1 className="text-3xl font-bold text-gray-900 mb-2">Nueva cita</h1>
-      <p className="text-gray-600 mb-8">Programa una cita para un cliente</p>
+      <h1 className="text-3xl font-bold text-zinc-100 mb-2">Nueva cita</h1>
+      <p className="text-zinc-400 mb-8">Programa una cita para un cliente</p>
       <ToastWrapper>
         <NewAppointmentForm
           businessId={business.id}
