@@ -1,23 +1,25 @@
 /**
- * n8n webhook trigger: envía datos de cita creada para recordatorios WhatsApp (Evolution API).
- * La URL se configura en N8N_WEBHOOK_URL.
- * Cuando n8n confirme el envío (callback o webhook de respuesta), insertar en public.notifications:
- *   type: 'whatsapp_sent', title: 'Recordatorio WhatsApp', message: 'Recordatorio enviado a [Cliente].'
+ * n8n webhook: recordatorios WhatsApp (Evolution API).
+ * URL en N8N_WEBHOOK_URL.
  */
 
-export type N8nAppointmentPayload = {
-  appointment_id: string
-  business_id: string
-  wa_instance_name: string | null
-  client_phone: string
-  client_name: string
-  start_time: string
-  end_time: string
-  service_name: string | null
-  status: string
+/** Payload para el webhook de recordatorio (formato esperado por n8n) */
+export type N8nReminderPayload = {
+  businessName: string
+  waInstanceName: string
+  clientName: string
+  clientPhone: string
+  serviceName: string
+  formattedDate: string
 }
 
-export async function triggerN8nWebhook(payload: N8nAppointmentPayload): Promise<{ ok: boolean; error?: string }> {
+/**
+ * Dispara el webhook de n8n con el payload de recordatorio.
+ * Fire-and-forget: no lanza; devuelve { ok, error } para que el llamador decida.
+ */
+export async function triggerN8nReminderWebhook(
+  payload: N8nReminderPayload
+): Promise<{ ok: boolean; error?: string }> {
   const url = process.env.N8N_WEBHOOK_URL
   if (!url) {
     return { ok: false, error: 'N8N_WEBHOOK_URL not configured' }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -48,15 +48,13 @@ interface BusinessData {
   whatsapp_number: string
   slug: string
   industry: string
-  website: string
-  instagram: string
-  facebook: string
   booking_settings: Record<string, unknown>
   notification_settings: Record<string, unknown>
   plan: string
   logo_url: string
   wa_instance_name?: string | null
   wa_status?: WaStatus
+  wa_connected_phone?: string | null
 }
 
 interface ShiftRow {
@@ -92,9 +90,6 @@ export function SettingsClient({
   const [whatsappNumber, setWhatsappNumber] = useState(business.whatsapp_number)
   const [slug, setSlug] = useState(business.slug)
   const [industry, setIndustry] = useState(business.industry)
-  const [website, setWebsite] = useState(business.website)
-  const [instagram, setInstagram] = useState(business.instagram)
-  const [facebook, setFacebook] = useState(business.facebook)
   const [logoUrl, setLogoUrl] = useState(business.logo_url)
   const [logoUploading, setLogoUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -127,9 +122,137 @@ export function SettingsClient({
   const [webhookUrl, setWebhookUrl] = useState((notif.webhook_url as string) ?? '')
   const [waStatus, setWaStatus] = useState<WaStatus>(business.wa_status ?? 'disconnected')
   const [waConnecting, setWaConnecting] = useState(false)
+  const [qrBase64, setQrBase64] = useState<string | null>(null)
+  const [waPhone, setWaPhone] = useState<string | null>(business.wa_connected_phone ?? null)
+
+  // Sincronizar estado inicial desde props cuando cambian
+  useEffect(() => {
+    const newStatus = business.wa_status ?? 'disconnected'
+    if (newStatus !== waStatus) {
+      setWaStatus(newStatus)
+    }
+    if (business.wa_connected_phone !== waPhone) {
+      setWaPhone(business.wa_connected_phone ?? null)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [business.wa_status, business.wa_connected_phone])
 
   const supabase = createClient()
   const setBusiness = useBusinessStore((s) => s.setBusiness)
+
+  /**
+   * Formatea un número de WhatsApp de forma profesional
+   */
+  const formatWhatsAppNumber = (phone: string | null): string => {
+    if (!phone) return 'Desconocido'
+    // Mostrar texto literal como 'Sincronizando...' sin formatear
+    if (phone === 'Sincronizando...') return phone
+
+    // Limpiar el número de cualquier carácter no numérico
+    const cleaned = phone.replace(/[^0-9]/g, '')
+    
+    // Formato para España: +34 XXX XXX XXX
+    if (cleaned.startsWith('34') && cleaned.length === 11) {
+      const rest = cleaned.slice(2)
+      return `+34 ${rest.slice(0, 3)} ${rest.slice(3, 6)} ${rest.slice(6)}`
+    }
+    
+    // Para otros países, añadir + y separar en grupos de 3
+    if (cleaned.length >= 8) {
+      // Detectar código de país (1-3 dígitos)
+      let countryCode = ''
+      let number = cleaned
+      
+      // Códigos comunes de 1 dígito (EEUU, Canadá)
+      if (cleaned.startsWith('1') && cleaned.length >= 10) {
+        countryCode = '1'
+        number = cleaned.slice(1)
+      }
+      // Códigos de 2 dígitos (la mayoría)
+      else if (cleaned.length >= 10) {
+        countryCode = cleaned.slice(0, 2)
+        number = cleaned.slice(2)
+      }
+      // Códigos de 3 dígitos
+      else if (cleaned.length >= 11) {
+        countryCode = cleaned.slice(0, 3)
+        number = cleaned.slice(3)
+      }
+      
+      if (countryCode) {
+        // Formatear el número en grupos de 3
+        const formatted = number.match(/.{1,3}/g)?.join(' ') || number
+        return `+${countryCode} ${formatted}`
+      }
+      
+      // Si no detectamos código de país, simplemente añadir + y separar
+      const formatted = cleaned.match(/.{1,3}/g)?.join(' ') || cleaned
+      return `+${formatted}`
+    }
+    
+    // Si es muy corto, devolverlo tal cual con +
+    return `+${cleaned}`
+  }
+
+  // Polling indestructible con useRef para evitar stale closures
+  const isPolling = useRef(false)
+
+  useEffect(() => {
+    if (waStatus !== 'pending_qr') {
+      isPolling.current = false
+      return
+    }
+
+    isPolling.current = true
+
+    const pollStatus = async () => {
+      if (!isPolling.current) return
+
+      try {
+        const res = await fetch(
+          `/api/whatsapp/check-status?t=${new Date().getTime()}`,
+          {
+            cache: 'no-store',
+            headers: {
+              Pragma: 'no-cache',
+              'Cache-Control': 'no-cache',
+            },
+          }
+        )
+
+        const text = await res.text()
+        let data: { connected?: boolean; rawState?: string; phone?: string; details?: string }
+        try {
+          data = JSON.parse(text)
+        } catch {
+          if (isPolling.current) setTimeout(pollStatus, 3000)
+          return
+        }
+
+        if (data.connected) {
+          isPolling.current = false
+          setWaStatus('connected')
+          setQrBase64(null)
+          setWaPhone(data.phone ?? 'Sincronizando...')
+          showFeedback('success', 'WhatsApp conectado exitosamente.')
+          return
+        }
+
+      } catch {
+        // Error de red; se reintentará en el siguiente poll
+      }
+
+      if (isPolling.current) {
+        setTimeout(pollStatus, 2000)
+      }
+    }
+
+    pollStatus()
+
+    return () => {
+      isPolling.current = false
+    }
+  }, [waStatus])
 
   const showFeedback = (type: 'error' | 'success', msg: string) => {
     if (type === 'error') setError(msg)
@@ -152,9 +275,6 @@ export function SettingsClient({
         whatsapp_number: whatsappNumber || null,
         slug: slug || business.slug,
         industry: industry || null,
-        website: website || null,
-        instagram: instagram || null,
-        facebook: facebook || null,
         logo_url: logoUrl || null,
       })
       .eq('id', business.id)
@@ -547,39 +667,6 @@ export function SettingsClient({
                     <p className="text-xs text-zinc-400">Vista previa: {slugPath}</p>
                   </div>
                 </div>
-                <div>
-                  <Label htmlFor="website">Sitio web</Label>
-                  <Input
-                    id="website"
-                    type="url"
-                    value={website}
-                    onChange={(e) => setWebsite(e.target.value)}
-                    placeholder="https://..."
-                    className="mt-1"
-                  />
-                </div>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <Label htmlFor="instagram">Instagram</Label>
-                    <Input
-                      id="instagram"
-                      value={instagram}
-                      onChange={(e) => setInstagram(e.target.value)}
-                      placeholder="@miempresa"
-                      className="mt-1"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="facebook">Facebook</Label>
-                    <Input
-                      id="facebook"
-                      value={facebook}
-                      onChange={(e) => setFacebook(e.target.value)}
-                      placeholder="facebook.com/miempresa"
-                      className="mt-1"
-                    />
-                  </div>
-                </div>
                 <Button onClick={saveGeneral} disabled={saving === 'general'} className="cursor-pointer">
                   {saving === 'general' ? 'Guardando…' : 'Guardar cambios'}
                 </Button>
@@ -884,73 +971,121 @@ export function SettingsClient({
               </CardHeader>
               <CardContent className="space-y-4">
                 {/* WhatsApp (Evolution API) */}
-                <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-zinc-800 p-4">
-                  <div className="flex items-center gap-4 min-w-0">
-                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#25D366]/10 text-[#25D366]">
-                      <svg viewBox="0 0 24 24" className="h-7 w-7" fill="currentColor" aria-hidden>
-                        <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.865 9.865 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
-                      </svg>
+                <div className="rounded-lg border border-zinc-800 p-4 space-y-4 transition-all duration-300">
+                  <div className="flex flex-wrap items-center justify-between gap-4">
+                    <div className="flex items-center gap-4 min-w-0">
+                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#25D366]/10 text-[#25D366]">
+                        <svg viewBox="0 0 24 24" className="h-7 w-7" fill="currentColor" aria-hidden>
+                          <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.865 9.865 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+                        </svg>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-medium text-zinc-100 dark:text-zinc-100">WhatsApp (Evolution API)</p>
+                        <p className="text-sm text-zinc-400">Envía recordatorios automáticos de citas a tus clientes</p>
+                      </div>
                     </div>
-                    <div className="min-w-0">
-                      <p className="font-medium text-zinc-100 dark:text-zinc-100">WhatsApp (Evolution API)</p>
-                      <p className="text-sm text-zinc-400">Envía recordatorios automáticos de citas a tus clientes</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    {waStatus === 'connected' ? (
-                      <>
-                        <span className="inline-flex items-center gap-1.5 rounded-md bg-emerald-500/20 px-2.5 py-1.5 text-sm font-medium text-emerald-400 border border-emerald-500/30">
-                          Conectado
-                        </span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {waStatus === 'connected' ? (
+                        <div className="flex flex-col items-end gap-2 transition-all duration-300 animate-in fade-in">
+                          <span className="inline-flex items-center gap-1.5 rounded-md bg-emerald-500/20 px-2.5 py-1.5 text-sm font-medium text-emerald-400 border border-emerald-500/30">
+                            Conectado
+                          </span>
+                          {waPhone && (
+                            <p className="text-xs text-zinc-400 text-right">
+                              WhatsApp vinculado al número: <span className="font-mono text-emerald-400">{formatWhatsAppNumber(waPhone)}</span>
+                            </p>
+                          )}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="cursor-pointer border-zinc-600 text-zinc-300 hover:bg-red-950/30 hover:border-red-800 hover:text-red-400 transition-colors"
+                            onClick={async () => {
+                              setWaConnecting(true)
+                              try {
+                                const res = await fetch('/api/whatsapp/disconnect', {
+                                  method: 'POST',
+                                })
+                                const data = await res.json()
+                                if (!res.ok) {
+                                  throw new Error(data.error || 'Error al desconectar')
+                                }
+                                setWaStatus('disconnected')
+                                setQrBase64(null)
+                                setWaPhone(null)
+                                showFeedback('success', 'WhatsApp desconectado correctamente.')
+                                router.refresh()
+                              } catch (err) {
+                                const message = err instanceof Error ? err.message : 'Error desconocido'
+                                showFeedback('error', `Error: ${message}`)
+                              } finally {
+                                setWaConnecting(false)
+                              }
+                            }}
+                            disabled={waConnecting}
+                          >
+                            Desconectar cuenta
+                          </Button>
+                        </div>
+                      ) : waConnecting ? (
+                        <div className="rounded-md border border-zinc-700 bg-zinc-800/50 px-4 py-2.5 text-sm text-zinc-400 transition-all duration-300">
+                          Generando código QR…
+                        </div>
+                      ) : (
                         <Button
                           variant="outline"
-                          size="sm"
-                          className="cursor-pointer border-zinc-600 text-zinc-300 hover:bg-red-950/30 hover:border-red-800 hover:text-red-400"
+                          className="cursor-pointer transition-all duration-300"
                           onClick={async () => {
                             setWaConnecting(true)
-                            const { error } = await supabase
-                              .from('businesses')
-                              .update({ wa_status: 'disconnected', wa_instance_name: null })
-                              .eq('id', business.id)
-                            setWaConnecting(false)
-                            if (!error) {
+                            setQrBase64(null)
+                            try {
+                              const res = await fetch('/api/whatsapp/connect', {
+                                method: 'POST',
+                              })
+                              const data = await res.json()
+                              if (!res.ok) {
+                                const errorMsg = data.error || 'Error al conectar con Evolution API'
+                                const details = data.details ? `: ${data.details}` : ''
+                                throw new Error(`${errorMsg}${details}`)
+                              }
+                              if (data.qrBase64) {
+                                setQrBase64(data.qrBase64)
+                                setWaStatus('pending_qr')
+                                showFeedback('success', 'Código QR generado. Escanéalo con WhatsApp.')
+                              } else {
+                                throw new Error('QR code no recibido')
+                              }
+                            } catch (err) {
+                              const message = err instanceof Error ? err.message : 'Error desconocido'
+                              showFeedback('error', `Error: ${message}`)
                               setWaStatus('disconnected')
-                              showFeedback('success', 'WhatsApp desconectado.')
-                              router.refresh()
-                            } else showFeedback('error', error.message)
+                            } finally {
+                              setWaConnecting(false)
+                            }
                           }}
                           disabled={waConnecting}
                         >
-                          Desconectar
+                          Conectar
                         </Button>
-                      </>
-                    ) : waStatus === 'pending_qr' || waConnecting ? (
-                      <div className="rounded-md border border-zinc-700 bg-zinc-800/50 px-4 py-2.5 text-sm text-zinc-400">
-                        Cargando QR…
-                      </div>
-                    ) : (
-                      <Button
-                        variant="outline"
-                        className="cursor-pointer"
-                        onClick={async () => {
-                          setWaConnecting(true)
-                          const { error } = await supabase
-                            .from('businesses')
-                            .update({ wa_status: 'pending_qr' })
-                            .eq('id', business.id)
-                          setWaConnecting(false)
-                          if (!error) {
-                            setWaStatus('pending_qr')
-                            showFeedback('success', 'Iniciando conexión. Aquí se mostrará el QR cuando integres Evolution API.')
-                            router.refresh()
-                          } else showFeedback('error', error.message)
-                        }}
-                        disabled={waConnecting}
-                      >
-                        Conectar
-                      </Button>
-                    )}
+                      )}
+                    </div>
                   </div>
+                  {waStatus === 'pending_qr' && qrBase64 && (
+                    <div className="flex flex-col items-center gap-3 pt-4 border-t border-zinc-800 transition-all duration-300 animate-in fade-in slide-in-from-bottom-4">
+                      <div className="rounded-lg border border-zinc-700 bg-white p-4 shadow-lg">
+                        <img
+                          src={qrBase64.startsWith('data:image') ? qrBase64 : `data:image/png;base64,${qrBase64}`}
+                          alt="QR Code WhatsApp"
+                          className="w-64 h-64 transition-opacity duration-300"
+                        />
+                      </div>
+                      <p className="text-sm text-zinc-400 text-center max-w-md">
+                        Escanea este código QR con WhatsApp para conectar tu cuenta
+                      </p>
+                      <p className="text-xs text-zinc-500 text-center">
+                        La conexión se detectará automáticamente cuando escanees el código
+                      </p>
+                    </div>
+                  )}
                 </div>
                 <div className="flex items-center justify-between rounded-lg border border-zinc-800 p-4">
                   <div>

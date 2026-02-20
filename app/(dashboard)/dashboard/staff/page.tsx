@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import { PageHeader } from '@/components/layout/PageHeader'
 import { StaffClient } from '@/components/staff/StaffClient'
 import { RequirePermission } from '@/components/auth/RequirePermission'
 import { getBusinessIdForUser } from '@/lib/supabase/business'
@@ -40,10 +41,7 @@ export default async function StaffPage() {
   return (
     <RequirePermission permission="staff_view">
       <div>
-        <h1 className="text-2xl font-bold text-zinc-100 mb-1">Equipo</h1>
-        <p className="text-zinc-400 mb-8">
-          Gestiona empleados, turnos, roles y permisos
-        </p>
+        <PageHeader title="Equipo" subtitle="Gestiona empleados, turnos, roles y permisos" />
         <StaffClient
           staff={staffResult.data ?? []}
           businessId={businessId}

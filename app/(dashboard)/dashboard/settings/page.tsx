@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import { PageHeader } from '@/components/layout/PageHeader'
 import { SettingsClient } from '@/components/settings/SettingsClient'
 import { RequirePermission } from '@/components/auth/RequirePermission'
 import { getBusinessIdForUser } from '@/lib/supabase/business'
@@ -17,7 +18,7 @@ export default async function SettingsPage() {
   const { data: business } = await supabase
     .from('businesses')
     .select(
-      'id, name, owner_name, owner_phone, address, whatsapp_number, slug, industry, website, instagram, facebook, booking_settings, notification_settings, plan, logo_url, wa_instance_name, wa_status'
+      'id, name, owner_name, owner_phone, address, whatsapp_number, slug, industry, booking_settings, notification_settings, plan, logo_url, wa_instance_name, wa_status, wa_connected_phone'
     )
     .eq('id', businessId)
     .single()
@@ -59,10 +60,7 @@ export default async function SettingsPage() {
   return (
     <RequirePermission permission="settings_manage">
       <div>
-        <h1 className="text-2xl font-bold text-zinc-100 mb-1">Configuración</h1>
-        <p className="text-zinc-400 mb-8">
-          Gestiona la información de tu negocio y preferencias
-        </p>
+        <PageHeader title="Configuración" subtitle="Gestiona la información de tu negocio y preferencias" />
         <SettingsClient
         business={{
           id: business.id,
@@ -73,15 +71,13 @@ export default async function SettingsPage() {
           whatsapp_number: business.whatsapp_number ?? '',
           slug: business.slug ?? '',
           industry: business.industry ?? '',
-          website: business.website ?? '',
-          instagram: business.instagram ?? '',
-          facebook: business.facebook ?? '',
           booking_settings: business.booking_settings as Record<string, unknown> ?? {},
           notification_settings: business.notification_settings as Record<string, unknown> ?? {},
           plan: business.plan ?? 'free',
           logo_url: business.logo_url ?? '',
           wa_instance_name: business.wa_instance_name ?? null,
           wa_status: (business.wa_status as 'disconnected' | 'pending_qr' | 'connected') ?? 'disconnected',
+          wa_connected_phone: business.wa_connected_phone ?? null,
         }}
         ownerEmail={user.email ?? ''}
         daysWithShifts={daysWithShifts}

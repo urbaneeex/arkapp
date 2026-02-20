@@ -14,6 +14,7 @@ import {
   UserX,
   Clock,
 } from 'lucide-react'
+import { PageHeader } from '@/components/layout/PageHeader'
 import {
   startOfToday,
   endOfToday,
@@ -177,10 +178,7 @@ export default async function DashboardPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-zinc-100 mb-1">
-        Hola, {business.name}
-      </h1>
-      <p className="text-zinc-400 mb-8">Resumen de tu negocio</p>
+      <PageHeader title={`Hola, ${business.name}`} subtitle="Resumen de tu negocio" className="mb-8" />
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-8">
         {stats.map(({ title, value, icon: Icon, href, color }) => (

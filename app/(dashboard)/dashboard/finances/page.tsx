@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import { PageHeader } from '@/components/layout/PageHeader'
 import { FinancesPageClient } from '@/components/finances/FinancesPageClient'
 import { RequirePermission } from '@/components/auth/RequirePermission'
 import { getBusinessIdForUser } from '@/lib/supabase/business'
@@ -68,10 +69,7 @@ export default async function FinancesPage() {
   return (
     <RequirePermission permission="finances_view">
       <div>
-        <h1 className="text-2xl font-bold text-zinc-100 mb-1">Finanzas</h1>
-        <p className="text-zinc-400 mb-8">
-          Resumen, ingresos, gastos y reportes
-        </p>
+        <PageHeader title="Finanzas" subtitle="Resumen, ingresos, gastos y reportes" />
         <FinancesPageClient
           businessId={businessId}
         incomeData={incomeData}

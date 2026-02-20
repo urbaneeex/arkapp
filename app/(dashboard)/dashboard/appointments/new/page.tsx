@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import { PageHeader } from '@/components/layout/PageHeader'
 import { NewAppointmentForm } from '@/components/appointments/NewAppointmentForm'
 import { ToastWrapper } from './ToastWrapper'
 
@@ -82,8 +83,7 @@ export default async function NewAppointmentPage() {
 
   return (
     <div className="max-w-4xl">
-      <h1 className="text-3xl font-bold text-zinc-100 mb-2">Nueva cita</h1>
-      <p className="text-zinc-400 mb-8">Programa una cita para un cliente</p>
+      <PageHeader title="Nueva cita" subtitle="Programa una cita para un cliente" />
       <ToastWrapper>
         <NewAppointmentForm
           businessId={business.id}

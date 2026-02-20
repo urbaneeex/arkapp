@@ -438,11 +438,15 @@ export function NewAppointmentForm({
       }
 
       if (insertedAppointment?.id) {
-        fetch('/api/webhooks/n8n-appointment', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ appointmentId: insertedAppointment.id }),
-        }).catch(() => {})
+        try {
+          await fetch('/api/webhooks/n8n-appointment', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ appointmentId: insertedAppointment.id }),
+          })
+        } catch (e) {
+          console.error('[NewAppointmentForm] Fallo al llamar al webhook n8n:', e)
+        }
       }
 
       onToastFn?.(

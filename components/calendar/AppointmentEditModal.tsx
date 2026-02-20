@@ -13,7 +13,7 @@ import { createClient } from '@/lib/supabase/client'
 import { format, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
 
-type Client = { id: string; name: string; phone?: string }
+type Client = { id: string; name: string; phone?: string; email?: string }
 type Service = { id: string; name: string; duration: number; price: number }
 type Staff = { id: string; name: string }
 

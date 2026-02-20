@@ -55,8 +55,8 @@ export function CalendarPageClient({
     <div>
       <div className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center mb-6">
         <div>
-          <h1 className="text-3xl font-bold text-zinc-100">Calendario</h1>
-          <p className="text-zinc-400 mt-1">
+          <h1 className="text-2xl font-bold text-zinc-100">Calendario</h1>
+          <p className="text-sm text-zinc-400 mt-1">
             Vista día, semana, mes o año
           </p>
         </div>

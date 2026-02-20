@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { addMinutes, format, parseISO } from 'date-fns'
 
-type Client = { id: string; name: string; phone?: string }
+type Client = { id: string; name: string; phone?: string; email?: string }
 type Service = { id: string; name: string; duration: number; price: number }
 type Staff = { id: string; name: string }
 
@@ -65,11 +65,27 @@ export function AppointmentForm({
     start_time: defaultStart,
     end_time: defaultEnd,
     client_id: appointment?.client_id ?? '',
+    client_phone: '',
+    client_email: '',
     service_id: appointment?.service_id ?? '',
     staff_id: appointment?.staff_id ?? '',
     status: (appointment?.status ?? 'pending') as string,
     price_total: appointment?.price_total ?? '',
   })
+
+  const selectedClient = form.client_id ? clients.find((c) => c.id === form.client_id) : null
+  useEffect(() => {
+    if (!form.client_id) {
+      setForm((f) => ({ ...f, client_phone: '', client_email: '' }))
+    } else {
+      const client = clients.find((c) => c.id === form.client_id)
+      setForm((f) => ({
+        ...f,
+        client_phone: client?.phone ?? '',
+        client_email: client?.email ?? '',
+      }))
+    }
+  }, [form.client_id])
 
   const selectedService = services.find((s) => s.id === form.service_id)
   const suggestedEnd = form.start_time && selectedService
@@ -108,6 +124,28 @@ export function AppointmentForm({
       if (redirectOnSuccess) router.push('/dashboard/calendar')
       else onSuccess?.()
     } else {
+      if (form.client_id) {
+        const phoneInForm = form.client_phone.trim()
+        const originalPhone = (selectedClient?.phone ?? '').trim()
+        const emailInForm = form.client_email.trim()
+        const originalEmail = (selectedClient?.email ?? '').trim()
+        const phoneChanged = phoneInForm !== originalPhone
+        const emailChanged = emailInForm !== originalEmail
+        if (phoneChanged || emailChanged) {
+          const updateData: { phone?: string | null; email?: string | null } = {}
+          if (phoneChanged) updateData.phone = phoneInForm || null
+          if (emailChanged) updateData.email = emailInForm || null
+          const { error: updateErr } = await supabase
+            .from('clients')
+            .update(updateData)
+            .eq('id', form.client_id)
+          if (updateErr) {
+            setError(updateErr.message)
+            setLoading(false)
+            return
+          }
+        }
+      }
       const { data: inserted, error: err } = await supabase
         .from('appointments')
         .insert(payload)
@@ -119,11 +157,15 @@ export function AppointmentForm({
         return
       }
       if (inserted?.id) {
-        fetch('/api/webhooks/n8n-appointment', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ appointmentId: inserted.id }),
-        }).catch(() => {})
+        try {
+          await fetch('/api/webhooks/n8n-appointment', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ appointmentId: inserted.id }),
+          })
+        } catch (e) {
+          console.error('[AppointmentForm] Fallo al llamar al webhook n8n:', e)
+        }
       }
       if (redirectOnSuccess) router.push('/dashboard/calendar')
       else onSuccess?.()
@@ -155,6 +197,33 @@ export function AppointmentForm({
           ))}
         </select>
       </div>
+      {!appointment && form.client_id && (
+        <div className="space-y-3">
+          <div>
+            <Label htmlFor="client_phone" className="text-zinc-100 font-medium">Teléfono del cliente</Label>
+            <Input
+              id="client_phone"
+              type="tel"
+              value={form.client_phone}
+              onChange={(e) => setForm((f) => ({ ...f, client_phone: e.target.value }))}
+              placeholder="Actualiza el teléfono si ha cambiado"
+              className="mt-1 text-zinc-100 font-medium"
+            />
+          </div>
+          <div>
+            <Label htmlFor="client_email" className="text-zinc-100 font-medium">Email del cliente</Label>
+            <Input
+              id="client_email"
+              type="email"
+              value={form.client_email}
+              onChange={(e) => setForm((f) => ({ ...f, client_email: e.target.value }))}
+              placeholder="Actualiza el email si ha cambiado"
+              className="mt-1 text-zinc-100 font-medium"
+            />
+          </div>
+          <p className="text-xs text-zinc-400">Si modificas teléfono o email, se guardará en la ficha del cliente antes de crear la cita.</p>
+        </div>
+      )}
       <div>
         <Label htmlFor="service_id">Servicio</Label>
         <select

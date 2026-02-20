@@ -90,7 +90,7 @@ export function Sidebar() {
           type="button"
           onClick={toggleCollapsed}
           className={cn(
-            'hidden lg:flex absolute z-50 top-4 right-0 w-6 h-6 items-center justify-center rounded-full bg-zinc-200 border border-zinc-300 shadow-md text-zinc-600 hover:bg-zinc-300 hover:text-zinc-900 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-700 dark:hover:text-zinc-100 cursor-pointer',
+            'hidden lg:flex absolute z-50 top-5 right-0 w-6 h-6 items-center justify-center rounded-full bg-zinc-200 border border-zinc-300 shadow-md text-zinc-600 hover:bg-zinc-300 hover:text-zinc-900 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-700 dark:hover:text-zinc-100 cursor-pointer',
             'translate-x-1/2'
           )}
           aria-label={isCollapsed ? 'Expandir menú' : 'Contraer menú'}

@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { PageHeader } from '@/components/layout/PageHeader'
 import { RolesManagement } from '@/components/roles/RolesManagement'
 
 export default async function RolesPage() {
@@ -30,12 +31,7 @@ export default async function RolesPage() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-zinc-100">Roles</h1>
-        <p className="text-zinc-400 mt-1">
-          Gestiona los roles y permisos de tu equipo
-        </p>
-      </div>
+      <PageHeader title="Roles" subtitle="Gestiona los roles y permisos de tu equipo" />
       <RolesManagement businessId={business.id} initialRoles={roles ?? []} initialStaff={staff ?? []} />
     </div>
   )

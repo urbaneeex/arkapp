@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect, notFound } from 'next/navigation'
+import { PageHeader } from '@/components/layout/PageHeader'
 import { StaffForm } from '@/components/staff/StaffForm'
 
 export default async function EditStaffPage({
@@ -39,8 +40,7 @@ export default async function EditStaffPage({
 
   return (
     <div className="max-w-xl">
-      <h1 className="text-3xl font-bold text-zinc-100 mb-2">Editar empleado</h1>
-      <p className="text-zinc-400 mb-8">{staff.name}</p>
+      <PageHeader title="Editar empleado" subtitle={staff.name} />
       <StaffForm businessId={business.id} staff={staff} initialRoles={roles ?? []} />
     </div>
   )

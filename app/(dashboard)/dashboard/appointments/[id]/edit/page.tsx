@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect, notFound } from 'next/navigation'
+import { PageHeader } from '@/components/layout/PageHeader'
 import { AppointmentForm } from '@/components/appointments/AppointmentForm'
 
 export default async function EditAppointmentPage({
@@ -38,7 +39,7 @@ export default async function EditAppointmentPage({
   ] = await Promise.all([
     supabase
       .from('clients')
-      .select('id, name, phone')
+      .select('id, name, phone, email')
       .eq('business_id', business.id)
       .order('name'),
     supabase
@@ -56,10 +57,7 @@ export default async function EditAppointmentPage({
 
   return (
     <div className="max-w-xl">
-      <h1 className="text-3xl font-bold text-zinc-100 mb-2">Editar cita</h1>
-      <p className="text-zinc-400 mb-8">
-        {new Date(appointment.start_time).toLocaleString('es')}
-      </p>
+      <PageHeader title="Editar cita" subtitle={new Date(appointment.start_time).toLocaleString('es')} />
       <AppointmentForm
         businessId={business.id}
         clients={clients ?? []}

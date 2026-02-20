@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect, notFound } from 'next/navigation'
+import { PageHeader } from '@/components/layout/PageHeader'
 import ClientForm from '../../clientForm'
 
 export default async function EditClientPage({
@@ -33,8 +34,7 @@ export default async function EditClientPage({
 
   return (
     <div className="max-w-2xl">
-      <h1 className="text-3xl font-bold text-zinc-100 mb-2">Editar cliente</h1>
-      <p className="text-zinc-400 mb-8">{client.name}</p>
+      <PageHeader title="Editar cliente" subtitle={client.name} />
       <ClientForm client={client} />
     </div>
   )

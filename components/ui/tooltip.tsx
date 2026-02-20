@@ -4,26 +4,36 @@ import * as React from 'react'
 import { createPortal } from 'react-dom'
 import { cn } from '@/lib/utils'
 
+const SIDE_OFFSET = 20
+
 interface TooltipProps {
   content: string
   children: React.ReactElement
   side?: 'right' | 'left'
+  sideOffset?: number
   className?: string
 }
 
-export function Tooltip({ content, children, side = 'right', className }: TooltipProps) {
+export function Tooltip({
+  content,
+  children,
+  side = 'right',
+  sideOffset = SIDE_OFFSET,
+  className,
+}: TooltipProps) {
   const [visible, setVisible] = React.useState(false)
+  const [entered, setEntered] = React.useState(false)
   const [rect, setRect] = React.useState<DOMRect | null>(null)
   const triggerRef = React.useRef<HTMLDivElement>(null)
   const timeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const showDelay = 80
-  const gap = 6
 
   const handleMouseEnter = () => {
     timeoutRef.current = setTimeout(() => {
       if (triggerRef.current) setRect(triggerRef.current.getBoundingClientRect())
       setVisible(true)
+      setEntered(false)
     }, showDelay)
   }
 
@@ -33,7 +43,16 @@ export function Tooltip({ content, children, side = 'right', className }: Toolti
       timeoutRef.current = null
     }
     setVisible(false)
+    setEntered(false)
   }
+
+  React.useEffect(() => {
+    if (!visible || !rect) return
+    const id = requestAnimationFrame(() => {
+      setEntered(true)
+    })
+    return () => cancelAnimationFrame(id)
+  }, [visible, rect])
 
   React.useEffect(() => {
     return () => {
@@ -47,35 +66,27 @@ export function Tooltip({ content, children, side = 'right', className }: Toolti
     rect && (
       <span
         role="tooltip"
-        className={cn(
-          'fixed z-[9999] rounded-md bg-gray-900 px-2.5 py-1.5 text-xs font-medium text-white shadow-lg whitespace-nowrap',
-          'transition-opacity duration-100'
-        )}
-        style={
-          side === 'right'
-            ? {
-                left: rect.right + gap,
-                top: rect.top + rect.height / 2,
-                transform: 'translateY(-50%)',
-              }
-            : {
-                right: window.innerWidth - rect.left + gap,
-                top: rect.top + rect.height / 2,
-                transform: 'translateY(-50%)',
-              }
-        }
+        className="fixed z-[9999] inline-flex items-center"
+        style={{
+          left: side === 'right' ? rect.right + sideOffset : undefined,
+          right: side === 'left' ? window.innerWidth - rect.left + sideOffset : undefined,
+          top: rect.top + rect.height / 2,
+          transform: 'translateY(-50%)',
+        }}
       >
-        {/* Cola del bocadillo a la izquierda (apunta al icono) */}
+        {/* Bubble único: caret como ::before (misma animación, punta redondeada) */}
         <span
-          className="absolute top-1/2 w-0 h-0 border-[5px] border-transparent -translate-y-1/2"
-          style={{
-            right: '100%',
-            borderRightColor: 'rgb(17 24 39)',
-            marginRight: '-1px',
-          }}
-          aria-hidden
-        />
-        {content}
+          className={cn(
+            'relative inline-flex items-center rounded-xl bg-white text-zinc-950 font-medium text-sm whitespace-nowrap',
+            'shadow-lg px-4 py-2',
+            'transition-all duration-200 ease-out',
+            'before:content-[""] before:block before:absolute before:top-1/2 before:right-full before:-translate-y-1/2',
+            'before:w-2 before:h-2 before:rotate-45 before:bg-white before:rounded-[2px] before:-mr-1',
+            entered ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-[3px]'
+          )}
+        >
+          {content}
+        </span>
       </span>
     )
 

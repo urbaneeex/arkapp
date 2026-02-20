@@ -42,7 +42,7 @@ export function GlobalHeader() {
         href="/dashboard"
         className="cursor-pointer flex items-center focus:outline-none focus:ring-2 focus:ring-[#3B82F6] focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-zinc-950 rounded-md"
       >
-        <span className="text-xl font-bold tracking-tight text-zinc-900 dark:text-white">
+        <span className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-white">
           Arkapp
         </span>
       </Link>

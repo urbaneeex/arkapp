@@ -515,14 +515,6 @@ function DayView({
     }
   }, [openRanges, appointments, day])
 
-  if (isClosed) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[320px] rounded-xl border border-zinc-800 bg-zinc-900 p-8 text-center">
-        <p className="text-zinc-400 font-medium">El negocio está cerrado este día</p>
-      </div>
-    )
-  }
-
   const isSlotClosed = useCallback(
     (slotIndex: number) => {
       const startMin = dayViewStartMin + slotIndex * MINUTES_PER_SLOT
@@ -610,6 +602,14 @@ function DayView({
     }
     return out
   }, [dayViewStartMin, dayViewEndMin])
+
+  if (isClosed) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[320px] rounded-xl border border-zinc-800 bg-zinc-900 p-8 text-center">
+        <p className="text-zinc-400 font-medium">El negocio está cerrado este día</p>
+      </div>
+    )
+  }
 
   return (
     <DndContext
@@ -1112,6 +1112,28 @@ function NewAppointmentSidePanel({
         clientId = newClient.id
       } else {
         clientId = selectedClient?.id ?? null
+        if (clientId) {
+          const phoneInForm = editingClientPhone.trim()
+          const originalPhone = (selectedClient?.phone ?? '').trim()
+          const emailInForm = editingClientEmail.trim()
+          const originalEmail = (selectedClient?.email ?? '').trim()
+          const phoneChanged = phoneInForm !== originalPhone
+          const emailChanged = emailInForm !== originalEmail
+          if (phoneChanged || emailChanged) {
+            const updateData: { phone?: string | null; email?: string | null } = {}
+            if (phoneChanged) updateData.phone = phoneInForm || null
+            if (emailChanged) updateData.email = emailInForm || null
+            const { error: updateErr } = await supabase
+              .from('clients')
+              .update(updateData)
+              .eq('id', clientId)
+            if (updateErr) {
+              setCreateError(updateErr.message)
+              setCreating(false)
+              return
+            }
+          }
+        }
       }
 
       if (!clientId) {
@@ -1156,11 +1178,15 @@ function NewAppointmentSidePanel({
       }
 
       if (insertedAppointment?.id) {
-        fetch('/api/webhooks/n8n-appointment', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ appointmentId: insertedAppointment.id }),
-        }).catch(() => {})
+        try {
+          await fetch('/api/webhooks/n8n-appointment', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ appointmentId: insertedAppointment.id }),
+          })
+        } catch (e) {
+          console.error('[CalendarView] Fallo al llamar al webhook n8n:', e)
+        }
       }
 
       const clientNameDisplay = isNewClient ? newClientName : selectedClient?.name ?? 'Cliente'

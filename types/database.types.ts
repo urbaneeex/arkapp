@@ -180,16 +180,14 @@ export type Database = {
           whatsapp_number: string | null
           logo_url: string | null
           industry: string | null
-          website: string | null
           address: string | null
-          instagram: string | null
-          facebook: string | null
           booking_settings: Json | null
           notification_settings: Json | null
           plan: string | null
           permission_matrix: Json | null
           wa_instance_name: string | null
           wa_status: string | null
+          wa_connected_phone: string | null
         }
         Insert: {
           config_json?: Json | null
@@ -207,16 +205,14 @@ export type Database = {
           whatsapp_number?: string | null
           logo_url?: string | null
           industry?: string | null
-          website?: string | null
           address?: string | null
-          instagram?: string | null
-          facebook?: string | null
           booking_settings?: Json | null
           notification_settings?: Json | null
           plan?: string | null
           permission_matrix?: Json | null
           wa_instance_name?: string | null
           wa_status?: string | null
+          wa_connected_phone?: string | null
         }
         Update: {
           config_json?: Json | null
@@ -234,16 +230,14 @@ export type Database = {
           whatsapp_number?: string | null
           logo_url?: string | null
           industry?: string | null
-          website?: string | null
           address?: string | null
-          instagram?: string | null
-          facebook?: string | null
           booking_settings?: Json | null
           notification_settings?: Json | null
           plan?: string | null
           permission_matrix?: Json | null
           wa_instance_name?: string | null
           wa_status?: string | null
+          wa_connected_phone?: string | null
         }
         Relationships: []
       }

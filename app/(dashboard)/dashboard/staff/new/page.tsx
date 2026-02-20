@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import { PageHeader } from '@/components/layout/PageHeader'
 import { StaffForm } from '@/components/staff/StaffForm'
 
 export default async function NewStaffPage() {
@@ -25,8 +26,7 @@ export default async function NewStaffPage() {
 
   return (
     <div className="max-w-xl">
-      <h1 className="text-3xl font-bold text-zinc-100 mb-2">Nuevo empleado</h1>
-      <p className="text-zinc-400 mb-8">Añade un empleado o miembro del equipo</p>
+      <PageHeader title="Nuevo empleado" subtitle="Añade un empleado o miembro del equipo" />
       <StaffForm businessId={business.id} staff={undefined} initialRoles={roles ?? []} />
     </div>
   )
