@@ -1,6 +1,6 @@
 'use client'
 
-import Link from 'next/link'
+import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Plus } from 'lucide-react'
 import { CalendarView } from '@/components/calendar/CalendarView'
@@ -20,8 +20,8 @@ type AppointmentRow = {
   staff: { name: string } | { name: string }[] | null
 }
 
-type Client = { id: string; name: string }
-type Service = { id: string; name: string; duration: number; price: number }
+type Client = { id: string; name: string; phone?: string | null; email?: string | null }
+type Service = { id: string; name: string; duration: number; price: number; requires_deposit?: boolean | null; deposit_amount?: number | null }
 type Staff = { id: string; name: string }
 type Shift = { open_time: string; close_time: string; is_closed: boolean }
 
@@ -42,6 +42,7 @@ export function CalendarPageClient({
 }) {
   const { hasPermission, loading } = usePermissions()
   const canCreateAppointments = hasPermission('appointments_create')
+  const [triggerNewPanel, setTriggerNewPanel] = useState(false)
 
   if (loading) {
     return (
@@ -61,14 +62,13 @@ export function CalendarPageClient({
           </p>
         </div>
         {canCreateAppointments && (
-          <Link href="/dashboard/appointments/new" className="cursor-pointer">
-            <Button className="cursor-pointer">
-              <Plus className="w-4 h-4 mr-2" />
-              Nueva cita
-            </Button>
-          </Link>
+          <Button className="cursor-pointer" onClick={() => setTriggerNewPanel(true)}>
+            <Plus className="w-4 h-4 mr-2" />
+            Nueva cita
+          </Button>
         )}
       </div>
+
       <CalendarView
         appointments={appointments}
         clients={clients}
@@ -76,6 +76,8 @@ export function CalendarPageClient({
         staff={staff}
         businessId={businessId}
         shiftsByDay={shiftsByDay}
+        openNewPanel={triggerNewPanel}
+        onNewPanelClosed={() => setTriggerNewPanel(false)}
       />
     </div>
   )

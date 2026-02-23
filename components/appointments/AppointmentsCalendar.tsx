@@ -31,12 +31,12 @@ type AppointmentRow = {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  pending: 'bg-amber-100 text-amber-800 border-amber-200',
-  confirmed: 'bg-blue-100 text-blue-800 border-blue-800',
-  in_progress: 'bg-violet-100 text-violet-800 border-violet-200',
-  completed: 'bg-emerald-100 text-emerald-800 border-emerald-200',
-  cancelled: 'bg-zinc-800 text-zinc-400 border-zinc-800',
-  no_show: 'bg-red-100 text-red-300 border-red-800',
+  pending: 'bg-amber-800 border-amber-500 text-amber-100',
+  confirmed: 'bg-blue-800 border-blue-500 text-blue-100',
+  in_progress: 'bg-violet-800 border-violet-500 text-violet-100',
+  completed: 'bg-emerald-800 border-emerald-500 text-emerald-100',
+  cancelled: 'bg-zinc-700 border-zinc-600 text-zinc-300',
+  no_show: 'bg-zinc-700 border-zinc-600 text-zinc-400',
 }
 
 export function AppointmentsCalendar({
@@ -208,6 +208,11 @@ function DraggableAppointmentCard({
     id: appointment.id,
   })
   const canDrag = appointment.status !== 'completed' && appointment.status !== 'cancelled'
+  const clientName = Array.isArray(appointment.clients) ? appointment.clients[0]?.name : appointment.clients?.name
+  const serviceName = Array.isArray(appointment.services) ? appointment.services[0]?.name : appointment.services?.name
+  const startTime = format(parseISO(appointment.start_time), 'HH:mm')
+  const endTime = format(parseISO(appointment.end_time), 'HH:mm')
+  const timeRange = `${startTime} – ${endTime}`
   return (
     <button
       ref={setNodeRef}
@@ -215,20 +220,18 @@ function DraggableAppointmentCard({
       onClick={(e) => onAppointmentClick?.(appointment, e)}
       {...(canDrag ? { ...attributes, ...listeners } : {})}
       className={cn(
-        'cursor-pointer w-full text-left block rounded-lg border p-2 mb-2 text-xs truncate transition-opacity hover:opacity-90',
+        'cursor-pointer w-full text-left flex flex-col items-start justify-start rounded-lg border-l-4 p-1.5 mb-1.5 text-xs overflow-hidden transition-opacity hover:opacity-90',
         canDrag && 'cursor-grab active:cursor-grabbing',
         isDragging && 'opacity-50 shadow-lg',
         statusColors[appointment.status ?? 'pending'] ?? 'bg-zinc-800'
       )}
-      title={`${Array.isArray(appointment.clients) ? appointment.clients[0]?.name : appointment.clients?.name ?? 'Sin cliente'} - ${Array.isArray(appointment.services) ? appointment.services[0]?.name : appointment.services?.name ?? 'Sin servicio'}`}
     >
-      <span className="font-medium block truncate">
-        {Array.isArray(appointment.clients) ? appointment.clients[0]?.name : appointment.clients?.name ?? 'Sin cliente'}
+      <span className="font-semibold leading-tight truncate w-full">
+        {timeRange}{clientName ? ` ${clientName}` : ''}
       </span>
-      <span className="text-[10px] opacity-90">
-        {format(parseISO(appointment.start_time), 'HH:mm')} ·{' '}
-        {Array.isArray(appointment.services) ? appointment.services[0]?.name : appointment.services?.name ?? '-'}
-      </span>
+      {serviceName && (
+        <span className="leading-tight truncate w-full opacity-75">{serviceName}</span>
+      )}
     </button>
   )
 }

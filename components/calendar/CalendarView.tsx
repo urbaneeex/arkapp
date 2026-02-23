@@ -62,12 +62,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { usePermissions } from '@/hooks/usePermissions'
 
 const STATUS_COLORS: Record<string, string> = {
-  pending: 'bg-amber-900/50 border-amber-700 text-amber-200',
-  confirmed: 'bg-blue-900/50 border-blue-700 text-blue-200',
-  in_progress: 'bg-violet-900/50 border-violet-700 text-violet-200',
-  completed: 'bg-emerald-900/50 border-emerald-700 text-emerald-200',
-  cancelled: 'bg-zinc-800 border-zinc-700 text-zinc-400',
-  no_show: 'bg-zinc-800 border-zinc-700 text-zinc-500',
+  pending: 'bg-amber-800 border-amber-500 text-amber-100',
+  confirmed: 'bg-blue-800 border-blue-500 text-blue-100',
+  in_progress: 'bg-violet-800 border-violet-500 text-violet-100',
+  completed: 'bg-emerald-800 border-emerald-500 text-emerald-100',
+  cancelled: 'bg-zinc-700 border-zinc-600 text-zinc-300',
+  no_show: 'bg-zinc-700 border-zinc-600 text-zinc-400',
 }
 
 type ViewType = 'day' | 'week' | 'month' | 'year'
@@ -117,13 +117,17 @@ export function CalendarView({
   staff,
   businessId,
   shiftsByDay = {},
+  openNewPanel,
+  onNewPanelClosed,
 }: {
   appointments: AppointmentRow[]
-  clients: { id: string; name: string }[]
+  clients: { id: string; name: string; phone?: string | null; email?: string | null }[]
   services: { id: string; name: string; duration: number; price: number }[]
   staff: { id: string; name: string }[]
   businessId: string
   shiftsByDay?: Record<number, Shift[]>
+  openNewPanel?: boolean
+  onNewPanelClosed?: () => void
 }) {
   const router = useRouter()
   const supabase = createClient()
@@ -144,6 +148,15 @@ export function CalendarView({
   } | null>(null)
   const [moveLoading, setMoveLoading] = useState(false)
   const [editModalAppointmentId, setEditModalAppointmentId] = useState<string | null>(null)
+  const [externalPanelOpen, setExternalPanelOpen] = useState(false)
+
+  useEffect(() => {
+    if (openNewPanel) {
+      setExternalPanelOpen(true)
+      onNewPanelClosed?.()
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openNewPanel])
 
   const normalizedForViews = useMemo(
     () => appointments.map(normalizeAppointment),
@@ -369,7 +382,7 @@ export function CalendarView({
                 onAppointmentClick={handleAppointmentClick}
                 onDropInDay={canMoveAppointments ? handleDropAppointment : undefined}
                 businessId={businessId}
-                recentClients={clients.map((c) => ({ id: c.id, name: c.name, phone: null, email: null }))}
+                recentClients={clients.map((c) => ({ id: c.id, name: c.name, phone: c.phone ?? null, email: c.email ?? null }))}
                 services={services}
                 staff={staff}
                 allAppointments={appointments}
@@ -434,12 +447,28 @@ export function CalendarView({
         onOpenChange={(open) => !open && setEditModalAppointmentId(null)}
         appointment={editModalAppointmentId ? (appointments.find((a) => a.id === editModalAppointmentId) ?? null) : null}
         businessId={businessId}
-        clients={clients}
+        clients={clients.map((c) => ({ id: c.id, name: c.name, phone: c.phone ?? undefined, email: c.email ?? undefined }))}
         services={services}
         staff={staff}
         onToast={(message, type) => setToast({ message, type })}
         canDelete={hasPermission('appointments_delete')}
       />
+
+      {externalPanelOpen && (
+        <NewAppointmentSidePanel
+          day={current}
+          timeMin={9 * 60}
+          businessId={businessId}
+          recentClients={clients.map((c) => ({ id: c.id, name: c.name, phone: c.phone ?? null, email: c.email ?? null }))}
+          services={services}
+          staff={staff}
+          allAppointments={appointments}
+          shiftsByDay={shiftsByDay}
+          onClose={() => setExternalPanelOpen(false)}
+          onNavigateToDate={(date) => { setCurrent(date); setView('day') }}
+          onToast={(message, type) => setToast({ message, type })}
+        />
+      )}
     </div>
   )
 }
@@ -468,7 +497,7 @@ function DayView({
   appointments: AppointmentNormalized[]
   shiftsByDay: Record<number, Shift[]>
   onAppointmentClick: (apt: AppointmentNormalized, e: React.MouseEvent) => void
-  onDropInDay: (apt: AppointmentNormalized, toDate: Date) => void
+  onDropInDay?: (apt: AppointmentNormalized, toDate: Date) => void
   businessId: string
   recentClients: ClientOption[]
   services: { id: string; name: string; duration: number; price: number }[]
@@ -587,7 +616,7 @@ function DayView({
       const newStartMin = dayViewStartMin + slotIndex * MINUTES_PER_SLOT
       const toDate = new Date(day)
       toDate.setHours(Math.floor(newStartMin / 60), newStartMin % 60, 0, 0)
-      onDropInDay(apt, toDate)
+      onDropInDay?.(apt, toDate)
     },
     [appointments, day, dayViewStartMin, totalSlots, onDropInDay]
   )
@@ -834,11 +863,14 @@ function DayViewContent({
         {activeApt ? (
           <div
             className={cn(
-              'rounded border-l-4 px-2 py-1 text-xs truncate cursor-grabbing shadow-lg opacity-95',
+              'rounded border-l-4 p-1.5 text-xs cursor-grabbing shadow-lg opacity-95 flex flex-col items-start',
               STATUS_COLORS[activeApt.status] ?? 'bg-zinc-800'
             )}
           >
-            {format(parseISO(activeApt.start_time), 'HH:mm')} {activeApt.client_name ?? activeApt.service_name ?? 'Cita'}
+            <span className="font-semibold leading-tight">
+              {format(parseISO(activeApt.start_time), 'HH:mm')} – {format(parseISO(activeApt.end_time), 'HH:mm')}{activeApt.client_name ? ` ${activeApt.client_name}` : ''}
+            </span>
+            {activeApt.service_name && <span className="leading-tight opacity-75">{activeApt.service_name}</span>}
           </div>
         ) : null}
       </DragOverlay>
@@ -945,6 +977,8 @@ function DayDraggableAppointment({
     disabled: !canDrag,
   })
   const start = parseISO(apt.start_time)
+  const end = parseISO(apt.end_time)
+  const timeRange = `${format(start, 'HH:mm')} – ${format(end, 'HH:mm')}`
 
   return (
     <button
@@ -954,7 +988,7 @@ function DayDraggableAppointment({
       {...(canDrag ? { ...attributes, ...listeners } : {})}
       title={!canDrag ? 'No se pueden mover citas completadas o canceladas' : undefined}
       className={cn(
-        'absolute rounded border-l-4 px-2 py-0.5 text-xs truncate text-left transition-shadow cursor-pointer pointer-events-auto',
+        'absolute rounded border-l-4 p-1.5 text-xs text-left transition-shadow cursor-pointer pointer-events-auto overflow-hidden flex flex-col items-start justify-start',
         canDrag ? 'cursor-grab active:cursor-grabbing' : 'cursor-not-allowed opacity-90',
         isDragging && 'opacity-70 shadow-lg z-20',
         STATUS_COLORS[apt.status] ?? 'bg-zinc-800'
@@ -966,7 +1000,12 @@ function DayDraggableAppointment({
         height: heightPx,
       }}
     >
-      {format(start, 'HH:mm')} {apt.client_name ?? apt.service_name ?? 'Cita'}
+      <span className="font-semibold leading-tight truncate w-full">
+        {timeRange}{apt.client_name ? ` ${apt.client_name}` : ''}
+      </span>
+      {apt.service_name && (
+        <span className="leading-tight truncate w-full opacity-75">{apt.service_name}</span>
+      )}
     </button>
   )
 }
