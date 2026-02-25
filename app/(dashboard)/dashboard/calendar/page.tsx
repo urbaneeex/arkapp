@@ -13,6 +13,12 @@ export default async function CalendarPage() {
   const businessId = await getBusinessIdForUser(user.id)
   if (!businessId) redirect('/dashboard')
 
+  const { data: business } = await supabase
+    .from('businesses')
+    .select('country')
+    .eq('id', businessId)
+    .single()
+
   const { data: appointments } = await supabase
     .from('appointments')
     .select(
@@ -83,13 +89,16 @@ export default async function CalendarPage() {
   }
 
   return (
-    <CalendarPageClient
+    <div className="-mx-4 -mt-4 -mb-4 lg:-mx-8 lg:-mt-6 lg:-mb-8 flex flex-col min-h-[calc(100vh-4rem)]">
+      <CalendarPageClient
       appointments={appointments ?? []}
       clients={clients ?? []}
       services={services ?? []}
       staff={staff ?? []}
       businessId={businessId}
+      businessCountry={(business as { country?: string | null } | null)?.country ?? 'ES'}
       shiftsByDay={shiftsByDay}
     />
+    </div>
   )
 }

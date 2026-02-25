@@ -31,6 +31,7 @@ export function CalendarPageClient({
   services,
   staff,
   businessId,
+  businessCountry = 'ES',
   shiftsByDay,
 }: {
   appointments: AppointmentRow[]
@@ -38,6 +39,7 @@ export function CalendarPageClient({
   services: Service[]
   staff: Staff[]
   businessId: string
+  businessCountry?: string | null
   shiftsByDay: Record<number, Shift[]>
 }) {
   const { hasPermission, loading } = usePermissions()
@@ -53,22 +55,7 @@ export function CalendarPageClient({
   }
 
   return (
-    <div>
-      <div className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-zinc-100">Calendario</h1>
-          <p className="text-sm text-zinc-400 mt-1">
-            Vista día, semana, mes o año
-          </p>
-        </div>
-        {canCreateAppointments && (
-          <Button className="cursor-pointer" onClick={() => setTriggerNewPanel(true)}>
-            <Plus className="w-4 h-4 mr-2" />
-            Nueva cita
-          </Button>
-        )}
-      </div>
-
+    <div className="flex flex-col flex-1 min-h-0">
       <CalendarView
         appointments={appointments}
         clients={clients}
@@ -78,6 +65,25 @@ export function CalendarPageClient({
         shiftsByDay={shiftsByDay}
         openNewPanel={triggerNewPanel}
         onNewPanelClosed={() => setTriggerNewPanel(false)}
+        businessCountry={businessCountry}
+        headerSlot={
+          <>
+            <div className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center">
+              <div>
+                <h1 className="text-2xl font-bold text-zinc-100">Calendario</h1>
+                <p className="text-sm text-zinc-400 mt-1">
+                  Vista día, semana, mes o año
+                </p>
+              </div>
+              {canCreateAppointments && (
+                <Button className="cursor-pointer" onClick={() => setTriggerNewPanel(true)}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Nueva cita
+                </Button>
+              )}
+            </div>
+          </>
+        }
       />
     </div>
   )

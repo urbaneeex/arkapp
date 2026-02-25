@@ -4,6 +4,8 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { PhoneInput } from '@/components/ui/phone-input'
+import { EmailInput } from '@/components/ui/email-input'
 import { Search, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -182,6 +184,7 @@ export function NewClientFields({
   onEmailChange,
   onAddressChange,
   phoneError,
+  defaultCountry = 'ES',
   className,
 }: {
   name: string
@@ -193,6 +196,7 @@ export function NewClientFields({
   onEmailChange: (v: string) => void
   onAddressChange: (v: string) => void
   phoneError?: string
+  defaultCountry?: string | null
   className?: string
 }) {
   return (
@@ -208,28 +212,23 @@ export function NewClientFields({
           placeholder="Nombre completo"
         />
       </div>
-      <div>
-        <Label htmlFor="new-client-phone" className="text-zinc-100 font-medium">Teléfono (requerido)</Label>
-        <Input
-          id="new-client-phone"
-          value={phone}
-          onChange={(e) => onPhoneChange(e.target.value)}
-          className={cn('mt-1 text-zinc-100 font-medium', phoneError && 'border-red-500')}
-          placeholder="Ej: 612345678"
-        />
-        {phoneError && <p className="text-xs text-red-600 mt-1">{phoneError}</p>}
-      </div>
-      <div>
-        <Label htmlFor="new-client-email" className="text-zinc-100 font-medium">Email (opcional)</Label>
-        <Input
-          id="new-client-email"
-          type="email"
-          value={email}
-          onChange={(e) => onEmailChange(e.target.value)}
-          className="mt-1 text-zinc-100 font-medium"
-          placeholder="email@ejemplo.com"
-        />
-      </div>
+      <PhoneInput
+        id="new-client-phone"
+        label="Teléfono (requerido)"
+        value={phone}
+        defaultCountry={defaultCountry}
+        onChange={onPhoneChange}
+        error={phoneError}
+        className="mt-1"
+      />
+      <EmailInput
+        id="new-client-email"
+        label="Email (opcional)"
+        value={email}
+        onChange={onEmailChange}
+        optional
+        className="mt-1"
+      />
       <div>
         <Label htmlFor="new-client-address" className="text-zinc-100 font-medium">Dirección (opcional)</Label>
         <Input

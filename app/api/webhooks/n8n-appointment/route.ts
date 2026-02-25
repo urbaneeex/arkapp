@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { Resend } from 'resend'
+import { isEmailValidForSending, getEmailInvalidReason } from '@/lib/email'
+import { isPhoneValidForSending } from '@/lib/phone'
 
 const RESEND_FROM = process.env.RESEND_FROM_EMAIL || 'Arkapp <contact@blindxworld.com>'
 
@@ -128,9 +130,10 @@ export async function POST(req: Request) {
       .from('appointments')
       .select(`
         start_time,
-        clients ( name, phone, email ),
+        client_id,
+        clients ( id, name, phone, email, metadata ),
         services ( name ),
-        businesses ( name, wa_instance_name, wa_status, address )
+        businesses ( name, wa_instance_name, wa_status, address, country )
       `)
       .eq('id', appointmentId)
       .single()
@@ -140,11 +143,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: 'Datos no encontrados' })
     }
     const business = Array.isArray((apt as { businesses?: unknown }).businesses)
-      ? (apt as { businesses: { name?: string; wa_instance_name?: string; wa_status?: string; address?: string | null }[] }).businesses[0]
-      : (apt as { businesses?: { name?: string; wa_instance_name?: string; wa_status?: string; address?: string | null } }).businesses
+      ? (apt as { businesses: { name?: string; wa_instance_name?: string; wa_status?: string; address?: string | null; country?: string | null }[] }).businesses[0]
+      : (apt as { businesses?: { name?: string; wa_instance_name?: string; wa_status?: string; address?: string | null; country?: string | null } }).businesses
     const client = Array.isArray((apt as { clients?: unknown }).clients)
-      ? (apt as { clients: { name?: string; phone?: string; email?: string }[] }).clients[0]
-      : (apt as { clients?: { name?: string; phone?: string; email?: string } }).clients
+      ? (apt as { clients: { id?: string; name?: string; phone?: string; email?: string; metadata?: Record<string, unknown> | null }[] }).clients[0]
+      : (apt as { clients?: { id?: string; name?: string; phone?: string; email?: string; metadata?: Record<string, unknown> | null } }).clients
     const service = Array.isArray((apt as { services?: unknown }).services)
       ? (apt as { services: { name?: string }[] }).services[0]
       : (apt as { services?: { name?: string } }).services
@@ -152,75 +155,111 @@ export async function POST(req: Request) {
     if (business?.wa_status !== 'connected' || !business?.wa_instance_name) {
       return NextResponse.json({ ok: true, msg: 'No conectado' })
     }
-    if (!client?.phone) {
-      return NextResponse.json({ ok: true, msg: 'Sin teléfono' })
-    }
-    if (!process.env.N8N_WEBHOOK_URL) {
-      console.error('[n8n-appointment] N8N_WEBHOOK_URL no configurado')
-      return NextResponse.json({ ok: true, msg: 'Falta URL Webhook' })
-    }
-    const cleanPhone = client.phone.replace(/\D/g, '')
-    const formattedDate = new Intl.DateTimeFormat('es-ES', {
-      weekday: 'long',
-      day: 'numeric',
-      month: 'long',
-      hour: '2-digit',
-      minute: '2-digit',
-    }).format(new Date((apt as { start_time: string }).start_time))
-
-    const businessAddress = (business?.address ?? '').trim() || 'Consultar con el establecimiento'
-    const payload = {
-      businessName: business.name,
-      waInstanceName: business.wa_instance_name,
-      clientName: client.name,
-      clientPhone: cleanPhone,
-      serviceName: service?.name || 'Servicio',
-      formattedDate: formattedDate,
-      businessAddress,
+    if (!process.env.N8N_WEBHOOK_URL && !process.env.RESEND_API_KEY) {
+      return NextResponse.json({ ok: true, msg: 'Sin webhook ni Resend' })
     }
 
-    const n8nRes = await fetch(process.env.N8N_WEBHOOK_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    })
+    const businessCountry = (business?.country ?? 'ES') as string
+    const hasPhone = !!(client?.phone ?? '').toString().trim()
+    const phoneValidForSend = hasPhone && isPhoneValidForSending(client!.phone!, businessCountry)
+    const clientId = client?.id ?? (apt as { client_id?: string | null }).client_id ?? null
+
+    const metadataUpdates: Record<string, string> = {}
+
+    if (process.env.N8N_WEBHOOK_URL) {
+      if (!phoneValidForSend) {
+        if (hasPhone) metadataUpdates.phone_status = 'invalid'
+      } else {
+        const cleanPhone = client!.phone!.replace(/\D/g, '')
+        const formattedDate = new Intl.DateTimeFormat('es-ES', {
+          weekday: 'long',
+          day: 'numeric',
+          month: 'long',
+          hour: '2-digit',
+          minute: '2-digit',
+        }).format(new Date((apt as { start_time: string }).start_time))
+        const businessAddress = (business?.address ?? '').trim() || 'Consultar con el establecimiento'
+        const payload = {
+          businessName: business.name,
+          waInstanceName: business.wa_instance_name,
+          clientName: client!.name,
+          clientPhone: cleanPhone,
+          serviceName: service?.name || 'Servicio',
+          formattedDate: formattedDate,
+          businessAddress,
+        }
+        try {
+          await fetch(process.env.N8N_WEBHOOK_URL!, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          })
+        } catch (n8nErr) {
+          console.error('[n8n-appointment] Error llamando webhook n8n:', n8nErr)
+        }
+      }
+    }
 
     const clientEmail = (client?.email ?? '').toString().trim()
     if (clientEmail) {
-      try {
-        console.log('📧 [Backend] Enviando email a:', clientEmail)
-        const resendApiKey = process.env.RESEND_API_KEY
-        if (resendApiKey) {
-          const resend = new Resend(resendApiKey)
-          const startDate = new Date((apt as { start_time: string }).start_time)
-          const icsString = generateICS(
-            business?.name ?? 'Negocio',
-            service?.name ?? 'Servicio',
-            startDate,
-            businessAddress
-          )
-          await resend.emails.send({
-            from: RESEND_FROM,
-            to: clientEmail,
-            subject: `📅 Confirmación de tu cita en ${business?.name ?? 'el negocio'}`,
-            html: buildConfirmationEmailHtml(
-              business?.name ?? '',
-              client?.name ?? 'Cliente',
+      const isValidEmail = isEmailValidForSending(clientEmail)
+      if (!isValidEmail) {
+        const reason = getEmailInvalidReason(clientEmail)
+        console.warn('[n8n-appointment] Email inválido, no se envía Resend:', { email: clientEmail, reason })
+        metadataUpdates.email_status = 'skipped-invalid-email'
+      } else {
+        try {
+          console.log('📧 [Backend] Enviando email a:', clientEmail)
+          const resendApiKey = process.env.RESEND_API_KEY
+          if (resendApiKey) {
+            const resend = new Resend(resendApiKey)
+            const startDate = new Date((apt as { start_time: string }).start_time)
+            const businessAddress = (business?.address ?? '').trim() || 'Consultar con el establecimiento'
+            const icsString = generateICS(
+              business?.name ?? 'Negocio',
               service?.name ?? 'Servicio',
-              formattedDate,
+              startDate,
               businessAddress
-            ),
-            attachments: [
-              {
-                filename: 'reserva-arkapp.ics',
-                content: Buffer.from(icsString),
-              },
-            ],
-          })
+            )
+            await resend.emails.send({
+              from: RESEND_FROM,
+              to: clientEmail,
+              subject: `📅 Confirmación de tu cita en ${business?.name ?? 'el negocio'}`,
+              html: buildConfirmationEmailHtml(
+                business?.name ?? '',
+                client?.name ?? 'Cliente',
+                service?.name ?? 'Servicio',
+                new Intl.DateTimeFormat('es-ES', {
+                  weekday: 'long',
+                  day: 'numeric',
+                  month: 'long',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                }).format(startDate),
+                businessAddress
+              ),
+              attachments: [
+                {
+                  filename: 'reserva-arkapp.ics',
+                  content: Buffer.from(icsString),
+                },
+              ],
+            })
+          }
+        } catch (mailError) {
+          console.error('[n8n-appointment] Error enviando email de confirmación (no bloqueante):', mailError)
         }
-      } catch (mailError) {
-        console.error('[n8n-appointment] Error enviando email de confirmación (no bloqueante):', mailError)
       }
+    }
+
+    if (clientId && Object.keys(metadataUpdates).length > 0) {
+      const currentMeta = (client?.metadata as Record<string, unknown>) ?? {}
+      await supabase
+        .from('clients')
+        .update({
+          metadata: { ...currentMeta, ...metadataUpdates },
+        })
+        .eq('id', clientId)
     }
 
     return NextResponse.json({ ok: true })

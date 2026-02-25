@@ -112,7 +112,7 @@ export function AppointmentsCalendar({
 
   return (
     <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-    <div className="bg-zinc-900 rounded-xl border border-zinc-800 overflow-hidden">
+    <div className="bg-zinc-900 border border-zinc-800 overflow-hidden">
       {!hideToolbar && (
         <div className="flex items-center justify-between p-4 border-b border-zinc-800 flex-wrap gap-2">
           <div className="flex items-center gap-2">
@@ -220,7 +220,7 @@ function DraggableAppointmentCard({
       onClick={(e) => onAppointmentClick?.(appointment, e)}
       {...(canDrag ? { ...attributes, ...listeners } : {})}
       className={cn(
-        'cursor-pointer w-full text-left flex flex-col items-start justify-start rounded-lg border-l-4 p-1.5 mb-1.5 text-xs overflow-hidden transition-opacity hover:opacity-90',
+        'cursor-pointer w-full text-left flex flex-col items-start justify-start border-l-4 p-1.5 mb-1.5 text-xs overflow-hidden transition-opacity hover:opacity-90',
         canDrag && 'cursor-grab active:cursor-grabbing',
         isDragging && 'opacity-50 shadow-lg',
         statusColors[appointment.status ?? 'pending'] ?? 'bg-zinc-800'

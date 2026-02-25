@@ -18,7 +18,7 @@ export default async function SettingsPage() {
   const { data: business } = await supabase
     .from('businesses')
     .select(
-      'id, name, owner_name, owner_phone, address, whatsapp_number, slug, industry, booking_settings, notification_settings, plan, logo_url, wa_instance_name, wa_status, wa_connected_phone'
+      'id, name, owner_name, owner_phone, address, whatsapp_number, slug, industry, booking_settings, notification_settings, plan, logo_url, wa_instance_name, wa_status, wa_connected_phone, country'
     )
     .eq('id', businessId)
     .single()
@@ -78,6 +78,7 @@ export default async function SettingsPage() {
           wa_instance_name: business.wa_instance_name ?? null,
           wa_status: (business.wa_status as 'disconnected' | 'pending_qr' | 'connected') ?? 'disconnected',
           wa_connected_phone: business.wa_connected_phone ?? null,
+          country: (business as { country?: string | null }).country ?? 'ES',
         }}
         ownerEmail={user.email ?? ''}
         daysWithShifts={daysWithShifts}

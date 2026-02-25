@@ -4,6 +4,8 @@ import React, { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
+import { EmailInput } from '@/components/ui/email-input'
+import { normalizeEmail } from '@/lib/email'
 import type { Database } from '@/types/database.types'
 
 type ClientRow = Database['public']['Tables']['clients']['Row']
@@ -58,7 +60,7 @@ export default function ClientForm({ client }: ClientFormProps) {
       const payload = {
         name: formData.name,
         phone: formData.phone,
-        email: formData.email || null,
+        email: formData.email ? normalizeEmail(formData.email) || null : null,
         address: formData.address || null,
         notes: formData.notes || null,
       }
@@ -132,19 +134,14 @@ export default function ClientForm({ client }: ClientFormProps) {
       </div>
 
       {/* Email */}
-      <div>
-        <label className="block text-sm font-medium text-zinc-300 mb-2">
-          Email
-        </label>
-        <input
-          type="email"
-          name="email"
-          value={formData.email}
-          onChange={handleChange}
-          className="w-full px-4 py-2 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder="juan@ejemplo.com"
-        />
-      </div>
+      <EmailInput
+        id="email"
+        label="Email"
+        value={formData.email}
+        onChange={(v) => setFormData((prev) => ({ ...prev, email: v }))}
+        optional
+        className="mt-1"
+      />
 
       {/* Dirección */}
       <div>

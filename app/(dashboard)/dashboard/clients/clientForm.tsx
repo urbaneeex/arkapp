@@ -4,15 +4,19 @@ import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
+import { PhoneInput } from '@/components/ui/phone-input'
+import { EmailInput } from '@/components/ui/email-input'
+import { normalizeEmail } from '@/lib/email'
 import type { Database } from '@/types/database.types'
 
 type ClientRow = Database['public']['Tables']['clients']['Row']
 
 interface ClientFormProps {
   client?: ClientRow | null
+  defaultCountry?: string | null
 }
 
-export default function ClientForm({ client }: ClientFormProps) {
+export default function ClientForm({ client, defaultCountry }: ClientFormProps) {
   const router = useRouter()
   const supabase = createClient()
   
@@ -27,7 +31,6 @@ export default function ClientForm({ client }: ClientFormProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  // Manejar cambios en inputs
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setFormData({
       ...formData,
@@ -35,18 +38,15 @@ export default function ClientForm({ client }: ClientFormProps) {
     })
   }
 
-  // Enviar formulario
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault() // Previene reload de página
+    e.preventDefault()
     setLoading(true)
     setError('')
 
     try {
-      // 1. Obtener usuario actual
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('No autenticado')
 
-      // 2. Obtener business_id
       const { data: business } = await supabase
         .from('businesses')
         .select('id')
@@ -58,7 +58,7 @@ export default function ClientForm({ client }: ClientFormProps) {
       const payload = {
         name: formData.name,
         phone: formData.phone,
-        email: formData.email || null,
+        email: formData.email ? normalizeEmail(formData.email) || null : null,
         address: formData.address || null,
         notes: formData.notes || null,
       }
@@ -80,12 +80,11 @@ export default function ClientForm({ client }: ClientFormProps) {
         if (insertError) throw insertError
       }
 
-      // Redirigir a lista de clientes
       router.push('/dashboard/clients')
-      router.refresh() // Refresca los datos
+      router.refresh()
       
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Error al guardar')
     } finally {
       setLoading(false)
     }
@@ -99,7 +98,6 @@ export default function ClientForm({ client }: ClientFormProps) {
         </div>
       )}
 
-      {/* Nombre */}
       <div>
         <label className="block text-sm font-medium text-zinc-300 mb-2">
           Nombre completo *
@@ -110,43 +108,29 @@ export default function ClientForm({ client }: ClientFormProps) {
           required
           value={formData.name}
           onChange={handleChange}
-          className="w-full px-4 py-2 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full px-4 py-2 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-zinc-900 text-zinc-100"
           placeholder="Juan Pérez"
         />
       </div>
 
-      {/* Teléfono */}
-      <div>
-        <label className="block text-sm font-medium text-zinc-300 mb-2">
-          Teléfono *
-        </label>
-        <input
-          type="tel"
-          name="phone"
-          required
-          value={formData.phone}
-          onChange={handleChange}
-          className="w-full px-4 py-2 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder="+34 612 34 56 78"
-        />
-      </div>
+      <PhoneInput
+        id="phone"
+        label="Teléfono *"
+        value={formData.phone}
+        defaultCountry={defaultCountry ?? 'ES'}
+        onChange={(v) => setFormData((prev) => ({ ...prev, phone: v }))}
+        className="mt-1"
+      />
 
-      {/* Email */}
-      <div>
-        <label className="block text-sm font-medium text-zinc-300 mb-2">
-          Email
-        </label>
-        <input
-          type="email"
-          name="email"
-          value={formData.email}
-          onChange={handleChange}
-          className="w-full px-4 py-2 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder="juan@ejemplo.com"
-        />
-      </div>
+      <EmailInput
+        id="email"
+        label="Email"
+        value={formData.email}
+        onChange={(v) => setFormData((prev) => ({ ...prev, email: v }))}
+        optional
+        className="mt-1"
+      />
 
-      {/* Dirección */}
       <div>
         <label className="block text-sm font-medium text-zinc-300 mb-2">
           Dirección
@@ -156,12 +140,11 @@ export default function ClientForm({ client }: ClientFormProps) {
           name="address"
           value={formData.address}
           onChange={handleChange}
-          className="w-full px-4 py-2 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full px-4 py-2 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-zinc-900 text-zinc-100"
           placeholder="Calle Principal 123, Sevilla"
         />
       </div>
 
-      {/* Notas */}
       <div>
         <label className="block text-sm font-medium text-zinc-300 mb-2">
           Notas
@@ -171,12 +154,11 @@ export default function ClientForm({ client }: ClientFormProps) {
           rows={3}
           value={formData.notes}
           onChange={handleChange}
-          className="w-full px-4 py-2 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full px-4 py-2 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-zinc-900 text-zinc-100"
           placeholder="Alergias, preferencias, etc."
         />
       </div>
 
-      {/* Botones */}
       <div className="flex gap-4">
         <Button type="submit" disabled={loading}>
           {loading ? 'Guardando...' : client ? 'Guardar cambios' : 'Guardar Cliente'}

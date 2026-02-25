@@ -57,6 +57,9 @@ import type { Shift } from '@/lib/availability'
 import { getClosedRangesForDay } from '@/lib/availability'
 import { ClientSearchCombobox, NewClientFields, type ClientOption } from '@/components/appointments/ClientSearchCombobox'
 import { X, Plus, Trash2, Clock } from 'lucide-react'
+import { PhoneInput } from '@/components/ui/phone-input'
+import { EmailInput } from '@/components/ui/email-input'
+import { normalizeEmail } from '@/lib/email'
 import { createClient } from '@/lib/supabase/client'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { usePermissions } from '@/hooks/usePermissions'
@@ -116,18 +119,22 @@ export function CalendarView({
   services,
   staff,
   businessId,
+  businessCountry = 'ES',
   shiftsByDay = {},
   openNewPanel,
   onNewPanelClosed,
+  headerSlot,
 }: {
   appointments: AppointmentRow[]
   clients: { id: string; name: string; phone?: string | null; email?: string | null }[]
   services: { id: string; name: string; duration: number; price: number }[]
   staff: { id: string; name: string }[]
   businessId: string
+  businessCountry?: string | null
   shiftsByDay?: Record<number, Shift[]>
   openNewPanel?: boolean
   onNewPanelClosed?: () => void
+  headerSlot?: React.ReactNode
 }) {
   const router = useRouter()
   const supabase = createClient()
@@ -135,7 +142,7 @@ export function CalendarView({
   const canMoveAppointments = hasPermission('appointments_move')
   const canEditAppointments = hasPermission('appointments_edit')
   const [current, setCurrent] = useState(new Date())
-  const [view, setView] = useState<ViewType>('week')
+  const [view, setView] = useState<ViewType>('day')
   const [staffFilter, setStaffFilter] = useState<string>('')
   const [popoverAppointment, setPopoverAppointment] = useState<AppointmentForPopover | null>(null)
   const [anchorPosition, setAnchorPosition] = useState<{ x: number; y: number } | null>(null)
@@ -299,55 +306,60 @@ export function CalendarView({
   }, [moveDialog, supabase, router])
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2 justify-between">
-        <div className="flex items-center gap-2 flex-wrap">
-          <Button variant="outline" size="icon" onClick={goPrev} className="cursor-pointer">
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <Button variant="outline" size="icon" onClick={goNext} className="cursor-pointer">
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-          <Button variant="outline" size="sm" onClick={goToday} className="cursor-pointer">
-            Hoy
-          </Button>
-          <h2 className="text-lg font-semibold text-zinc-100 capitalize min-w-[200px] text-center">
-            {title()}
-          </h2>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          {(['day', 'week', 'month', 'year'] as const).map((v) => (
-            <Button
-              key={v}
-              variant={view === v ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setView(v)}
-              className="cursor-pointer capitalize"
-            >
-              {v === 'day' ? 'Día' : v === 'week' ? 'Semana' : v === 'month' ? 'Mes' : 'Año'}
+    <div className="flex flex-col flex-1 min-h-0">
+      <div className="sticky top-0 z-20 bg-zinc-100 dark:bg-[#0d0d0d] px-4 pt-4 pb-4 lg:px-8 lg:pt-6 lg:pb-6 space-y-4 border-b border-zinc-200 dark:border-zinc-800/80 shrink-0">
+        {headerSlot}
+        <div className="flex flex-wrap items-center gap-2 justify-between">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button variant="outline" size="icon" onClick={goPrev} className="cursor-pointer">
+              <ChevronLeft className="h-4 w-4" />
             </Button>
-          ))}
-          <select
-            value={staffFilter}
-            onChange={(e) => setStaffFilter(e.target.value)}
-            className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6] focus-visible:ring-offset-2"
-          >
-            <option value="">Todos los empleados</option>
-            {staff.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
+            <Button variant="outline" size="icon" onClick={goNext} className="cursor-pointer">
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+            <Button variant="outline" size="sm" onClick={goToday} className="cursor-pointer">
+              Hoy
+            </Button>
+            <h2 className="text-lg font-semibold text-zinc-100 capitalize min-w-[200px] text-center">
+              {title()}
+            </h2>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            {(['day', 'week', 'month', 'year'] as const).map((v) => (
+              <Button
+                key={v}
+                variant={view === v ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setView(v)}
+                className="cursor-pointer capitalize"
+              >
+                {v === 'day' ? 'Día' : v === 'week' ? 'Semana' : v === 'month' ? 'Mes' : 'Año'}
+              </Button>
             ))}
-          </select>
+            <select
+              value={staffFilter}
+              onChange={(e) => setStaffFilter(e.target.value)}
+              className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6] focus-visible:ring-offset-2"
+            >
+              <option value="">Todos los empleados</option>
+              {staff.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
+      <div className="flex-1 min-h-0 flex flex-col">
       <ClientOnlyDnd
         fallback={
-          <div className="rounded-xl border border-zinc-800 bg-zinc-900 overflow-hidden min-h-[400px]" aria-hidden />
+          <div className="border border-zinc-800 bg-zinc-900 overflow-hidden flex-1 min-h-[400px]" aria-hidden />
         }
       >
         {view === 'week' ? (
+          <div className="flex-1 min-h-0 flex flex-col">
           <AppointmentsCalendar
             appointments={appointmentsForWeekView}
             clients={clients}
@@ -372,8 +384,10 @@ export function CalendarView({
             }}
             onDropAppointment={canMoveAppointments ? (apt, toDate) => handleDropAppointment(normalizeAppointment(apt), toDate) : undefined}
           />
+          </div>
         ) : (
-          <div className="rounded-xl border border-zinc-800 bg-zinc-900 overflow-hidden">
+          <div className="border border-zinc-800 bg-zinc-900 overflow-hidden flex-1 min-h-0 flex flex-col">
+            <div className="flex-1 min-h-0 overflow-y-auto">
             {view === 'day' && (
               <DayView
                 day={current}
@@ -382,6 +396,7 @@ export function CalendarView({
                 onAppointmentClick={handleAppointmentClick}
                 onDropInDay={canMoveAppointments ? handleDropAppointment : undefined}
                 businessId={businessId}
+                businessCountry={businessCountry ?? 'ES'}
                 recentClients={clients.map((c) => ({ id: c.id, name: c.name, phone: c.phone ?? null, email: c.email ?? null }))}
                 services={services}
                 staff={staff}
@@ -409,9 +424,11 @@ export function CalendarView({
                 onAppointmentClick={handleAppointmentClick}
               />
             )}
+            </div>
           </div>
         )}
       </ClientOnlyDnd>
+      </div>
 
       <AppointmentPopover
         appointment={popoverAppointment}
@@ -459,6 +476,7 @@ export function CalendarView({
           day={current}
           timeMin={9 * 60}
           businessId={businessId}
+          businessCountry={businessCountry ?? 'ES'}
           recentClients={clients.map((c) => ({ id: c.id, name: c.name, phone: c.phone ?? null, email: c.email ?? null }))}
           services={services}
           staff={staff}
@@ -486,6 +504,7 @@ function DayView({
   onAppointmentClick,
   onDropInDay,
   businessId,
+  businessCountry = 'ES',
   recentClients,
   services,
   staff,
@@ -499,6 +518,7 @@ function DayView({
   onAppointmentClick: (apt: AppointmentNormalized, e: React.MouseEvent) => void
   onDropInDay?: (apt: AppointmentNormalized, toDate: Date) => void
   businessId: string
+  businessCountry?: string | null
   recentClients: ClientOption[]
   services: { id: string; name: string; duration: number; price: number }[]
   staff: { id: string; name: string }[]
@@ -586,19 +606,19 @@ function DayView({
         setCurrentTimeTop(null)
         return
       }
-      const currentHour = Math.floor(minSinceMidnight / 60)
-      const hourStartMin = currentHour * 60
-      if (hourStartMin < dayViewStartMin || hourStartMin >= dayViewEndMin) {
-        setCurrentTimeTop(null)
-        return
-      }
-      const hourIndex = Math.floor((hourStartMin - dayViewStartMin) / 60)
-      setCurrentTimeTop(hourIndex * HOUR_HEIGHT_PX)
+      const minutesIntoView = minSinceMidnight - dayViewStartMin
+      const currentSlotIndex = Math.floor(minutesIntoView / MINUTES_PER_SLOT)
+      const slotBoundaryNext = (currentSlotIndex + 1) * SLOT_HEIGHT_PX
+      const rawTopPx = (minutesIntoView / MINUTES_PER_SLOT) * SLOT_HEIGHT_PX
+      const lineHeightPx = 2
+      const maxTop = slotBoundaryNext - lineHeightPx
+      const topPx = Math.min(rawTopPx, maxTop)
+      setCurrentTimeTop(topPx)
     }
     update()
     const id = setInterval(update, 60000)
     return () => clearInterval(id)
-  }, [isToday, dayViewStartMin, dayViewEndMin, totalSlots])
+  }, [isToday, dayViewStartMin, dayViewEndMin])
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
   const [overSlot, setOverSlot] = useState<number | null>(null)
@@ -634,7 +654,7 @@ function DayView({
 
   if (isClosed) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[320px] rounded-xl border border-zinc-800 bg-zinc-900 p-8 text-center">
+      <div className="flex flex-col items-center justify-center min-h-[320px] border border-zinc-800 bg-zinc-900 p-8 text-center">
         <p className="text-zinc-400 font-medium">El negocio está cerrado este día</p>
       </div>
     )
@@ -665,6 +685,7 @@ function DayView({
         onAppointmentClick={onAppointmentClick}
         isSlotClosed={isSlotClosed}
         businessId={businessId}
+        businessCountry={businessCountry}
         recentClients={recentClients}
         services={services}
         staff={staff}
@@ -692,6 +713,7 @@ function DayViewContent({
   onAppointmentClick,
   isSlotClosed,
   businessId,
+  businessCountry = 'ES',
   recentClients,
   services,
   staff,
@@ -713,6 +735,7 @@ function DayViewContent({
   onAppointmentClick: (apt: AppointmentNormalized, e: React.MouseEvent) => void
   isSlotClosed: (slotIndex: number) => boolean
   businessId: string
+  businessCountry?: string | null
   recentClients: { id: string; name: string; phone?: string | null; email?: string | null }[]
   services: { id: string; name: string; duration: number; price: number }[]
   staff: { id: string; name: string }[]
@@ -723,6 +746,8 @@ function DayViewContent({
 }) {
   const [activeId, setActiveId] = useState<string | null>(null)
   const [selectedSlotTime, setSelectedSlotTime] = useState<{ slotIndex: number; timeMin: number } | null>(null)
+  const currentTimeLineRef = useRef<HTMLDivElement>(null)
+  const hasScrolledToTimeRef = useRef(false)
 
   useDndMonitor({
     onDragStart: (e) => setActiveId(String(e.active.id)),
@@ -769,6 +794,22 @@ function DayViewContent({
     }))
   }, [appointments, day, dayViewStartMin, dayViewEndMin])
 
+  useEffect(() => {
+    if (!isToday) hasScrolledToTimeRef.current = false
+  }, [isToday])
+
+  useEffect(() => {
+    if (!isToday || currentTimeTop == null || hasScrolledToTimeRef.current) return
+    hasScrolledToTimeRef.current = true
+    const el = currentTimeLineRef.current
+    if (el) {
+      const t = setTimeout(() => {
+        el.scrollIntoView({ behavior: 'auto', block: 'center' })
+      }, 100)
+      return () => clearTimeout(t)
+    }
+  }, [isToday, currentTimeTop])
+
   return (
     <>
       <div className="relative grid grid-cols-[56px_1fr] min-h-[400px]">
@@ -812,7 +853,7 @@ function DayViewContent({
                   slotHeightPx={SLOT_HEIGHT_PX}
                   isHourStart={slotIndex % SLOTS_PER_HOUR === 0}
                   dayStartMin={dayViewStartMin}
-                  onSlotClick={!hasAppointment && !closed ? (idx, timeMin) => setSelectedSlotTime({ slotIndex: idx, timeMin }) : undefined}
+                  onSlotClick={!hasAppointment ? (idx, timeMin) => setSelectedSlotTime({ slotIndex: idx, timeMin }) : undefined}
                   isClosed={closed}
                 />
               )
@@ -845,18 +886,21 @@ function DayViewContent({
               })}
             </div>
           </div>
-          {isToday && currentTimeTop != null && (
-            <div
-              className="absolute left-0 right-0 z-10 pointer-events-none flex items-center"
-              style={{ top: currentTimeTop }}
-            >
-              <span className="bg-red-500 text-white text-xs font-medium px-3 py-1 rounded-full shrink-0">
+        </div>
+        {isToday && currentTimeTop != null && (
+          <div
+            ref={currentTimeLineRef}
+            className="absolute left-0 right-0 z-10 pointer-events-none flex items-start"
+            style={{ top: currentTimeTop }}
+          >
+            <div className="w-[56px] flex justify-end shrink-0">
+              <span className="bg-red-500 text-white text-[10px] font-medium px-2 py-0.5 rounded-full -translate-y-1/2">
                 {format(new Date(), 'HH:mm')}
               </span>
-              <span className="border-t-2 border-red-500 flex-1 h-0" />
             </div>
-          )}
-        </div>
+            <span className="border-t-2 border-red-500 flex-1 h-0 -translate-y-1/2 min-w-0" />
+          </div>
+        )}
       </div>
 
       <DragOverlay dropAnimation={null}>
@@ -880,6 +924,7 @@ function DayViewContent({
           day={day}
           timeMin={selectedSlotTime.timeMin}
           businessId={businessId}
+          businessCountry={businessCountry ?? 'ES'}
           recentClients={recentClients}
           services={services}
           staff={staff}
@@ -921,7 +966,7 @@ function DaySlot({
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation()
-    if (!isClosed && onSlotClick) {
+    if (onSlotClick) {
       onSlotClick(slotIndex, timeMin)
     }
   }
@@ -936,14 +981,14 @@ function DaySlot({
         'transition-colors shrink-0 relative cursor-pointer',
         isHourStart ? 'border-t-2 border-zinc-700' : 'border-t border-zinc-700',
         showOver && 'ring-1 ring-inset ring-blue-400 bg-blue-900/30',
-        isHovered && !isClosed && 'bg-blue-800/60',
-        isClosed && 'cursor-not-allowed'
+        isHovered && 'bg-blue-800/60',
+        isClosed && onSlotClick && 'cursor-pointer'
       )}
       style={{ height: slotHeightPx }}
     >
-      {isHovered && !isClosed && (
+      {isHovered && (
         <div className="absolute inset-0 flex items-center pointer-events-none pl-2">
-          <span className="text-xs font-medium text-zinc-300 bg-zinc-900/90 px-2 py-0.5 rounded shadow-sm">
+          <span className="text-xs font-medium text-zinc-300">
             {timeLabel}
           </span>
         </div>
@@ -1014,6 +1059,7 @@ function NewAppointmentSidePanel({
   day,
   timeMin,
   businessId,
+  businessCountry = 'ES',
   recentClients,
   services,
   staff,
@@ -1026,6 +1072,7 @@ function NewAppointmentSidePanel({
   day: Date
   timeMin: number
   businessId: string
+  businessCountry?: string | null
   recentClients: ClientOption[]
   services: { id: string; name: string; duration: number; price: number }[]
   staff: { id: string; name: string }[]
@@ -1061,6 +1108,7 @@ function NewAppointmentSidePanel({
   const [loadingAvailability, setLoadingAvailability] = useState(false)
   const [showCloseConfirm, setShowCloseConfirm] = useState(false)
   const [useAnyAvailableStaff, setUseAnyAvailableStaff] = useState(false)
+  const [noClient, setNoClient] = useState(false)
 
   const hours = Math.floor(currentTimeMin / 60)
   const minutes = currentTimeMin % 60
@@ -1074,8 +1122,8 @@ function NewAppointmentSidePanel({
   const endTimeLabel = `${String(endHours).padStart(2, '0')}:${String(endMinutes).padStart(2, '0')}`
 
   const hasData = useMemo(() => {
-    return !!(selectedClient || (isNewClient && newClientName) || selectedServices.length > 0 || selectedStaff || useAnyAvailableStaff)
-  }, [selectedClient, isNewClient, newClientName, selectedServices.length, selectedStaff, useAnyAvailableStaff])
+    return !!(noClient || selectedClient || (isNewClient && newClientName) || selectedServices.length > 0 || selectedStaff || useAnyAvailableStaff)
+  }, [noClient, selectedClient, isNewClient, newClientName, selectedServices.length, selectedStaff, useAnyAvailableStaff])
 
   const handleOverlayClick = () => {
     if (hasData) {
@@ -1106,8 +1154,8 @@ function NewAppointmentSidePanel({
       setCreateError('Selecciona un empleado o "Cualquier empleado disponible"')
       return
     }
-    if (!selectedClient && (!isNewClient || !newClientName || !newClientPhone)) {
-      setCreateError('Completa los datos del cliente')
+    if (!noClient && !selectedClient && (!isNewClient || !newClientName || !newClientPhone)) {
+      setCreateError('Completa los datos del cliente o pulsa «Continuar sin ficha de cliente»')
       return
     }
 
@@ -1117,7 +1165,7 @@ function NewAppointmentSidePanel({
     try {
       let clientId: string | null = null
 
-      if (isNewClient) {
+      if (!noClient && isNewClient) {
         const { data: existingByPhone } = await supabase
           .from('clients')
           .select('id')
@@ -1137,7 +1185,7 @@ function NewAppointmentSidePanel({
             business_id: businessId,
             name: newClientName.trim(),
             phone: newClientPhone.trim(),
-            email: newClientEmail.trim() || null,
+            email: newClientEmail.trim() ? normalizeEmail(newClientEmail) || null : null,
             address: newClientAddress.trim() || null,
           })
           .select('id')
@@ -1149,7 +1197,7 @@ function NewAppointmentSidePanel({
           return
         }
         clientId = newClient.id
-      } else {
+      } else if (!noClient) {
         clientId = selectedClient?.id ?? null
         if (clientId) {
           const phoneInForm = editingClientPhone.trim()
@@ -1161,7 +1209,7 @@ function NewAppointmentSidePanel({
           if (phoneChanged || emailChanged) {
             const updateData: { phone?: string | null; email?: string | null } = {}
             if (phoneChanged) updateData.phone = phoneInForm || null
-            if (emailChanged) updateData.email = emailInForm || null
+            if (emailChanged) updateData.email = emailInForm ? normalizeEmail(editingClientEmail) || null : null
             const { error: updateErr } = await supabase
               .from('clients')
               .update(updateData)
@@ -1175,7 +1223,7 @@ function NewAppointmentSidePanel({
         }
       }
 
-      if (!clientId) {
+      if (!noClient && !clientId) {
         setCreateError('Error al obtener el cliente')
         setCreating(false)
         return
@@ -1228,12 +1276,14 @@ function NewAppointmentSidePanel({
         }
       }
 
-      const clientNameDisplay = isNewClient ? newClientName : selectedClient?.name ?? 'Cliente'
+      const clientNameDisplay = noClient ? 'sin cliente' : (isNewClient ? newClientName : selectedClient?.name ?? 'Cliente')
       const serviceNames = selectedServices.map((s) => s.name).join(', ')
       const staffNameDisplay = useAnyAvailableStaff ? 'empleado disponible' : selectedStaff?.name ?? 'empleado'
 
       onToast?.(
-        `Cita creada correctamente para ${clientNameDisplay} el ${format(currentDay, 'EEEE d MMM', { locale: es })} a las ${timeLabel}`,
+        noClient
+          ? `Cita creada correctamente (sin ficha de cliente) el ${format(currentDay, 'EEEE d MMM', { locale: es })} a las ${timeLabel}`
+          : `Cita creada correctamente para ${clientNameDisplay} el ${format(currentDay, 'EEEE d MMM', { locale: es })} a las ${timeLabel}`,
         'success'
       )
 
@@ -1415,7 +1465,7 @@ function NewAppointmentSidePanel({
       .update({
         name: editingClientName.trim(),
         phone: editingClientPhone.trim() || null,
-        email: editingClientEmail.trim() || null,
+        email: editingClientEmail.trim() ? normalizeEmail(editingClientEmail) || null : null,
       })
       .eq('id', selectedClient.id)
 
@@ -1428,7 +1478,7 @@ function NewAppointmentSidePanel({
       ...selectedClient,
       name: editingClientName.trim(),
       phone: editingClientPhone.trim() || null,
-      email: editingClientEmail.trim() || null,
+      email: editingClientEmail.trim() ? normalizeEmail(editingClientEmail) || null : null,
     })
     setClientSearchText(editingClientName.trim())
     onToast?.('Cliente actualizado correctamente', 'success')
@@ -1442,7 +1492,7 @@ function NewAppointmentSidePanel({
   }
 
   const handleNext = () => {
-    if (step === 1 && (selectedClient || (isNewClient && newClientName && newClientPhone))) {
+    if (step === 1 && (noClient || selectedClient || (isNewClient && newClientName && newClientPhone))) {
       setStep(2)
     }
   }
@@ -1450,12 +1500,15 @@ function NewAppointmentSidePanel({
   const handlePrevious = () => {
     if (step > 1) {
       setStep(step - 1)
+      if (step === 2) {
+        setNoClient(false)
+      }
     }
   }
 
   const dayLabel = format(currentDay, 'EEE d MMM', { locale: es })
   const dayLabelFull = format(currentDay, 'EEEE d \'de\' MMMM yyyy', { locale: es })
-  const clientName = selectedClient?.name ?? (isNewClient && newClientName ? newClientName : null)
+  const clientName = noClient ? null : (selectedClient?.name ?? (isNewClient && newClientName ? newClientName : null))
   const today = new Date()
   const canGoPrev = !isBefore(currentDay, today) || !isSameDay(currentDay, today)
 
@@ -1472,19 +1525,31 @@ function NewAppointmentSidePanel({
   }
 
   const getAvailableTimeSlots = useMemo(() => {
-    const businessHours = getBusinessHoursForDay(currentDay)
-    if (!businessHours) return []
+    const dayOfWeek = getDayOfWeek(currentDay)
+    const openRanges = getOpenRangesForDay(shiftsByDay ?? {}, dayOfWeek)
     const slots: { timeMin: number; label: string }[] = []
-    for (let min = businessHours.openMin; min <= businessHours.closeMin - totalDuration; min += 5) {
-      const hours = Math.floor(min / 60)
-      const minutes = min % 60
-      slots.push({
-        timeMin: min,
-        label: `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`,
-      })
+    for (const range of openRanges) {
+      for (let min = range.start; min <= range.end - totalDuration; min += 5) {
+        const hours = Math.floor(min / 60)
+        const minutes = min % 60
+        slots.push({
+          timeMin: min,
+          label: `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`,
+        })
+      }
+    }
+    const currentRounded = Math.floor(currentTimeMin / 15) * 15
+    if (currentRounded >= 0 && currentRounded < 24 * 60 && totalDuration > 0) {
+      const exists = slots.some((s) => s.timeMin === currentRounded)
+      if (!exists) {
+        const h = Math.floor(currentRounded / 60)
+        const m = currentRounded % 60
+        slots.push({ timeMin: currentRounded, label: `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}` })
+        slots.sort((a, b) => a.timeMin - b.timeMin)
+      }
     }
     return slots
-  }, [currentDay, getBusinessHoursForDay, totalDuration])
+  }, [currentDay, shiftsByDay, totalDuration, currentTimeMin])
 
   const handleTimeSelect = (timeMin: number) => {
     setCurrentTimeMin(timeMin)
@@ -1652,6 +1717,7 @@ function NewAppointmentSidePanel({
             </div>
 
             <div className="pt-2 border-t border-zinc-800 space-y-1">
+              {noClient && <p className="text-xs font-medium text-zinc-400">Sin ficha de cliente</p>}
               {clientName && <p className="text-xs font-medium text-zinc-300">{clientName}</p>}
               {selectedServices.length > 0 && (
                 <p className="text-xs font-medium text-zinc-300">
@@ -1678,9 +1744,25 @@ function NewAppointmentSidePanel({
                   onChange={setClientSearchText}
                   onSelectExisting={handleSelectExistingClient}
                   onSelectNew={handleSelectNewClient}
-                  disabled={false}
+                  disabled={noClient}
                   className="mt-1 [&_input]:text-zinc-100 [&_input]:font-medium"
                 />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={noClient}
+                  onClick={() => {
+                    setNoClient(true)
+                    setSelectedClient(null)
+                    setIsNewClient(false)
+                    setClientSearchText('')
+                    setStep(2)
+                  }}
+                  className="mt-2 w-full sm:w-auto"
+                >
+                  Continuar sin ficha de cliente
+                </Button>
               </div>
 
               {selectedClient && !isNewClient && (
@@ -1708,23 +1790,23 @@ function NewAppointmentSidePanel({
                   </div>
                   <div>
                     <Label htmlFor="existing-client-phone-display" className="text-zinc-100 font-medium">Teléfono</Label>
-                    <Input
+                    <PhoneInput
                       id="existing-client-phone-display"
                       value={editingClientPhone}
-                      onChange={(e) => setEditingClientPhone(e.target.value)}
-                      className="mt-1 text-zinc-100 font-medium bg-zinc-900"
-                      placeholder="Sin teléfono"
+                      defaultCountry={businessCountry ?? 'ES'}
+                      onChange={setEditingClientPhone}
+                      className="mt-1"
                     />
                   </div>
                   <div>
-                    <Label htmlFor="existing-client-email-display" className="text-zinc-100 font-medium">Email</Label>
-                    <Input
+                    <EmailInput
                       id="existing-client-email-display"
-                      type="email"
+                      label="Email"
                       value={editingClientEmail}
-                      onChange={(e) => setEditingClientEmail(e.target.value)}
-                      className="mt-1 text-zinc-100 font-medium bg-zinc-900"
+                      onChange={setEditingClientEmail}
+                      optional
                       placeholder="Sin email"
+                      className="mt-1"
                     />
                   </div>
                 </div>
@@ -1744,6 +1826,7 @@ function NewAppointmentSidePanel({
                   onEmailChange={setNewClientEmail}
                   onAddressChange={setNewClientAddress}
                   phoneError={phoneDuplicateError ?? undefined}
+                  defaultCountry={businessCountry ?? 'ES'}
                 />
               )}
             </div>
@@ -2189,7 +2272,7 @@ function YearView({
         const pad = Array(startPad).fill(null)
         const allDays = [...pad, ...daysInMonth]
         return (
-          <div key={m.toISOString()} className="border border-zinc-800 rounded-lg p-2">
+          <div key={m.toISOString()} className="border border-zinc-800 p-2">
             <p className="text-xs font-medium text-zinc-100 capitalize mb-2 text-center">
               {format(m, 'MMMM', { locale: es })}
             </p>

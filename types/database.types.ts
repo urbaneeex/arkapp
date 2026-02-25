@@ -188,6 +188,7 @@ export type Database = {
           wa_instance_name: string | null
           wa_status: string | null
           wa_connected_phone: string | null
+          country: string | null
         }
         Insert: {
           config_json?: Json | null
@@ -213,6 +214,7 @@ export type Database = {
           wa_instance_name?: string | null
           wa_status?: string | null
           wa_connected_phone?: string | null
+          country?: string | null
         }
         Update: {
           config_json?: Json | null
@@ -238,6 +240,7 @@ export type Database = {
           wa_instance_name?: string | null
           wa_status?: string | null
           wa_connected_phone?: string | null
+          country?: string | null
         }
         Relationships: []
       }

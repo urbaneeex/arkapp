@@ -23,6 +23,7 @@ import {
   Trash2,
 } from 'lucide-react'
 import { useBusinessStore } from '@/stores/business'
+import { COUNTRY_OPTIONS } from '@/lib/phone'
 const INDUSTRIES = ['Belleza', 'Salud', 'Consultoría', 'Fitness', 'Educación', 'Legal', 'Otro']
 const DAYS = [
   { label: 'Lunes', day: 1 },
@@ -55,6 +56,7 @@ interface BusinessData {
   wa_instance_name?: string | null
   wa_status?: WaStatus
   wa_connected_phone?: string | null
+  country?: string | null
 }
 
 interface ShiftRow {
@@ -91,6 +93,7 @@ export function SettingsClient({
   const [slug, setSlug] = useState(business.slug)
   const [industry, setIndustry] = useState(business.industry)
   const [logoUrl, setLogoUrl] = useState(business.logo_url)
+  const [country, setCountry] = useState(business.country ?? 'ES')
   const [logoUploading, setLogoUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -276,6 +279,7 @@ export function SettingsClient({
         slug: slug || business.slug,
         industry: industry || null,
         logo_url: logoUrl || null,
+        country: country || null,
       })
       .eq('id', business.id)
     setSaving(null)
@@ -616,6 +620,24 @@ export function SettingsClient({
                     {INDUSTRIES.map((i) => (
                       <option key={i} value={i}>
                         {i}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <Label htmlFor="country">País de operación</Label>
+                  <p className="text-xs text-zinc-400 mt-0.5 mb-1">
+                    Prefijo predeterminado para nuevos clientes y validación de teléfonos
+                  </p>
+                  <select
+                    id="country"
+                    value={country}
+                    onChange={(e) => setCountry(e.target.value)}
+                    className="mt-1 flex h-10 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6] focus-visible:ring-offset-2"
+                  >
+                    {COUNTRY_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.dial} {opt.label}
                       </option>
                     ))}
                   </select>

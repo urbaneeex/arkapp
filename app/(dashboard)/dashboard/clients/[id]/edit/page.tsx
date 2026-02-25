@@ -17,7 +17,7 @@ export default async function EditClientPage({
 
   const { data: business } = await supabase
     .from('businesses')
-    .select('id')
+    .select('id, country')
     .eq('owner_uid', user.id)
     .single()
 
@@ -35,7 +35,7 @@ export default async function EditClientPage({
   return (
     <div className="max-w-2xl">
       <PageHeader title="Editar cliente" subtitle={client.name} />
-      <ClientForm client={client} />
+      <ClientForm client={client} defaultCountry={(business as { country?: string | null }).country ?? 'ES'} />
     </div>
   )
 }

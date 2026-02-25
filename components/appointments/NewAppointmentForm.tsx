@@ -2,11 +2,13 @@
 
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { useAppointmentToast } from '@/app/(dashboard)/dashboard/appointments/new/ToastWrapper'
+import { useAppointmentToast } from '@/components/appointments/ToastWrapper'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { EmailInput } from '@/components/ui/email-input'
+import { normalizeEmail } from '@/lib/email'
 import {
   addMinutes,
   format,
@@ -49,6 +51,7 @@ export function NewAppointmentForm({
   services,
   staff,
   businessHoursByDay,
+  businessCountry = 'ES',
   onToast,
 }: {
   businessId: string
@@ -56,6 +59,7 @@ export function NewAppointmentForm({
   services: Service[]
   staff: Staff[]
   businessHoursByDay: Record<number, Shift[]>
+  businessCountry?: string | null
   onToast?: (message: string, type: 'success' | 'error') => void
 }) {
   const router = useRouter()
@@ -76,6 +80,7 @@ export function NewAppointmentForm({
   const [phoneDuplicateError, setPhoneDuplicateError] = useState<string | null>(null)
   const [existingClientPhone, setExistingClientPhone] = useState('')
   const [existingClientEmail, setExistingClientEmail] = useState('')
+  const [noClient, setNoClient] = useState(false)
 
   const [service_id, setService_id] = useState('')
   const [staff_id, setStaff_id] = useState('')
@@ -314,7 +319,7 @@ export function NewAppointmentForm({
   }, [])
 
   const canSubmit = useMemo(() => {
-    const hasClient = isNewClient ? newClientName.trim() && newClientPhone.trim() : selectedClient?.id
+    const hasClient = noClient || (isNewClient ? newClientName.trim() && newClientPhone.trim() : !!selectedClient?.id)
     const hasService = !!service_id
     const hasStaff = !!staff_id
     const hasStart = !!startDateTime
@@ -328,7 +333,7 @@ export function NewAppointmentForm({
     }
     if (conflict && !conflictAck) return false
     return !!(hasClient && hasService && hasStaff && hasStart && hasEnd && noPast())
-  }, [isNewClient, newClientName, newClientPhone, selectedClient, service_id, staff_id, startDateTime, computedEnd, endDateTime, conflict, conflictAck])
+  }, [noClient, isNewClient, newClientName, newClientPhone, selectedClient, service_id, staff_id, startDateTime, computedEnd, endDateTime, conflict, conflictAck])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -339,7 +344,7 @@ export function NewAppointmentForm({
     let clientId: string | null = null
 
     try {
-      if (isNewClient) {
+      if (!noClient && isNewClient) {
         if (!newClientPhone.trim()) {
           setPhoneDuplicateError('El teléfono es obligatorio.')
           setLoading(false)
@@ -362,7 +367,7 @@ export function NewAppointmentForm({
             business_id: businessId,
             name: newClientName.trim(),
             phone: newClientPhone.trim(),
-            email: newClientEmail.trim() || null,
+            email: newClientEmail.trim() ? normalizeEmail(newClientEmail) || null : null,
             address: newClientAddress.trim() || null,
           })
           .select('id')
@@ -373,21 +378,16 @@ export function NewAppointmentForm({
           return
         }
         clientId = newClient.id
-      } else {
-        if (!selectedClient?.id) {
-          setError('Selecciona o crea un cliente.')
-          setLoading(false)
-          return
-        }
+      } else if (!noClient && selectedClient?.id) {
         clientId = selectedClient.id
-        
+
         const phoneChanged = existingClientPhone.trim() !== (selectedClient.phone || '')
         const emailChanged = existingClientEmail.trim() !== (selectedClient.email || '')
         
         if (phoneChanged || emailChanged) {
           const updateData: { phone?: string; email?: string | null } = {}
           if (phoneChanged) updateData.phone = existingClientPhone.trim()
-          if (emailChanged) updateData.email = existingClientEmail.trim() || null
+          if (emailChanged) updateData.email = existingClientEmail.trim() ? normalizeEmail(existingClientEmail) || null : null
           
           const { error: updateClientErr } = await supabase
             .from('clients')
@@ -450,7 +450,9 @@ export function NewAppointmentForm({
       }
 
       onToastFn?.(
-        `Cita creada correctamente para ${isNewClient ? newClientName : selectedClient?.name} el ${format(start, "EEEE d MMM", { locale: es })} a las ${format(start, 'HH:mm')}.${isNewClient ? ' Cliente nuevo añadido al sistema.' : ''}`,
+        noClient
+          ? `Cita creada correctamente (sin ficha de cliente) el ${format(start, "EEEE d MMM", { locale: es })} a las ${format(start, 'HH:mm')}.`
+          : `Cita creada correctamente para ${isNewClient ? newClientName : selectedClient?.name} el ${format(start, "EEEE d MMM", { locale: es })} a las ${format(start, 'HH:mm')}.${isNewClient ? ' Cliente nuevo añadido al sistema.' : ''}`,
         'success'
       )
       router.push('/dashboard/calendar')
@@ -513,9 +515,26 @@ export function NewAppointmentForm({
               onChange={setClientSearchText}
               onSelectExisting={handleSelectExistingClient}
               onSelectNew={handleSelectNewClient}
-              disabled={false}
+              disabled={noClient}
               className="mt-1 [&_input]:text-zinc-100 [&_input]:font-medium"
             />
+            <label className="mt-2 flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={noClient}
+                onChange={(e) => {
+                  setNoClient(e.target.checked)
+                  if (e.target.checked) {
+                    setSelectedClient(null)
+                    setIsNewClient(false)
+                    setClientSearchText('')
+                  }
+                }}
+                className="rounded border-zinc-600 bg-zinc-800 text-blue-500 focus:ring-blue-500"
+              />
+              <span className="text-sm text-zinc-400">Continuar sin ficha de cliente</span>
+            </label>
+          </div>
             {selectedClient && !isNewClient && (
               <div className="mt-3 space-y-3 rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
                 <p className="text-xs font-medium text-zinc-300 mb-2">Actualizar datos del cliente</p>
@@ -530,14 +549,13 @@ export function NewAppointmentForm({
                   />
                 </div>
                 <div>
-                  <Label htmlFor="existing-client-email" className="text-zinc-100 font-medium">Email</Label>
-                  <Input
+                  <EmailInput
                     id="existing-client-email"
-                    type="email"
+                    label="Email"
                     value={existingClientEmail}
-                    onChange={(e) => setExistingClientEmail(e.target.value)}
-                    className="mt-1 text-zinc-100 font-medium"
-                    placeholder="email@ejemplo.com"
+                    onChange={setExistingClientEmail}
+                    optional
+                    className="mt-1"
                   />
                 </div>
               </div>
@@ -555,6 +573,7 @@ export function NewAppointmentForm({
               onEmailChange={setNewClientEmail}
               onAddressChange={setNewClientAddress}
               phoneError={phoneDuplicateError ?? undefined}
+              defaultCountry={businessCountry ?? 'ES'}
             />
           )}
 
@@ -699,7 +718,7 @@ export function NewAppointmentForm({
           )}
 
           <div className="flex gap-3 pt-2">
-            <Button type="submit" disabled={loading || !canSubmit}>
+            <Button type="submit" disabled={loading}>
               {loading ? 'Creando...' : 'Crear cita'}
             </Button>
             <Button type="button" variant="outline" onClick={() => router.push('/dashboard/calendar')}>

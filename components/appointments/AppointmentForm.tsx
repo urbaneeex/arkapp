@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { EmailInput } from '@/components/ui/email-input'
+import { normalizeEmail } from '@/lib/email'
 import { addMinutes, format, parseISO } from 'date-fns'
 
 type Client = { id: string; name: string; phone?: string; email?: string }
@@ -134,7 +136,7 @@ export function AppointmentForm({
         if (phoneChanged || emailChanged) {
           const updateData: { phone?: string | null; email?: string | null } = {}
           if (phoneChanged) updateData.phone = phoneInForm || null
-          if (emailChanged) updateData.email = emailInForm || null
+          if (emailChanged) updateData.email = emailInForm ? normalizeEmail(form.client_email) || null : null
           const { error: updateErr } = await supabase
             .from('clients')
             .update(updateData)
@@ -211,14 +213,14 @@ export function AppointmentForm({
             />
           </div>
           <div>
-            <Label htmlFor="client_email" className="text-zinc-100 font-medium">Email del cliente</Label>
-            <Input
+            <EmailInput
               id="client_email"
-              type="email"
+              label="Email del cliente"
               value={form.client_email}
-              onChange={(e) => setForm((f) => ({ ...f, client_email: e.target.value }))}
+              onChange={(v) => setForm((f) => ({ ...f, client_email: v }))}
+              optional
               placeholder="Actualiza el email si ha cambiado"
-              className="mt-1 text-zinc-100 font-medium"
+              className="mt-1"
             />
           </div>
           <p className="text-xs text-zinc-400">Si modificas teléfono o email, se guardará en la ficha del cliente antes de crear la cita.</p>
