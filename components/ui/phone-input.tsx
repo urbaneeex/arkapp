@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { CountryCombobox } from '@/components/ui/country-combobox'
 import { cn } from '@/lib/utils'
 import {
   COUNTRY_OPTIONS,
@@ -103,19 +104,13 @@ export function PhoneInput({
         'flex rounded-md border bg-zinc-900 overflow-hidden focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-offset-zinc-950',
         showWarning ? 'border-amber-500/80 focus-within:ring-amber-500/50' : 'border-zinc-700 focus-within:ring-[#3B82F6]'
       )}>
-        <select
-          aria-label="Prefijo de país"
+        <CountryCombobox
           value={country}
-          onChange={(e) => handleCountryChange(e.target.value as CountryCode)}
+          onValueChange={handleCountryChange}
+          compact
           disabled={disabled}
-          className="bg-zinc-800/80 border-r border-zinc-700 px-3 py-2 text-sm text-zinc-100 cursor-pointer focus:outline-none min-w-[100px]"
-        >
-          {COUNTRY_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.dial} {opt.label}
-            </option>
-          ))}
-        </select>
+          className="rounded-r-none border-0 border-r border-zinc-700 h-full shrink-0 shadow-none"
+        />
         <Input
           id={id}
           type="tel"

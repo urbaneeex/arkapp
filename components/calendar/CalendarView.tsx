@@ -387,7 +387,8 @@ export function CalendarView({
           </div>
         ) : (
           <div className="border border-zinc-800 bg-zinc-900 overflow-hidden flex-1 min-h-0 flex flex-col">
-            <div className="flex-1 min-h-0 overflow-y-auto">
+            <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain pb-0 flex flex-col min-w-full">
+            <div className="min-h-full h-full min-w-full bg-zinc-900 flex flex-col">
             {view === 'day' && (
               <DayView
                 day={current}
@@ -424,6 +425,7 @@ export function CalendarView({
                 onAppointmentClick={handleAppointmentClick}
               />
             )}
+            </div>
             </div>
           </div>
         )}
@@ -812,8 +814,8 @@ function DayViewContent({
 
   return (
     <>
-      <div className="relative grid grid-cols-[56px_1fr] min-h-[400px]">
-        <div className="border-r border-zinc-800 bg-zinc-950/80 flex flex-col">
+      <div className="relative grid grid-cols-[56px_1fr] w-full">
+        <div className="border-r border-zinc-800 bg-zinc-950/80 flex flex-col shrink-0">
           {timeLabels.map(({ min, label }) => (
             <div
               key={min}
@@ -824,8 +826,9 @@ function DayViewContent({
             </div>
           ))}
         </div>
-        <div className="relative overflow-hidden">
-          <div className="absolute inset-0">
+        <div className="relative min-h-[400px] flex flex-col bg-zinc-900" style={{ height: totalSlots * SLOT_HEIGHT_PX }}>
+          {/* Capa de fondo: franjas cerradas (solo visual, no bloquea eventos) */}
+          <div className="absolute inset-0 z-0 pointer-events-none" aria-hidden>
             {closedHourRuns.map((run, i) => (
               <div
                 key={i}
@@ -837,7 +840,8 @@ function DayViewContent({
               />
             ))}
           </div>
-          <div className="absolute inset-0 flex flex-col z-0">
+          {/* Capa interactiva: slots (siempre encima del fondo, reciben hover/click) */}
+          <div className="relative z-10 flex flex-col flex-1 min-h-0">
             {Array.from({ length: totalSlots }).map((_, slotIndex) => {
               const closed = isSlotClosed(slotIndex)
               const slotStartMin = dayViewStartMin + slotIndex * MINUTES_PER_SLOT
@@ -859,8 +863,9 @@ function DayViewContent({
               )
             })}
           </div>
-          <div className="absolute inset-0 pointer-events-none z-10">
-            <div className="relative w-full h-full pointer-events-none">
+          {/* Capa de citas: overlay que no bloquea (solo los botones son clickeables) */}
+          <div className="absolute inset-0 z-20 pointer-events-none overflow-visible">
+            <div className="relative w-full h-full">
               {appointmentsWithColumns.map(({ apt, startMin, endMin, columnIndex, totalColumns }) => {
                 const slotOffset = (startMin - dayViewStartMin) / MINUTES_PER_SLOT
                 const topPx = slotOffset * SLOT_HEIGHT_PX + 1
@@ -890,7 +895,7 @@ function DayViewContent({
         {isToday && currentTimeTop != null && (
           <div
             ref={currentTimeLineRef}
-            className="absolute left-0 right-0 z-10 pointer-events-none flex items-start"
+            className="absolute left-0 right-0 z-30 pointer-events-none flex items-start"
             style={{ top: currentTimeTop }}
           >
             <div className="w-[56px] flex justify-end shrink-0">
@@ -1133,7 +1138,25 @@ function NewAppointmentSidePanel({
     }
   }
 
-  const handleConfirmClose = () => {
+  const handleConfirmClose = async () => {
+    if (selectedClient?.id && !isNewClient && !noClient) {
+      const phoneInForm = editingClientPhone.trim()
+      const originalPhone = (selectedClient.phone ?? '').trim()
+      const emailInForm = editingClientEmail.trim()
+      const originalEmail = (selectedClient.email ?? '').trim()
+      const phoneChanged = phoneInForm !== originalPhone
+      const emailChanged = emailInForm !== originalEmail
+      if (phoneChanged || emailChanged) {
+        const updateData: { phone?: string | null; email?: string | null } = {}
+        if (phoneChanged) updateData.phone = phoneInForm || null
+        if (emailChanged) updateData.email = emailInForm ? normalizeEmail(editingClientEmail) || null : null
+        await supabase
+          .from('clients')
+          .update(updateData)
+          .eq('id', selectedClient.id)
+          .eq('business_id', businessId)
+      }
+    }
     setShowCloseConfirm(false)
     onClose()
   }

@@ -1,33 +1,21 @@
 /**
  * Configuración de países para prefijo y validación de teléfono.
- * Código ISO 3166-1 alpha-2, prefijo internacional y longitud del número local (sin prefijo).
+ * Datos desde lib/countries.ts (banderas, orden sugeridos primero).
  */
-export const COUNTRY_PHONE_CONFIG: Record<
-  string,
-  { code: string; dial: string; label: string; minDigits: number; maxDigits: number }
-> = {
-  ES: { code: 'ES', dial: '+34', label: 'España', minDigits: 9, maxDigits: 9 },
-  DE: { code: 'DE', dial: '+49', label: 'Alemania', minDigits: 10, maxDigits: 11 },
-  FR: { code: 'FR', dial: '+33', label: 'Francia', minDigits: 9, maxDigits: 9 },
-  IT: { code: 'IT', dial: '+39', label: 'Italia', minDigits: 9, maxDigits: 10 },
-  PT: { code: 'PT', dial: '+351', label: 'Portugal', minDigits: 9, maxDigits: 9 },
-  GB: { code: 'GB', dial: '+44', label: 'Reino Unido', minDigits: 10, maxDigits: 10 },
-  US: { code: 'US', dial: '+1', label: 'Estados Unidos', minDigits: 10, maxDigits: 10 },
-  MX: { code: 'MX', dial: '+52', label: 'México', minDigits: 10, maxDigits: 10 },
-  AR: { code: 'AR', dial: '+54', label: 'Argentina', minDigits: 10, maxDigits: 10 },
-  CO: { code: 'CO', dial: '+57', label: 'Colombia', minDigits: 10, maxDigits: 10 },
-  CL: { code: 'CL', dial: '+56', label: 'Chile', minDigits: 9, maxDigits: 9 },
-  PE: { code: 'PE', dial: '+51', label: 'Perú', minDigits: 9, maxDigits: 9 },
-}
+import {
+  COUNTRY_PHONE_CONFIG as _CONFIG,
+  COUNTRY_LIST_ORDERED,
+  DEFAULT_COUNTRY as _DEFAULT,
+  type CountryCode as _CountryCode,
+} from './countries'
 
-export const DEFAULT_COUNTRY = 'ES'
+export const COUNTRY_PHONE_CONFIG = _CONFIG
+export const DEFAULT_COUNTRY = _DEFAULT
+export type CountryCode = _CountryCode
 
-export type CountryCode = keyof typeof COUNTRY_PHONE_CONFIG
-
-/** Lista de países para el selector (mismo orden que arriba) */
-export const COUNTRY_OPTIONS: { value: CountryCode; dial: string; label: string }[] = Object.entries(
-  COUNTRY_PHONE_CONFIG
-).map(([value, { dial, label }]) => ({ value: value as CountryCode, dial, label }))
+/** Lista para selector: sugeridos primero, luego alfabético; incluye bandera */
+export const COUNTRY_OPTIONS: { value: CountryCode; dial: string; label: string; flag: string }[] =
+  COUNTRY_LIST_ORDERED.map((r) => ({ value: r.code, dial: r.dial, label: r.label, flag: r.flag }))
 
 /**
  * Extrae el prefijo (dial) y el número local de un número completo.
@@ -89,4 +77,26 @@ export function isPhoneValidForSending(
   const parsed = parsePhoneFull(phone, country)
   if (!parsed || !parsed.local) return false
   return validatePhoneForCountry(parsed.country, parsed.local)
+}
+
+/**
+ * Devuelve el número en formato para WhatsApp/n8n (Evolution API):
+ * - e164: número completo solo dígitos (ej. 34655529662)
+ * - countryCode: prefijo del país solo dígitos (ej. 34)
+ * - national: número nacional solo dígitos (ej. 655529662)
+ * Así n8n puede construir el jid como countryCode + national sin duplicar prefijo.
+ */
+export function getPhoneForWhatsApp(
+  phone: string,
+  defaultCountry?: CountryCode | string | null
+): { e164: string; countryCode: string; national: string } | null {
+  const country = (defaultCountry as CountryCode) ?? DEFAULT_COUNTRY
+  const parsed = parsePhoneFull(phone, country)
+  if (!parsed || !parsed.local) return null
+  const config = COUNTRY_PHONE_CONFIG[parsed.country]
+  if (!config) return null
+  const national = parsed.local.replace(/\D/g, '')
+  const countryCodeDigits = config.dial.replace(/\D/g, '')
+  const e164 = countryCodeDigits + national
+  return { e164, countryCode: countryCodeDigits, national }
 }

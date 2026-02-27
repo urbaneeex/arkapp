@@ -23,7 +23,7 @@ import {
   Trash2,
 } from 'lucide-react'
 import { useBusinessStore } from '@/stores/business'
-import { COUNTRY_OPTIONS } from '@/lib/phone'
+import { CountryCombobox } from '@/components/ui/country-combobox'
 const INDUSTRIES = ['Belleza', 'Salud', 'Consultoría', 'Fitness', 'Educación', 'Legal', 'Otro']
 const DAYS = [
   { label: 'Lunes', day: 1 },
@@ -629,18 +629,13 @@ export function SettingsClient({
                   <p className="text-xs text-zinc-400 mt-0.5 mb-1">
                     Prefijo predeterminado para nuevos clientes y validación de teléfonos
                   </p>
-                  <select
+                  <CountryCombobox
                     id="country"
-                    value={country}
-                    onChange={(e) => setCountry(e.target.value)}
-                    className="mt-1 flex h-10 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6] focus-visible:ring-offset-2"
-                  >
-                    {COUNTRY_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.dial} {opt.label}
-                      </option>
-                    ))}
-                  </select>
+                    value={country ?? 'ES'}
+                    onValueChange={(code) => setCountry(code)}
+                    placeholder="Buscar país..."
+                    className="mt-1 w-full"
+                  />
                 </div>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div>

@@ -8,9 +8,13 @@ export type N8nReminderPayload = {
   businessName: string
   waInstanceName: string
   clientName: string
+  /** Número nacional solo dígitos (sin prefijo). Jid = clientCountryCode + clientPhone */
   clientPhone: string
+  /** Código de país solo dígitos (34, 49, 1, etc.). Jid = clientCountryCode + clientPhone */
+  clientCountryCode: string
   serviceName: string
   formattedDate: string
+  businessAddress?: string
 }
 
 /**

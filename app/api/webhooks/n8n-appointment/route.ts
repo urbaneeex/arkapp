@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { Resend } from 'resend'
 import { isEmailValidForSending, getEmailInvalidReason } from '@/lib/email'
-import { isPhoneValidForSending } from '@/lib/phone'
+import { isPhoneValidForSending, getPhoneForWhatsApp } from '@/lib/phone'
 
 const RESEND_FROM = process.env.RESEND_FROM_EMAIL || 'Arkapp <contact@blindxworld.com>'
 
@@ -170,32 +170,39 @@ export async function POST(req: Request) {
       if (!phoneValidForSend) {
         if (hasPhone) metadataUpdates.phone_status = 'invalid'
       } else {
-        const cleanPhone = client!.phone!.replace(/\D/g, '')
-        const formattedDate = new Intl.DateTimeFormat('es-ES', {
-          weekday: 'long',
-          day: 'numeric',
-          month: 'long',
-          hour: '2-digit',
-          minute: '2-digit',
-        }).format(new Date((apt as { start_time: string }).start_time))
-        const businessAddress = (business?.address ?? '').trim() || 'Consultar con el establecimiento'
-        const payload = {
-          businessName: business.name,
-          waInstanceName: business.wa_instance_name,
-          clientName: client!.name,
-          clientPhone: cleanPhone,
-          serviceName: service?.name || 'Servicio',
-          formattedDate: formattedDate,
-          businessAddress,
-        }
-        try {
-          await fetch(process.env.N8N_WEBHOOK_URL!, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-          })
-        } catch (n8nErr) {
-          console.error('[n8n-appointment] Error llamando webhook n8n:', n8nErr)
+        const phoneForWa = getPhoneForWhatsApp(client!.phone!, businessCountry)
+        if (!phoneForWa) {
+          metadataUpdates.phone_status = 'invalid'
+        } else {
+          const formattedDate = new Intl.DateTimeFormat('es-ES', {
+            weekday: 'long',
+            day: 'numeric',
+            month: 'long',
+            hour: '2-digit',
+            minute: '2-digit',
+          }).format(new Date((apt as { start_time: string }).start_time))
+          const businessAddress = (business?.address ?? '').trim() || 'Consultar con el establecimiento'
+          const payload = {
+            businessName: business.name,
+            waInstanceName: business.wa_instance_name,
+            clientName: client!.name,
+            /** Número nacional solo dígitos (sin prefijo). Para el jid: clientCountryCode + clientPhone */
+            clientPhone: phoneForWa.national,
+            /** Código de país solo dígitos (34, 49, 1, etc.). Jid = clientCountryCode + clientPhone */
+            clientCountryCode: phoneForWa.countryCode,
+            serviceName: service?.name || 'Servicio',
+            formattedDate: formattedDate,
+            businessAddress,
+          }
+          try {
+            await fetch(process.env.N8N_WEBHOOK_URL!, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+            })
+          } catch (n8nErr) {
+            console.error('[n8n-appointment] Error llamando webhook n8n:', n8nErr)
+          }
         }
       }
     }

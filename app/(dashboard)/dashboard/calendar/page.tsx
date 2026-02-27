@@ -89,7 +89,7 @@ export default async function CalendarPage() {
   }
 
   return (
-    <div className="-mx-4 -mt-4 -mb-4 lg:-mx-8 lg:-mt-6 lg:-mb-8 flex flex-col min-h-[calc(100vh-4rem)]">
+    <div className="-mx-4 -mt-4 -mb-4 lg:-mx-8 lg:-mt-6 lg:-mb-8 flex flex-col h-full min-h-0 overflow-hidden">
       <CalendarPageClient
       appointments={appointments ?? []}
       clients={clients ?? []}

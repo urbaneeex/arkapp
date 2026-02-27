@@ -34,7 +34,7 @@ export default async function DashboardLayout({
 
   return (
     <PermissionsProvider>
-      <div className="min-h-screen bg-zinc-950">
+      <div className="h-screen overflow-hidden flex flex-col bg-zinc-950">
         <GlobalHeader />
         <Sidebar />
         <DashboardMain>{children}</DashboardMain>

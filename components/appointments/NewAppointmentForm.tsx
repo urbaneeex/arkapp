@@ -464,6 +464,20 @@ export function NewAppointmentForm({
     }
   }
 
+  const handleCancel = async () => {
+    if (selectedClient?.id && !isNewClient && !noClient) {
+      const phoneChanged = existingClientPhone.trim() !== (selectedClient.phone || '')
+      const emailChanged = existingClientEmail.trim() !== (selectedClient.email || '')
+      if (phoneChanged || emailChanged) {
+        const updateData: { phone?: string; email?: string | null } = {}
+        if (phoneChanged) updateData.phone = existingClientPhone.trim()
+        if (emailChanged) updateData.email = existingClientEmail.trim() ? normalizeEmail(existingClientEmail) || null : null
+        await supabase.from('clients').update(updateData).eq('id', selectedClient.id)
+      }
+    }
+    router.push('/dashboard/calendar')
+  }
+
   const selectedStartMin = selectedDate && startDateTime ? timeToMinutes(startDateTime.slice(11, 16)) : null
 
   const now = new Date()
@@ -721,7 +735,7 @@ export function NewAppointmentForm({
             <Button type="submit" disabled={loading}>
               {loading ? 'Creando...' : 'Crear cita'}
             </Button>
-            <Button type="button" variant="outline" onClick={() => router.push('/dashboard/calendar')}>
+            <Button type="button" variant="outline" onClick={() => handleCancel()}>
               Cancelar
             </Button>
           </div>

@@ -34,13 +34,14 @@ export function GlobalHeader() {
       className={cn(
         'sticky top-0 left-0 right-0 z-50 h-16',
         'bg-white dark:bg-zinc-950 border-b border-zinc-200 dark:border-zinc-800',
-        'flex items-center justify-between px-4 lg:px-6'
+        'flex items-center justify-between',
+        'px-4 lg:pl-4 lg:pr-6'
       )}
     >
-      {/* Izquierda: logo */}
+      {/* Izquierda: logo alineado con el borde izquierdo del sidebar (px-3 = 12px) */}
       <Link
-        href="/dashboard"
-        className="cursor-pointer flex items-center focus:outline-none focus:ring-2 focus:ring-[#3B82F6] focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-zinc-950 rounded-md"
+        href="/dashboard/calendar"
+        className="cursor-pointer flex items-center focus:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6] focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-zinc-950 rounded"
       >
         <span className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-white">
           Arkapp
