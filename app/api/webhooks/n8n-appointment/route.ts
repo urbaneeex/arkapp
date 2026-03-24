@@ -4,7 +4,7 @@ import { Resend } from 'resend'
 import { isEmailValidForSending, getEmailInvalidReason } from '@/lib/email'
 import { isPhoneValidForSending, getPhoneForWhatsApp } from '@/lib/phone'
 
-const RESEND_FROM = process.env.RESEND_FROM_EMAIL || 'Arkapp <contact@blindxworld.com>'
+const RESEND_FROM = process.env.RESEND_FROM_EMAIL || 'Arkapp <hello@arkapp.es>'
 
 /**
  * Genera un archivo iCalendar (RFC 5545) para la cita.

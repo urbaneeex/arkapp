@@ -117,6 +117,22 @@ export function StaffClient({
 
   return (
     <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+      <header className="mb-6">
+        <div className="flex justify-between items-center">
+          <h1 className="text-2xl font-bold text-zinc-100">Equipo</h1>
+          {canInviteStaff && (
+            <Link href="/dashboard/staff/new" className="cursor-pointer">
+              <Button>
+                <Plus className="w-4 h-4 mr-2" />
+                Nuevo empleado
+              </Button>
+            </Link>
+          )}
+        </div>
+        <p className="text-sm text-zinc-400 mt-1">
+          Gestiona empleados, turnos, roles y permisos
+        </p>
+      </header>
       <TabsList className="flex w-full flex-row flex-wrap justify-start gap-2 h-auto p-1 bg-zinc-800 cursor-default">
         {tabs.map(({ value, icon: Icon, label }) => (
           <TabsTrigger key={value} value={value} className="cursor-pointer gap-1.5">
@@ -127,22 +143,6 @@ export function StaffClient({
       </TabsList>
 
       <TabsContent value="empleados" className="mt-6">
-        <div className="flex justify-between items-center mb-6">
-          <div>
-            <h2 className="text-xl font-semibold text-zinc-100">Empleados</h2>
-            <p className="text-zinc-400 mt-1">
-              Empleados y profesionales ({staff.length})
-            </p>
-          </div>
-          {canInviteStaff && (
-            <Link href="/dashboard/staff/new" className="cursor-pointer">
-              <Button>
-                <Plus className="w-4 h-4 mr-2" />
-                Nuevo empleado
-              </Button>
-            </Link>
-          )}
-        </div>
         <StaffList staff={staff} businessId={businessId} roles={roles} />
       </TabsContent>
 

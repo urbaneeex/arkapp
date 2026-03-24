@@ -28,6 +28,7 @@ export async function getBusinessForUserClient(userId: string) {
     .from('staff')
     .select('business_id')
     .eq('id', userId)
+    .is('deleted_at', null)
     .maybeSingle()
 
   if (staffError) {

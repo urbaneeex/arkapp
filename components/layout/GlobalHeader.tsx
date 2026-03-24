@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
+import { getBusinessForUserClient } from '@/lib/supabase/business-client'
 import { UserMenu } from '@/components/layout/UserMenu'
 import { cn } from '@/lib/utils'
 
@@ -11,6 +12,7 @@ export function GlobalHeader() {
     email: string
     name?: string
   } | null>(null)
+  const [businessName, setBusinessName] = useState<string | null>(null)
 
   useEffect(() => {
     const supabase = createClient()
@@ -25,6 +27,8 @@ export function GlobalHeader() {
           authUser.user_metadata?.full_name ||
           authUser.user_metadata?.name,
       })
+      const business = await getBusinessForUserClient(authUser.id)
+      setBusinessName(business?.name ?? null)
     }
     load()
   }, [])
@@ -38,13 +42,16 @@ export function GlobalHeader() {
         'px-4 lg:pl-4 lg:pr-6'
       )}
     >
-      {/* Izquierda: logo alineado con el borde izquierdo del sidebar (px-3 = 12px) */}
+      {/* Izquierda: logo "Arkapp x [Nombre del Negocio]" */}
       <Link
         href="/dashboard/calendar"
         className="cursor-pointer flex items-center focus:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6] focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-zinc-950 rounded"
       >
         <span className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-white">
           Arkapp
+          {businessName ? (
+            <span className="font-normal"> x {businessName}</span>
+          ) : null}
         </span>
       </Link>
 

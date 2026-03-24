@@ -35,13 +35,25 @@ import {
 } from '@/lib/availability'
 import { cn } from '@/lib/utils'
 
+function formatSlotLabel(dateStr: string, timeStr: string): string {
+  const formatted = new Intl.DateTimeFormat('es-ES', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  }).format(new Date(dateStr + 'T12:00:00'))
+  const capitalized = formatted.charAt(0).toUpperCase() + formatted.slice(1)
+  return `${capitalized} ${timeStr}`
+}
+
 type Service = { id: string; name: string; duration: number; price: number; requires_deposit?: boolean | null; deposit_amount?: number | null }
 type Staff = { id: string; name: string }
 
-const STATUS_OPTIONS = [
-  { value: 'pending', label: 'Pendiente' },
-  { value: 'confirmed', label: 'Confirmada' },
-] as const
+type StaffWithAvailability = {
+  id: string
+  name: string
+  isAvailableForRequestedTime: boolean
+  suggestedSlots?: { date: string; time: string }[]
+}
 
 const SLOT_STEP_MINUTES = 15
 
@@ -84,6 +96,8 @@ export function NewAppointmentForm({
 
   const [service_id, setService_id] = useState('')
   const [staff_id, setStaff_id] = useState('')
+  const [availableStaff, setAvailableStaff] = useState<StaffWithAvailability[]>([])
+  const [loadingAvailableStaff, setLoadingAvailableStaff] = useState(false)
   const [startDateTime, setStartDateTime] = useState(format(new Date(), "yyyy-MM-dd'T'HH:mm"))
   const dateStr = startDateTime.slice(0, 10)
   const setDateStr = (v: string) => {
@@ -99,7 +113,6 @@ export function NewAppointmentForm({
   const [customEndOverride, setCustomEndOverride] = useState(false)
   const [customEndDateTime, setCustomEndDateTime] = useState('')
   const [price_total, setPrice_total] = useState<string>('')
-  const [status, setStatus] = useState<string>('confirmed')
   const [depositPaid, setDepositPaid] = useState(false)
   const [conflictAck, setConflictAck] = useState(false)
   const [availabilityPanelOpen, setAvailabilityPanelOpen] = useState(true)
@@ -294,6 +307,51 @@ export function NewAppointmentForm({
     hasAutoAdjustedRef.current = false
   }, [staff_id])
 
+  // Fetch available staff when date, time or service changes (shift + overlap logic)
+  useEffect(() => {
+    if (!dateStr || !startDateTime || !endDateTime || !service_id || !businessId) {
+      setAvailableStaff([])
+      return
+    }
+    const startTime = startDateTime.slice(11, 16)
+    const endTime = endDateTime.slice(11, 16)
+    if (startTime >= endTime) {
+      setAvailableStaff([])
+      return
+    }
+    setLoadingAvailableStaff(true)
+    const params = new URLSearchParams({
+      businessId,
+      date: dateStr,
+      startTime,
+      endTime,
+    })
+    fetch(`/api/appointments/available-staff?${params}`)
+      .then((res) => res.json())
+      .then((data) => {
+        const raw = Array.isArray(data.staff) ? data.staff : []
+        const list: StaffWithAvailability[] = raw.map((s: Record<string, unknown>) => ({
+          id: String(s.id ?? ''),
+          name: String(s.name ?? ''),
+          isAvailableForRequestedTime: Boolean(s.isAvailableForRequestedTime),
+          suggestedSlots: Array.isArray(s.suggestedSlots)
+            ? (s.suggestedSlots as { date?: string; time?: string }[])
+                .filter((slot): slot is { date: string; time: string } => Boolean(slot?.date != null && slot?.time != null))
+                .map((slot) => ({ date: String(slot.date), time: String(slot.time) }))
+            : [],
+        }))
+        setAvailableStaff(list)
+        setStaff_id((current) => {
+          if (!current) return current
+          const selected = list.find((s) => s.id === current)
+          if (selected?.isAvailableForRequestedTime) return current
+          return ''
+        })
+      })
+      .catch(() => setAvailableStaff([]))
+      .finally(() => setLoadingAvailableStaff(false))
+  }, [businessId, dateStr, startDateTime, endDateTime, service_id])
+
   const handleSelectExistingClient = useCallback((client: ClientOption) => {
     setSelectedClient(client)
     setIsNewClient(false)
@@ -318,6 +376,15 @@ export function NewAppointmentForm({
     setStartDateTime((prev) => prev.slice(0, 11) + minutesToTime(startMin))
   }, [])
 
+  const handleSuggestionChipClick = useCallback(
+    (staffId: string, slot: { date: string; time: string }) => {
+      setDateStr(slot.date)
+      setStartDateTime(slot.date + 'T' + slot.time)
+      setStaff_id(staffId)
+    },
+    []
+  )
+
   const canSubmit = useMemo(() => {
     const hasClient = noClient || (isNewClient ? newClientName.trim() && newClientPhone.trim() : !!selectedClient?.id)
     const hasService = !!service_id
@@ -332,8 +399,12 @@ export function NewAppointmentForm({
       return true
     }
     if (conflict && !conflictAck) return false
-    return !!(hasClient && hasService && hasStaff && hasStart && hasEnd && noPast())
-  }, [noClient, isNewClient, newClientName, newClientPhone, selectedClient, service_id, staff_id, startDateTime, computedEnd, endDateTime, conflict, conflictAck])
+    const hasAvailability = !dateStr || !service_id || !endDateTime || availableStaff.length > 0
+    const selectedStaff = availableStaff.find((s) => s.id === staff_id)
+    const staffAvailableAtRequestedTime = !staff_id || (selectedStaff?.isAvailableForRequestedTime ?? false)
+    const staffInAvailable = !hasStaff || availableStaff.some((s) => s.id === staff_id)
+    return !!(hasClient && hasService && hasStaff && hasStart && hasEnd && noPast() && hasAvailability && staffInAvailable && staffAvailableAtRequestedTime)
+  }, [noClient, isNewClient, newClientName, newClientPhone, selectedClient, service_id, staff_id, startDateTime, computedEnd, endDateTime, conflict, conflictAck, dateStr, availableStaff])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -424,7 +495,7 @@ export function NewAppointmentForm({
           staff_id: staff_id || null,
           start_time: start.toISOString(),
           end_time: end.toISOString(),
-          status,
+          status: 'confirmed',
           price_total: price,
           metadata: Object.keys(metadata).length > 0 ? metadata : null,
         })
@@ -612,21 +683,64 @@ export function NewAppointmentForm({
           </div>
 
           <div>
-            <Label htmlFor="staff_id">Empleado</Label>
-            <select
-              id="staff_id"
-              value={staff_id}
-              onChange={(e) => setStaff_id(e.target.value)}
-              disabled={!service_id}
-              className="mt-1 flex h-10 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6] focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <option value="">Seleccionar empleado</option>
-              {staff.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
+            <Label className="text-zinc-100 font-medium">Profesional</Label>
+            {!dateStr || !service_id ? (
+              <p className="mt-2 text-sm text-zinc-500">Selecciona fecha y servicio para ver disponibilidad.</p>
+            ) : loadingAvailableStaff ? (
+              <p className="mt-2 text-sm text-zinc-400">Comprobando disponibilidad...</p>
+            ) : availableStaff.length === 0 ? (
+              <p className="mt-2 text-sm text-amber-500">No hay profesionales para este horario y servicio.</p>
+            ) : (
+              <div className="mt-2 space-y-2">
+                {availableStaff.map((staffMember) => {
+                  const isAvailable = staffMember.isAvailableForRequestedTime
+                  const isSelected = staff_id === staffMember.id
+                  return (
+                    <div
+                      key={staffMember.id}
+                      className={cn(
+                        'rounded-lg border p-3 transition-colors',
+                        !isAvailable && 'opacity-50',
+                        isSelected && 'ring-2 ring-blue-500'
+                      )}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-medium text-zinc-100">{staffMember.name}</span>
+                        {isAvailable ? (
+                          <button
+                            type="button"
+                            onClick={() => setStaff_id(staffMember.id)}
+                            className="text-xs font-medium text-emerald-400 hover:underline"
+                          >
+                            Disponible
+                          </button>
+                        ) : (
+                          <span className="text-xs font-medium text-amber-500">Ocupado a esa hora</span>
+                        )}
+                      </div>
+                      {!isAvailable && (
+                        staffMember.suggestedSlots && staffMember.suggestedSlots.length > 0 ? (
+                          <div className="flex gap-2 flex-wrap mt-2">
+                            {staffMember.suggestedSlots.map((slot, i) => (
+                              <button
+                                key={i}
+                                type="button"
+                                onClick={() => handleSuggestionChipClick(staffMember.id, slot)}
+                                className="bg-amber-100 text-amber-800 text-xs px-3 py-1 rounded-full cursor-pointer hover:bg-amber-200 transition-colors"
+                              >
+                                {formatSlotLabel(slot.date, slot.time)}
+                              </button>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-gray-500 mt-2">No hay horarios disponibles próximos</p>
+                        )
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -702,20 +816,8 @@ export function NewAppointmentForm({
                 className="mt-1 text-zinc-100 font-medium text-base"
               />
             </div>
-            <div>
-              <Label htmlFor="status">Estado</Label>
-              <select
-                id="status"
-                value={status}
-                onChange={(e) => setStatus(e.target.value)}
-                className="mt-1 flex h-10 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6] focus-visible:ring-offset-2"
-              >
-                {STATUS_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
+            <div className="flex items-end">
+              <p className="text-sm text-zinc-400 pb-2.5">Estado: Confirmada</p>
             </div>
           </div>
 
@@ -732,7 +834,7 @@ export function NewAppointmentForm({
           )}
 
           <div className="flex gap-3 pt-2">
-            <Button type="submit" disabled={loading}>
+            <Button type="submit" disabled={loading || !canSubmit}>
               {loading ? 'Creando...' : 'Crear cita'}
             </Button>
             <Button type="button" variant="outline" onClick={() => handleCancel()}>

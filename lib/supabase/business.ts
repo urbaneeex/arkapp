@@ -53,6 +53,7 @@ export async function getBusinessAccess(userId: string): Promise<BusinessAccess 
     .from('staff')
     .select('business_id, access_level')
     .eq('id', userId)
+    .is('deleted_at', null)
     .maybeSingle()
 
   // Manejar errores de forma más robusta
@@ -170,6 +171,7 @@ export async function getBusinessForUser(userId: string) {
     .from('staff')
     .select('business_id')
     .eq('id', userId)
+    .is('deleted_at', null)
     .maybeSingle()
 
   if (staffError) {

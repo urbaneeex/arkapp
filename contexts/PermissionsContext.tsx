@@ -65,6 +65,7 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
           .from('staff')
           .select('business_id, access_level')
           .eq('id', user.id)
+          .is('deleted_at', null)
           .maybeSingle()
         if (staffRow) {
           businessId = staffRow.business_id

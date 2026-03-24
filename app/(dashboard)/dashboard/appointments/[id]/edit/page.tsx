@@ -51,6 +51,7 @@ export default async function EditAppointmentPage({
       .from('staff')
       .select('id, name')
       .eq('business_id', business.id)
+      .is('deleted_at', null)
       .eq('is_active', true)
       .order('name'),
   ])

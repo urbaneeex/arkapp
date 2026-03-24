@@ -28,6 +28,7 @@ export default async function RolesPage() {
     .from('staff')
     .select('id, name, role_id')
     .eq('business_id', business.id)
+    .is('deleted_at', null)
 
   return (
     <div>

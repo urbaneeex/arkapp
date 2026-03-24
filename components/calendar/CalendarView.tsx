@@ -10,16 +10,12 @@ import {
   subWeeks,
   addMonths,
   subMonths,
-  addYears,
-  subYears,
   startOfDay,
   endOfDay,
   startOfWeek,
   endOfWeek,
   startOfMonth,
   endOfMonth,
-  startOfYear,
-  endOfYear,
   isSameDay,
   isSameMonth,
   getDay,
@@ -46,13 +42,12 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
-import { AppointmentsCalendar } from '@/components/appointments/AppointmentsCalendar'
 import { ClientOnlyDnd } from '@/components/calendar/ClientOnlyDnd'
 import { AppointmentPopover, type AppointmentForPopover } from '@/components/calendar/AppointmentPopover'
 import { MoveAppointmentDialog } from '@/components/calendar/MoveAppointmentDialog'
 import { AppointmentEditModal } from '@/components/calendar/AppointmentEditModal'
 import { ToastSimple } from '@/components/ui/toast-simple'
-import { getDayOfWeek, getOpenRangesForDay } from '@/lib/availability'
+import { getDayOfWeek, getOpenRangesForDay, minutesToTime, timeToMinutes } from '@/lib/availability'
 import type { Shift } from '@/lib/availability'
 import { getClosedRangesForDay } from '@/lib/availability'
 import { ClientSearchCombobox, NewClientFields, type ClientOption } from '@/components/appointments/ClientSearchCombobox'
@@ -73,7 +68,17 @@ const STATUS_COLORS: Record<string, string> = {
   no_show: 'bg-zinc-700 border-zinc-600 text-zinc-400',
 }
 
-type ViewType = 'day' | 'week' | 'month' | 'year'
+function formatSlotLabel(dateStr: string, timeStr: string): string {
+  const formatted = new Intl.DateTimeFormat('es-ES', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  }).format(new Date(dateStr + 'T12:00:00'))
+  const capitalized = formatted.charAt(0).toUpperCase() + formatted.slice(1)
+  return `${capitalized} ${timeStr}`
+}
+
+type ViewType = 'day' | 'week' | 'month'
 
 type AppointmentRow = {
   id: string
@@ -156,6 +161,8 @@ export function CalendarView({
   const [moveLoading, setMoveLoading] = useState(false)
   const [editModalAppointmentId, setEditModalAppointmentId] = useState<string | null>(null)
   const [externalPanelOpen, setExternalPanelOpen] = useState(false)
+  const [selectedWeekSlot, setSelectedWeekSlot] = useState<{ day: Date; timeMin: number } | null>(null)
+  const [selectedMonthDay, setSelectedMonthDay] = useState<Date | null>(null)
 
   useEffect(() => {
     if (openNewPanel) {
@@ -183,14 +190,12 @@ export function CalendarView({
   const goPrev = () => {
     if (view === 'day') setCurrent((d) => subDays(d, 1))
     else if (view === 'week') setCurrent((d) => subWeeks(d, 1))
-    else if (view === 'month') setCurrent((d) => subMonths(d, 1))
-    else setCurrent((d) => subYears(d, 1))
+    else setCurrent((d) => subMonths(d, 1))
   }
   const goNext = () => {
     if (view === 'day') setCurrent((d) => addDays(d, 1))
     else if (view === 'week') setCurrent((d) => addWeeks(d, 1))
-    else if (view === 'month') setCurrent((d) => addMonths(d, 1))
-    else setCurrent((d) => addYears(d, 1))
+    else setCurrent((d) => addMonths(d, 1))
   }
   const goToday = () => setCurrent(new Date())
 
@@ -202,7 +207,7 @@ export function CalendarView({
       return `${format(start, 'd MMM', { locale: es })} - ${format(end, 'd MMM yyyy', { locale: es })}`
     }
     if (view === 'month') return format(current, 'MMMM yyyy', { locale: es })
-    return format(current, 'yyyy', { locale: es })
+    return format(current, 'MMMM yyyy', { locale: es })
   }
 
   const aptsForDay = (day: Date) =>
@@ -325,7 +330,7 @@ export function CalendarView({
             </h2>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            {(['day', 'week', 'month', 'year'] as const).map((v) => (
+            {(['day', 'week', 'month'] as const).map((v) => (
               <Button
                 key={v}
                 variant={view === v ? 'default' : 'outline'}
@@ -333,7 +338,7 @@ export function CalendarView({
                 onClick={() => setView(v)}
                 className="cursor-pointer capitalize"
               >
-                {v === 'day' ? 'Día' : v === 'week' ? 'Semana' : v === 'month' ? 'Mes' : 'Año'}
+                {v === 'day' ? 'Día' : v === 'week' ? 'Semana' : 'Mes'}
               </Button>
             ))}
             <select
@@ -360,14 +365,10 @@ export function CalendarView({
       >
         {view === 'week' ? (
           <div className="flex-1 min-h-0 flex flex-col">
-          <AppointmentsCalendar
+          <WeekView
+            weekStart={startOfWeek(current, { weekStartsOn: 1 })}
             appointments={appointmentsForWeekView}
-            clients={clients}
-            services={services}
-            staff={staff}
-            businessId={businessId}
-            controlledWeekStart={startOfWeek(current, { weekStartsOn: 1 })}
-            hideToolbar
+            shiftsByDay={shiftsByDay}
             onAppointmentClick={(apt, e) => {
               e.preventDefault()
               e.stopPropagation()
@@ -382,13 +383,15 @@ export function CalendarView({
                 staff_name: Array.isArray(apt.staff) ? apt.staff[0]?.name ?? null : apt.staff?.name ?? null,
               })
             }}
-            onDropAppointment={canMoveAppointments ? (apt, toDate) => handleDropAppointment(normalizeAppointment(apt), toDate) : undefined}
+            onSlotClick={(day, timeMin) => setSelectedWeekSlot({ day, timeMin })}
+            onNavigateToDate={(date) => { setCurrent(date); setView('day') }}
+            onDropInDay={canMoveAppointments ? (apt, toDate) => handleDropAppointment(normalizeAppointment(apt), toDate) : undefined}
           />
           </div>
         ) : (
           <div className="border border-zinc-800 bg-zinc-900 overflow-hidden flex-1 min-h-0 flex flex-col">
-            <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain pb-0 flex flex-col min-w-full">
-            <div className="min-h-full h-full min-w-full bg-zinc-900 flex flex-col">
+            <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain pb-0 flex flex-col min-w-full bg-zinc-900">
+            <div className="min-h-full h-full min-w-full bg-zinc-900 flex flex-col flex-1">
             {view === 'day' && (
               <DayView
                 day={current}
@@ -413,16 +416,10 @@ export function CalendarView({
               <MonthView
                 month={current}
                 appointments={filteredAppointments}
+                shiftsByDay={shiftsByDay}
                 onAppointmentClick={handleAppointmentClick}
                 onDropAppointment={canMoveAppointments ? handleDropAppointment : undefined}
-              />
-            )}
-            {view === 'year' && (
-              <YearView
-                year={current}
-                appointments={filteredAppointments}
-                onGoToDay={(day) => { setCurrent(day); setView('day') }}
-                onAppointmentClick={handleAppointmentClick}
+                onDayClick={(day) => setSelectedMonthDay(day)}
               />
             )}
             </div>
@@ -489,6 +486,40 @@ export function CalendarView({
           onToast={(message, type) => setToast({ message, type })}
         />
       )}
+
+      {selectedWeekSlot && (
+        <NewAppointmentSidePanel
+          day={selectedWeekSlot.day}
+          timeMin={selectedWeekSlot.timeMin}
+          businessId={businessId}
+          businessCountry={businessCountry ?? 'ES'}
+          recentClients={clients.map((c) => ({ id: c.id, name: c.name, phone: c.phone ?? null, email: c.email ?? null }))}
+          services={services}
+          staff={staff}
+          allAppointments={appointments}
+          shiftsByDay={shiftsByDay}
+          onClose={() => setSelectedWeekSlot(null)}
+          onNavigateToDate={(date) => { setCurrent(date); setView('day') }}
+          onToast={(message, type) => setToast({ message, type })}
+        />
+      )}
+
+      {selectedMonthDay && (
+        <NewAppointmentSidePanel
+          day={selectedMonthDay}
+          timeMin={9 * 60}
+          businessId={businessId}
+          businessCountry={businessCountry ?? 'ES'}
+          recentClients={clients.map((c) => ({ id: c.id, name: c.name, phone: c.phone ?? null, email: c.email ?? null }))}
+          services={services}
+          staff={staff}
+          allAppointments={appointments}
+          shiftsByDay={shiftsByDay}
+          onClose={() => setSelectedMonthDay(null)}
+          onNavigateToDate={(date) => { setCurrent(date); setView('day') }}
+          onToast={(message, type) => setToast({ message, type })}
+        />
+      )}
     </div>
   )
 }
@@ -498,6 +529,527 @@ const SLOTS_PER_HOUR = 4
 const SLOT_HEIGHT_PX = 24
 const HOUR_HEIGHT_PX = SLOTS_PER_HOUR * SLOT_HEIGHT_PX
 const MINUTES_PER_DAY = 24 * 60
+
+/** Rango horario de la semana: mínima apertura y máxima cierre según shifts de los 7 días */
+function getWeekTimeRangeFromShifts(
+  days: Date[],
+  shiftsByDay: Record<number, Shift[]>
+): { weekViewStartMin: number; weekViewEndMin: number } {
+  let weekViewStartMin = MINUTES_PER_DAY
+  let weekViewEndMin = 0
+  for (const d of days) {
+    const openRanges = getOpenRangesForDay(shiftsByDay, getDayOfWeek(d))
+    for (const r of openRanges) {
+      weekViewStartMin = Math.min(weekViewStartMin, r.start)
+      weekViewEndMin = Math.max(weekViewEndMin, r.end)
+    }
+  }
+  if (weekViewEndMin <= weekViewStartMin) {
+    weekViewStartMin = 8 * 60
+    weekViewEndMin = 20 * 60
+  }
+  return { weekViewStartMin, weekViewEndMin }
+}
+
+/** Vista semana: réplica de DayView (slots 15 min, rango dinámico, sticky, línea “ahora” solo en hoy) */
+function WeekView({
+  weekStart,
+  appointments,
+  shiftsByDay = {},
+  onAppointmentClick,
+  onSlotClick,
+  onNavigateToDate,
+  onDropInDay,
+}: {
+  weekStart: Date
+  appointments: AppointmentRow[]
+  shiftsByDay?: Record<number, Shift[]>
+  onAppointmentClick: (apt: AppointmentRow, e: React.MouseEvent) => void
+  onSlotClick: (day: Date, timeMin: number) => void
+  onNavigateToDate?: (date: Date) => void
+  onDropInDay?: (apt: AppointmentRow, toDate: Date) => void
+}) {
+  const days = useMemo(
+    () => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)),
+    [weekStart]
+  )
+
+  const { weekViewStartMin, weekViewEndMin } = useMemo(
+    () => getWeekTimeRangeFromShifts(days, shiftsByDay),
+    [days, shiftsByDay]
+  )
+
+  const totalSlots = Math.max(0, Math.round((weekViewEndMin - weekViewStartMin) / MINUTES_PER_SLOT))
+
+  const timeLabels = useMemo(() => {
+    const out: { min: number; label: string }[] = []
+    for (let min = weekViewStartMin; min < weekViewEndMin; min += 60) {
+      out.push({
+        min,
+        label: `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`,
+      })
+    }
+    return out
+  }, [weekViewStartMin, weekViewEndMin])
+
+  const weekStartDate = startOfDay(weekStart)
+  const weekEndDate = endOfDay(addDays(weekStart, 6))
+  const appointmentsInWeek = useMemo(() => {
+    return appointments.filter((a) => {
+      const start = parseISO(a.start_time)
+      return start >= weekStartDate && start <= weekEndDate
+    })
+  }, [appointments, weekStartDate, weekEndDate])
+
+  const closedRangesByDay = useMemo(() => {
+    return days.map((d) => getClosedRangesForDay(shiftsByDay, getDayOfWeek(d)))
+  }, [days, shiftsByDay])
+
+  const isSlotClosed = useCallback(
+    (dayIndex: number, slotIndex: number) => {
+      const slotStartMin = weekViewStartMin + slotIndex * MINUTES_PER_SLOT
+      const slotEndMin = slotStartMin + MINUTES_PER_SLOT
+      const closed = closedRangesByDay[dayIndex] ?? []
+      return closed.some((r) => slotStartMin < r.end && slotEndMin > r.start)
+    },
+    [closedRangesByDay, weekViewStartMin]
+  )
+
+  const appointmentsWithLayout = useMemo(() => {
+    return appointmentsInWeek.map((apt) => {
+      const start = parseISO(apt.start_time)
+      const end = parseISO(apt.end_time)
+      const startDay = startOfDay(start)
+      const dayIndex = Math.max(0, Math.min(6, Math.round((startDay.getTime() - weekStartDate.getTime()) / (24 * 60 * 60 * 1000))))
+      const startMin = start.getHours() * 60 + start.getMinutes() + start.getSeconds() / 60
+      const endMin = end.getHours() * 60 + end.getMinutes() + end.getSeconds() / 60
+      const slotOffset = (startMin - weekViewStartMin) / MINUTES_PER_SLOT
+      const topPx = slotOffset * SLOT_HEIGHT_PX + 1
+      const durationMin = endMin - startMin
+      const heightSlots = Math.max(1, Math.round(durationMin / MINUTES_PER_SLOT))
+      const heightPx = heightSlots * SLOT_HEIGHT_PX - 2
+      return { apt, dayIndex, topPx, heightPx }
+    })
+  }, [appointmentsInWeek, weekStartDate, weekViewStartMin])
+
+  const [currentTimeTop, setCurrentTimeTop] = useState<number | null>(null)
+  const todayIndex = days.findIndex((d) => isSameDay(d, new Date()))
+  const isTodayInWeek = todayIndex >= 0
+
+  useEffect(() => {
+    if (!isTodayInWeek) {
+      setCurrentTimeTop(null)
+      return
+    }
+    const update = () => {
+      const now = new Date()
+      const nowMin = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60
+      if (nowMin < weekViewStartMin || nowMin >= weekViewEndMin) {
+        setCurrentTimeTop(null)
+        return
+      }
+      const minutesIntoView = nowMin - weekViewStartMin
+      const currentSlotIndex = Math.floor(minutesIntoView / MINUTES_PER_SLOT)
+      const slotBoundaryNext = (currentSlotIndex + 1) * SLOT_HEIGHT_PX
+      const rawTopPx = (minutesIntoView / MINUTES_PER_SLOT) * SLOT_HEIGHT_PX
+      const lineHeightPx = 2
+      const maxTop = slotBoundaryNext - lineHeightPx
+      setCurrentTimeTop(Math.min(rawTopPx, maxTop))
+    }
+    update()
+    const id = setInterval(update, 60000)
+    return () => clearInterval(id)
+  }, [isTodayInWeek, weekViewStartMin, weekViewEndMin])
+
+  const headerRowHeightPx = 40
+
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
+  const [overSlot, setOverSlot] = useState<{ dayIndex: number; slotIndex: number } | null>(null)
+
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      setOverSlot(null)
+      const { active, over } = event
+      if (over?.id == null || typeof over.id !== 'string') return
+      const match = String(over.id).match(/^week-slot-(\d+)-(\d+)$/)
+      if (!match) return
+      const dayIndex = parseInt(match[1], 10)
+      const slotIndex = parseInt(match[2], 10)
+      if (dayIndex < 0 || dayIndex > 6 || slotIndex < 0 || slotIndex >= totalSlots) return
+      const apt = appointmentsInWeek.find((a) => a.id === active.id)
+      if (!apt) return
+      if (apt.status === 'completed' || apt.status === 'cancelled') return
+      if (!onDropInDay) return
+      const day = days[dayIndex]
+      const newStartMin = weekViewStartMin + slotIndex * MINUTES_PER_SLOT
+      const toDate = new Date(day)
+      toDate.setHours(Math.floor(newStartMin / 60), newStartMin % 60, 0, 0)
+      onDropInDay(apt, toDate)
+    },
+    [appointmentsInWeek, days, totalSlots, weekViewStartMin, onDropInDay]
+  )
+
+  const weekViewContent = (
+    <div className="relative w-full overflow-auto flex flex-col flex-1 min-h-0 bg-zinc-900">
+      <div
+        className="grid min-w-[800px] flex-shrink-0"
+        style={{
+          gridTemplateColumns: '56px repeat(7, minmax(0, 1fr))',
+          gridTemplateRows: `${headerRowHeightPx}px repeat(${totalSlots}, ${SLOT_HEIGHT_PX}px)`,
+        }}
+      >
+        {/* Esquina header: misma celda que días para que toda la fila sea sticky */}
+        <div
+          className="sticky top-0 z-30 bg-zinc-950 border-r border-b border-zinc-700"
+          style={{ gridColumn: 1, gridRow: 1, height: headerRowHeightPx }}
+          aria-hidden
+        />
+
+        {/* Columna horas sticky (solo filas de cuerpo, sin esquina) */}
+        <div
+          className="sticky left-0 z-20 flex flex-col bg-zinc-950 border-r border-zinc-800"
+          style={{ gridColumn: 1, gridRow: '2 / -1' }}
+        >
+          {timeLabels.map(({ min, label }) => (
+            <div
+              key={min}
+              className="border-t-2 border-zinc-700 pr-1 pt-0.5 text-right text-xs font-medium text-zinc-300 flex-shrink-0"
+              style={{ height: HOUR_HEIGHT_PX }}
+            >
+              {label}
+            </div>
+          ))}
+        </div>
+
+        {/* Cabeceras día: sticky top, compacto "25 miércoles", clic → DayView */}
+        {days.map((day, dayIndex) => {
+          const isToday = isSameDay(day, new Date())
+          return (
+            <button
+              key={dayIndex}
+              type="button"
+              className={cn(
+                'sticky top-0 z-30 w-full flex flex-row items-center justify-center gap-1.5 py-1.5 px-2 text-center text-sm font-medium transition-colors border-r border-b border-zinc-700 cursor-pointer',
+                isToday
+                  ? 'bg-blue-600 text-white hover:bg-blue-500'
+                  : 'bg-zinc-950 text-zinc-400 hover:bg-zinc-800'
+              )}
+              style={{ gridColumn: dayIndex + 2, gridRow: 1, height: headerRowHeightPx, minHeight: headerRowHeightPx }}
+              onClick={() => onNavigateToDate?.(day)}
+              aria-label={`Ir al día ${format(day, 'd MMMM', { locale: es })}`}
+            >
+              <span className={cn('font-semibold tabular-nums', isToday && 'text-white')}>
+                {format(day, 'd', { locale: es })}
+              </span>
+              <span className={cn('text-xs capitalize truncate', isToday ? 'text-blue-100' : 'text-zinc-500')}>
+                {format(day, 'EEEE', { locale: es })}
+              </span>
+            </button>
+          )
+        })}
+
+        {/* Slots 15 min: hover con hora exacta, clic abre Nueva Cita */}
+        {Array.from({ length: totalSlots }).map((_, slotIndex) =>
+          days.map((day, dayIndex) => {
+            const timeMin = weekViewStartMin + slotIndex * MINUTES_PER_SLOT
+            const closed = isSlotClosed(dayIndex, slotIndex)
+            const slotHasAppointment = appointmentsInWeek.some((a) => {
+              const start = parseISO(a.start_time)
+              if (!isSameDay(start, day)) return false
+              const startMin = start.getHours() * 60 + start.getMinutes() + start.getSeconds() / 60
+              const end = parseISO(a.end_time)
+              const endMin = end.getHours() * 60 + end.getMinutes() + end.getSeconds() / 60
+              return startMin < timeMin + MINUTES_PER_SLOT && endMin > timeMin
+            })
+            const isHourStart = slotIndex % SLOTS_PER_HOUR === 0
+            return (
+              <WeekSlot
+                key={`${dayIndex}-${slotIndex}`}
+                day={day}
+                dayIndex={dayIndex}
+                slotIndex={slotIndex}
+                timeMin={timeMin}
+                isHourStart={isHourStart}
+                isClosed={closed}
+                hasAppointment={slotHasAppointment}
+                onSlotClick={() => !slotHasAppointment && onSlotClick(day, timeMin)}
+              />
+            )
+          })
+        )}
+      </div>
+
+      {/* Capa cerrados/partidos: franjas sombreadas por día (solo visual) */}
+      <div
+        className="absolute left-[56px] top-[var(--week-header-row)] right-0 bottom-0 pointer-events-none z-0"
+        style={{ '--week-header-row': `${headerRowHeightPx}px` } as React.CSSProperties}
+      >
+        {days.map((day, dayIndex) => {
+          const colWidth = 100 / 7
+          const leftPct = dayIndex * colWidth
+          return (
+            <div
+              key={dayIndex}
+              className="absolute top-0 bottom-0"
+              style={{
+                left: `${leftPct}%`,
+                width: `${colWidth}%`,
+              }}
+            >
+              {Array.from({ length: totalSlots }).map((_, slotIndex) => {
+                if (!isSlotClosed(dayIndex, slotIndex)) return null
+                return (
+                  <div
+                    key={slotIndex}
+                    className="absolute left-0 right-0 bg-zinc-700/70"
+                    style={{
+                      top: slotIndex * SLOT_HEIGHT_PX,
+                      height: SLOT_HEIGHT_PX,
+                    }}
+                  />
+                )
+              })}
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Citas: misma lógica que DayView (top/height en slots de 15 min), arrastrables si onDropInDay */}
+      <div
+        className="absolute left-[56px] top-[var(--week-header-row)] right-0 bottom-0 pointer-events-none overflow-visible z-10"
+        style={{ '--week-header-row': `${headerRowHeightPx}px` } as React.CSSProperties}
+      >
+        {appointmentsWithLayout.map(({ apt, dayIndex, topPx, heightPx }) => {
+          const clientName = Array.isArray(apt.clients) ? apt.clients[0]?.name : apt.clients?.name
+          const serviceName = Array.isArray(apt.services) ? apt.services[0]?.name : apt.services?.name
+          const colWidth = 100 / 7
+          const leftPct = dayIndex * colWidth
+          return (
+            <WeekDraggableAppointment
+              key={apt.id}
+              apt={apt}
+              dayIndex={dayIndex}
+              topPx={topPx}
+              heightPx={heightPx}
+              leftPct={leftPct}
+              colWidth={colWidth}
+              onAppointmentClick={onAppointmentClick}
+              canDrag={!!onDropInDay && apt.status !== 'completed' && apt.status !== 'cancelled'}
+            />
+          )
+        })}
+      </div>
+
+      {/* Línea “ahora” solo en la columna de hoy, sin pastilla */}
+      {isTodayInWeek && currentTimeTop != null && (
+        <div
+          className="absolute left-0 right-0 z-30 pointer-events-none flex items-start"
+          style={{ top: headerRowHeightPx + currentTimeTop }}
+        >
+          <div className="w-[56px] shrink-0" />
+          <div className="flex-1 flex min-w-0">
+            {days.map((day, dayIndex) => (
+              <div
+                key={dayIndex}
+                className="flex-1 border-r border-zinc-800 first:border-l-0"
+                style={{ minWidth: 0 }}
+              >
+                {dayIndex === todayIndex ? (
+                  <span className="block border-t-2 border-red-500 h-0 -translate-y-1/2 w-full" />
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+
+  return (
+    <DndContext
+      sensors={sensors}
+      onDragEnd={handleDragEnd}
+      onDragOver={(e) => {
+        const over = e.over?.id
+        if (over != null && typeof over === 'string' && over.startsWith('week-slot-')) {
+          const match = String(over).match(/^week-slot-(\d+)-(\d+)$/)
+          if (match) setOverSlot({ dayIndex: parseInt(match[1], 10), slotIndex: parseInt(match[2], 10) })
+        } else setOverSlot(null)
+      }}
+      onDragCancel={() => setOverSlot(null)}
+    >
+      <WeekViewDndContent appointmentsInWeek={appointmentsInWeek}>
+        {weekViewContent}
+      </WeekViewDndContent>
+    </DndContext>
+  )
+}
+
+/** Contenido de WeekView que vive dentro de DndContext para poder usar useDndMonitor y mostrar DragOverlay */
+function WeekViewDndContent({
+  children,
+  appointmentsInWeek,
+}: {
+  children: React.ReactNode
+  appointmentsInWeek: AppointmentRow[]
+}) {
+  const [activeId, setActiveId] = useState<string | null>(null)
+  useDndMonitor({
+    onDragStart: (e) => setActiveId(String(e.active.id)),
+    onDragEnd: () => setActiveId(null),
+    onDragCancel: () => setActiveId(null),
+  })
+  const activeApt = activeId ? appointmentsInWeek.find((a) => a.id === activeId) : null
+
+  return (
+    <>
+      {children}
+      <DragOverlay dropAnimation={null}>
+        {activeApt ? (
+          <div
+            className={cn(
+              'rounded border-l-4 p-1.5 text-xs text-left cursor-grabbing shadow-lg opacity-95 flex flex-col items-start min-w-[120px]',
+              STATUS_COLORS[activeApt.status ?? 'pending'] ?? 'bg-zinc-800'
+            )}
+          >
+            <span className="font-semibold leading-tight">
+              {format(parseISO(activeApt.start_time), 'HH:mm')} – {format(parseISO(activeApt.end_time), 'HH:mm')}
+              {Array.isArray(activeApt.clients) ? activeApt.clients[0]?.name : activeApt.clients?.name
+                ? ` ${Array.isArray(activeApt.clients) ? activeApt.clients[0]?.name : activeApt.clients?.name}`
+                : ''}
+            </span>
+            {(Array.isArray(activeApt.services) ? activeApt.services[0]?.name : activeApt.services?.name) && (
+              <span className="leading-tight opacity-75">
+                {Array.isArray(activeApt.services) ? activeApt.services[0]?.name : activeApt.services?.name}
+              </span>
+            )}
+          </div>
+        ) : null}
+      </DragOverlay>
+    </>
+  )
+}
+
+/** Cita arrastrable en WeekView (misma lógica que DayView) */
+function WeekDraggableAppointment({
+  apt,
+  dayIndex,
+  topPx,
+  heightPx,
+  leftPct,
+  colWidth,
+  onAppointmentClick,
+  canDrag,
+}: {
+  apt: AppointmentRow
+  dayIndex: number
+  topPx: number
+  heightPx: number
+  leftPct: number
+  colWidth: number
+  onAppointmentClick: (apt: AppointmentRow, e: React.MouseEvent) => void
+  canDrag: boolean
+}) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: apt.id,
+    disabled: !canDrag,
+  })
+  const clientName = Array.isArray(apt.clients) ? apt.clients[0]?.name : apt.clients?.name
+  const serviceName = Array.isArray(apt.services) ? apt.services[0]?.name : apt.services?.name
+
+  return (
+    <button
+      ref={setNodeRef}
+      type="button"
+      onClick={(e) => onAppointmentClick(apt, e)}
+      {...(canDrag ? { ...attributes, ...listeners } : {})}
+      title={!canDrag ? 'No se pueden mover citas completadas o canceladas' : undefined}
+      className={cn(
+        'absolute rounded border-l-4 p-1.5 text-xs text-left transition-shadow cursor-pointer pointer-events-auto overflow-hidden flex flex-col items-start justify-start',
+        canDrag ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer opacity-90',
+        isDragging && 'opacity-70 shadow-lg z-20',
+        STATUS_COLORS[apt.status ?? 'pending'] ?? 'bg-zinc-800'
+      )}
+      style={{
+        left: `calc(${leftPct}% + 4px)`,
+        width: `calc(${colWidth}% - 8px)`,
+        top: topPx,
+        height: heightPx,
+      }}
+    >
+      <span className="font-semibold leading-tight truncate w-full">
+        {format(parseISO(apt.start_time), 'HH:mm')} – {format(parseISO(apt.end_time), 'HH:mm')}
+        {clientName ? ` ${clientName}` : ''}
+      </span>
+      {serviceName && (
+        <span className="leading-tight truncate w-full opacity-75">{serviceName}</span>
+      )}
+    </button>
+  )
+}
+
+/** Slot de 15 min en WeekView: hover muestra hora exacta (00/15/30/45), clic abre Nueva Cita, droppable para DnD */
+function WeekSlot({
+  day,
+  dayIndex,
+  slotIndex,
+  timeMin,
+  isHourStart,
+  isClosed,
+  hasAppointment,
+  onSlotClick,
+}: {
+  day: Date
+  dayIndex: number
+  slotIndex: number
+  timeMin: number
+  isHourStart: boolean
+  isClosed: boolean
+  hasAppointment: boolean
+  onSlotClick: () => void
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: `week-slot-${dayIndex}-${slotIndex}` })
+  const [isHovered, setIsHovered] = useState(false)
+  const hours = Math.floor(timeMin / 60)
+  const minutes = timeMin % 60
+  const timeLabel = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
+
+  return (
+    <div
+      ref={setNodeRef}
+      role="button"
+      tabIndex={0}
+      className={cn(
+        'relative border-r border-t transition-colors cursor-pointer shrink-0',
+        isHourStart ? 'border-t-2 border-zinc-700' : 'border-t border-zinc-700/80',
+        isClosed && 'bg-zinc-700/50',
+        isSameDay(day, new Date()) && !isClosed && 'bg-[#3B82F6]/5',
+        isHovered && 'bg-blue-800/60',
+        isOver && 'ring-1 ring-inset ring-blue-400 bg-blue-900/30',
+        dayIndex === 6 && 'border-r-zinc-800'
+      )}
+      style={{ gridColumn: dayIndex + 2, gridRow: slotIndex + 2, height: SLOT_HEIGHT_PX }}
+      onClick={onSlotClick}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onSlotClick()
+        }
+      }}
+      aria-label={`${format(day, 'd MMM', { locale: es })} ${timeLabel}`}
+    >
+      {isHovered && (
+        <div className="absolute inset-0 flex items-center pointer-events-none pl-2">
+          <span className={cn('text-xs font-medium', isClosed ? 'text-zinc-500' : 'text-zinc-300')}>
+            {timeLabel}
+          </span>
+        </div>
+      )}
+    </div>
+  )
+}
 
 function DayView({
   day,
@@ -1275,7 +1827,7 @@ function NewAppointmentSidePanel({
           staff_id: finalStaffId,
           start_time: startDateTime.toISOString(),
           end_time: endDateTime.toISOString(),
-          status: 'pending',
+          status: 'confirmed',
           price_total: totalPrice,
         })
         .select('id')
@@ -1336,21 +1888,6 @@ function NewAppointmentSidePanel({
     setSelectedServices(selectedServices.filter((s) => s.id !== serviceId))
   }
 
-  const getBusinessHoursForDay = useCallback((date: Date) => {
-    const dayOfWeek = getDay(date) === 0 ? 7 : getDay(date)
-    const shifts = shiftsByDay?.[dayOfWeek] ?? []
-    if (shifts.length === 0 || shifts.some((s) => s.is_closed)) {
-      return null
-    }
-    const firstShift = shifts[0]
-    const openTime = firstShift.open_time.split(':').map(Number)
-    const closeTime = firstShift.close_time.split(':').map(Number)
-    return {
-      openMin: openTime[0] * 60 + openTime[1],
-      closeMin: closeTime[0] * 60 + closeTime[1],
-    }
-  }, [shiftsByDay])
-
   const checkStaffAvailability = useCallback(async () => {
     if (selectedServices.length === 0 || totalDuration === 0) {
       setStaffAvailability({})
@@ -1358,93 +1895,41 @@ function NewAppointmentSidePanel({
     }
 
     setLoadingAvailability(true)
-    const startDateTime = new Date(currentDay)
-    startDateTime.setHours(Math.floor(currentTimeMin / 60), currentTimeMin % 60, 0, 0)
-    const endDateTime = addMinutes(startDateTime, totalDuration)
-    const dayStart = startOfDay(currentDay)
-    const dayEnd = addMinutes(dayStart, 24 * 60)
+    const dateStr = format(currentDay, 'yyyy-MM-dd')
+    const startTimeStr = minutesToTime(currentTimeMin)
+    const endTimeStr = minutesToTime(currentTimeMin + totalDuration)
+    const params = new URLSearchParams({
+      businessId,
+      date: dateStr,
+      startTime: startTimeStr,
+      endTime: endTimeStr,
+    })
 
     const availability: Record<string, { available: boolean; alternativeSlots?: { date: Date; timeMin: number; timeLabel: string }[] }> = {}
 
-    for (const staffMember of staff) {
-      const { data: appointments } = await supabase
-        .from('appointments')
-        .select('start_time, end_time')
-        .eq('staff_id', staffMember.id)
-        .eq('business_id', businessId)
-        .gte('start_time', dayStart.toISOString())
-        .lt('start_time', addDays(dayStart, 7).toISOString())
-        .neq('status', 'cancelled')
-
-      const staffAppointments = (appointments ?? []).map((apt: { start_time: string; end_time: string }) => ({
-        start: parseISO(apt.start_time).getTime(),
-        end: parseISO(apt.end_time).getTime(),
-        date: parseISO(apt.start_time),
-      }))
-
-      const newStart = startDateTime.getTime()
-      const newEnd = endDateTime.getTime()
-      const hasConflict = staffAppointments.some((apt: { start: number; end: number }) => newStart < apt.end && newEnd > apt.start)
-
-      if (hasConflict) {
-        const slots: { date: Date; timeMin: number; timeLabel: string }[] = []
-        let searchDate = new Date(currentDay)
-        let daysSearched = 0
-        const maxDays = 7
-
-        while (slots.length < 3 && daysSearched < maxDays) {
-          const dayOfWeek = getDay(searchDate) === 0 ? 7 : getDay(searchDate)
-          const businessHours = getBusinessHoursForDay(searchDate)
-          const isSearchDay = isSameDay(searchDate, currentDay)
-
-          if (businessHours) {
-            const searchDayStart = startOfDay(searchDate)
-            const startMin = isSearchDay ? currentTimeMin : businessHours.openMin
-            const endMin = businessHours.closeMin
-
-            for (let slotMin = startMin; slotMin <= endMin - totalDuration; slotMin += 15) {
-              const slotStart = new Date(searchDayStart)
-              slotStart.setHours(Math.floor(slotMin / 60), slotMin % 60, 0, 0)
-              const slotEnd = addMinutes(slotStart, totalDuration)
-              const slotStartTime = slotStart.getTime()
-              const slotEndTime = slotEnd.getTime()
-
-              const slotConflict = staffAppointments.some((apt: { start: number; end: number; date: Date }) => {
-                return isSameDay(apt.date, searchDate) && slotStartTime < apt.end && slotEndTime > apt.start
-              })
-
-              if (!slotConflict) {
-                const isToday = isSameDay(searchDate, new Date())
-                const isTomorrow = isSameDay(searchDate, addDays(new Date(), 1))
-                let label = `${String(Math.floor(slotMin / 60)).padStart(2, '0')}:${String(slotMin % 60).padStart(2, '0')}`
-                if (!isSearchDay) {
-                  if (isToday) label = `Hoy ${label}`
-                  else if (isTomorrow) label = `Mañana ${label}`
-                  else label = `${format(searchDate, 'EEE d', { locale: es })} ${label}`
-                }
-                slots.push({
-                  date: new Date(searchDate),
-                  timeMin: slotMin,
-                  timeLabel: label,
-                })
-                if (slots.length >= 3) break
-              }
-            }
-          }
-
-          searchDate = addDays(searchDate, 1)
-          daysSearched++
-        }
-
-        availability[staffMember.id] = { available: false, alternativeSlots: slots }
-      } else {
-        availability[staffMember.id] = { available: true }
+    try {
+      const res = await fetch(`/api/appointments/available-staff?${params}`)
+      const data = await res.json()
+      const staffFromApi = (data.staff ?? []) as { id: string; name?: string; isAvailableForRequestedTime?: boolean; suggestedSlots?: { date: string; time: string }[] }[]
+      for (const staffMember of staff) {
+        const apiStaff = staffFromApi.find((s) => s.id === staffMember.id)
+        const available = apiStaff?.isAvailableForRequestedTime ?? false
+        const suggestedSlots = apiStaff?.suggestedSlots ?? []
+        const alternativeSlots = suggestedSlots.map((slot) => ({
+          date: new Date(slot.date + 'T12:00:00'),
+          timeMin: timeToMinutes(slot.time),
+          timeLabel: formatSlotLabel(slot.date, slot.time),
+        }))
+        availability[staffMember.id] = { available, alternativeSlots }
+      }
+    } catch {
+      for (const staffMember of staff) {
+        availability[staffMember.id] = { available: false, alternativeSlots: [] }
       }
     }
-
     setStaffAvailability(availability)
     setLoadingAvailability(false)
-  }, [selectedServices, totalDuration, currentTimeMin, currentDay, staff, businessId, supabase, getBusinessHoursForDay])
+  }, [selectedServices, totalDuration, currentTimeMin, currentDay, staff, businessId])
 
   useEffect(() => {
     if (step === 2 && selectedServices.length > 0) {
@@ -1978,26 +2463,24 @@ function NewAppointmentSidePanel({
                               {!isAvailable && (
                                 <div className="ml-4 pl-4 border-l-2 border-zinc-800 space-y-2">
                                   {alternatives.length > 0 ? (
-                                    <>
-                                      <p className="text-xs font-medium text-zinc-300 mb-2">Próximos horarios disponibles:</p>
-                                      <div className="flex flex-wrap gap-2">
-                                        {alternatives.slice(0, 3).map((slot, idx) => (
-                                          <button
-                                            key={`${slot.date.toISOString()}-${slot.timeMin}-${idx}`}
-                                            onClick={() => {
-                                              handleSlotSelect(slot)
-                                              setSelectedStaff(staffMember)
-                                              setUseAnyAvailableStaff(false)
-                                            }}
-                                            className="px-3 py-1.5 text-xs font-medium rounded-lg border border-zinc-700 bg-zinc-950 hover:bg-blue-900/50 hover:border-blue-400 hover:text-blue-300 transition-colors cursor-pointer"
-                                          >
-                                            {slot.timeLabel}
-                                          </button>
-                                        ))}
-                                      </div>
-                                    </>
+                                    <div className="flex gap-2 flex-wrap mt-2">
+                                      {alternatives.slice(0, 3).map((slot, i) => (
+                                        <button
+                                          key={i}
+                                          type="button"
+                                          onClick={() => {
+                                            handleSlotSelect(slot)
+                                            setSelectedStaff(staffMember)
+                                            setUseAnyAvailableStaff(false)
+                                          }}
+                                          className="bg-amber-100 text-amber-800 text-xs px-3 py-1 rounded-full cursor-pointer hover:bg-amber-200 transition-colors"
+                                        >
+                                          {slot.timeLabel}
+                                        </button>
+                                      ))}
+                                    </div>
                                   ) : (
-                                    <p className="text-xs text-zinc-400">No hay horarios disponibles próximos</p>
+                                    <p className="text-xs text-gray-500">No hay horarios disponibles próximos</p>
                                   )}
                                 </div>
                               )}
@@ -2055,14 +2538,29 @@ function NewAppointmentSidePanel({
           {step === 2 && (
             <>
               {selectedServices.length > 0 && (selectedStaff || useAnyAvailableStaff) ? (
-                <Button
-                  type="button"
-                  onClick={handleCreateAppointment}
-                  disabled={creating}
-                  className="flex-1"
-                >
-                  {creating ? 'Creando...' : 'Crear cita'}
-                </Button>
+                (() => {
+                  const availableCount = staff.filter((s) => staffAvailability[s.id]?.available).length
+                  const canCreate =
+                    !loadingAvailability &&
+                    (useAnyAvailableStaff ? availableCount > 0 : !!(selectedStaff && staffAvailability[selectedStaff.id]?.available))
+                  return (
+                    <>
+                      {!loadingAvailability && availableCount === 0 && (
+                        <p className="text-sm text-amber-500 px-4 pb-2">
+                          No hay profesionales disponibles para este horario y servicio.
+                        </p>
+                      )}
+                      <Button
+                        type="button"
+                        onClick={handleCreateAppointment}
+                        disabled={creating || !canCreate}
+                        className="flex-1"
+                      >
+                        {creating ? 'Creando...' : 'Crear cita'}
+                      </Button>
+                    </>
+                  )
+                })()
               ) : (
                 <Button
                   type="button"
@@ -2114,13 +2612,17 @@ function NewAppointmentSidePanel({
 function MonthView({
   month,
   appointments,
+  shiftsByDay = {},
   onAppointmentClick,
   onDropAppointment,
+  onDayClick,
 }: {
   month: Date
   appointments: AppointmentNormalized[]
+  shiftsByDay?: Record<number, Shift[]>
   onAppointmentClick: (apt: AppointmentNormalized, e: React.MouseEvent) => void
   onDropAppointment?: (apt: AppointmentNormalized, toDate: Date) => void
+  onDayClick: (day: Date) => void
 }) {
   const start = startOfMonth(month)
   const end = endOfMonth(month)
@@ -2128,8 +2630,13 @@ function MonthView({
   const daysInMonth = eachDayOfInterval({ start, end })
   const pad = Array(startPad).fill(null)
   const allDays = [...pad, ...daysInMonth]
-  const weeks = []
+  const weeks: (Date | null)[][] = []
   for (let i = 0; i < allDays.length; i += 7) weeks.push(allDays.slice(i, i + 7))
+
+  const isDayClosed = useCallback(
+    (day: Date) => getOpenRangesForDay(shiftsByDay, getDayOfWeek(day)).length === 0,
+    [shiftsByDay]
+  )
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
@@ -2142,31 +2649,53 @@ function MonthView({
     if (!apt) return
     const fromDayKey = format(parseISO(apt.start_time), 'yyyy-MM-dd')
     if (fromDayKey === toDayKey) return
-    const start = parseISO(apt.start_time)
-    const h = start.getHours()
-    const m = start.getMinutes()
-    const s = start.getSeconds()
+    const startDate = parseISO(apt.start_time)
+    const h = startDate.getHours()
+    const m = startDate.getMinutes()
+    const s = startDate.getSeconds()
     const timePart = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
     const toDate = new Date(toDayKey + 'T' + timePart)
     if (isNaN(toDate.getTime())) return
     onDropAppointment(apt, toDate)
   }
 
+  const dayNames = useMemo(
+    () => [1, 2, 3, 4, 5, 6, 7].map((dow) => format(new Date(2024, 0, dow), 'EEEE', { locale: es })),
+    []
+  )
+
   return (
     <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-      <div className="p-4">
-        <div className="grid grid-cols-7 border-b border-zinc-800">
-          {['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'].map((d) => (
-            <div key={d} className="p-2 text-center text-xs font-medium text-zinc-400 border-r border-zinc-700 last:border-r-0">
-              {d}
+      <div className="flex flex-col flex-1 min-h-0 w-full overflow-hidden bg-zinc-900">
+        {/* Cabecera: nombres completos de los días, alineados con las columnas */}
+        <div className="grid grid-cols-7 flex-shrink-0 border-b border-zinc-800 bg-zinc-950">
+          {dayNames.map((name) => (
+            <div
+              key={name}
+              className="p-2 text-center text-xs font-medium text-zinc-400 capitalize border-r border-zinc-800 last:border-r-0"
+            >
+              {name}
             </div>
           ))}
         </div>
-        {weeks.map((week, wi) => (
-          <div key={wi} className="grid grid-cols-7 border-b border-zinc-700 last:border-b-0">
-            {week.map((d, di) => {
-              if (d === null)
-                return <div key={di} className="min-h-[80px] border-r border-zinc-700 bg-zinc-900/50" />
+        {/* Grid de semanas: filas con altura igual que rellenan el espacio */}
+        <div
+          className="grid flex-1 min-h-0 overflow-auto"
+          style={{
+            gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
+            gridTemplateRows: `repeat(${weeks.length}, minmax(0, 1fr))`,
+          }}
+        >
+          {weeks.flatMap((week, wi) =>
+            week.map((d, di) => {
+              if (d === null) {
+                return (
+                  <div
+                    key={`empty-${wi}-${di}`}
+                    className="border-r border-b border-zinc-800 bg-zinc-900/50 min-h-[4rem]"
+                  />
+                )
+              }
               const apts = appointments.filter((a) => isSameDay(parseISO(a.start_time), d))
               const dayKey = format(d, 'yyyy-MM-dd')
               return (
@@ -2176,13 +2705,15 @@ function MonthView({
                   month={month}
                   dayKey={dayKey}
                   apts={apts}
+                  isClosed={isDayClosed(d)}
+                  onDayClick={onDayClick}
                   onAppointmentClick={onAppointmentClick}
                   onDropAppointment={onDropAppointment}
                 />
               )
-            })}
-          </div>
-        ))}
+            })
+          )}
+        </div>
       </div>
     </DndContext>
   )
@@ -2193,6 +2724,8 @@ function MonthDayCell({
   month,
   dayKey,
   apts,
+  isClosed,
+  onDayClick,
   onAppointmentClick,
   onDropAppointment,
 }: {
@@ -2200,33 +2733,56 @@ function MonthDayCell({
   month: Date
   dayKey: string
   apts: AppointmentNormalized[]
+  isClosed: boolean
+  onDayClick: (day: Date) => void
   onAppointmentClick: (apt: AppointmentNormalized, e: React.MouseEvent) => void
   onDropAppointment?: (apt: AppointmentNormalized, toDate: Date) => void
 }) {
   const { isOver, setNodeRef } = useDroppable({ id: dayKey })
+
+  const handleCellClick = (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest('[data-month-event]')) return
+    onDayClick(day)
+  }
+
   return (
     <div
       ref={setNodeRef}
+      role="button"
+      tabIndex={0}
+      onClick={handleCellClick}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onDayClick(day)
+        }
+      }}
       className={cn(
-        'min-h-[80px] p-2 border-r border-zinc-700 last:border-r-0',
+        'flex flex-col min-h-[4rem] p-2 border-r border-b border-zinc-800 cursor-pointer transition-colors overflow-hidden',
+        'hover:bg-zinc-800/70',
         isSameMonth(day, month) ? 'bg-zinc-900' : 'bg-zinc-900/50',
+        isClosed && 'bg-gray-50 dark:bg-zinc-700/50',
         isSameDay(day, new Date()) && 'ring-1 ring-[#3B82F6] ring-inset',
         isOver && 'ring-2 ring-blue-400 ring-inset'
       )}
+      aria-label={format(day, "d 'de' MMMM", { locale: es })}
     >
-      <span className="text-sm font-medium text-zinc-100">{format(day, 'd')}</span>
+      <span className="text-sm font-medium text-zinc-100 flex-shrink-0">{format(day, 'd')}</span>
       {apts.length > 0 && (
-        <div className="mt-1 space-y-0.5">
-          {apts.slice(0, 3).map((apt) => (
+        <div className="mt-1 space-y-0.5 flex-1 min-h-0 overflow-auto">
+          {apts.slice(0, 5).map((apt) => (
             <MonthDraggableAppointment
               key={apt.id}
               apt={apt}
-              onAppointmentClick={onAppointmentClick}
+              onAppointmentClick={(e) => {
+                e.stopPropagation()
+                onAppointmentClick(apt, e)
+              }}
               onDropAppointment={onDropAppointment}
             />
           ))}
-          {apts.length > 3 && (
-            <span className="text-[10px] text-zinc-400">+{apts.length - 3}</span>
+          {apts.length > 5 && (
+            <span className="text-[10px] text-zinc-400 block">+{apts.length - 5}</span>
           )}
         </div>
       )}
@@ -2240,7 +2796,7 @@ function MonthDraggableAppointment({
   onDropAppointment,
 }: {
   apt: AppointmentNormalized
-  onAppointmentClick: (apt: AppointmentNormalized, e: React.MouseEvent) => void
+  onAppointmentClick: (e: React.MouseEvent) => void
   onDropAppointment?: (apt: AppointmentNormalized, toDate: Date) => void
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: apt.id })
@@ -2249,10 +2805,11 @@ function MonthDraggableAppointment({
     <button
       ref={setNodeRef}
       type="button"
-      onClick={(e) => onAppointmentClick(apt, e)}
+      data-month-event
+      onClick={onAppointmentClick}
       {...(canDrag ? { ...attributes, ...listeners } : {})}
       className={cn(
-        'cursor-pointer w-full text-left block rounded px-1 py-0.5 text-[10px] truncate transition-opacity hover:opacity-90',
+        'cursor-pointer w-full text-left block rounded px-1 py-0.5 text-[10px] truncate transition-opacity hover:opacity-90 pointer-events-auto',
         canDrag && 'cursor-grab active:cursor-grabbing',
         isDragging && 'opacity-50 shadow-lg',
         STATUS_COLORS[apt.status] ?? 'bg-zinc-800'
@@ -2260,108 +2817,5 @@ function MonthDraggableAppointment({
     >
       {apt.client_name ?? 'Cita'}
     </button>
-  )
-}
-
-function YearView({
-  year,
-  appointments,
-  onGoToDay,
-  onAppointmentClick,
-}: {
-  year: Date
-  appointments: AppointmentNormalized[]
-  onGoToDay: (day: Date) => void
-  onAppointmentClick: (apt: AppointmentNormalized, e: React.MouseEvent) => void
-}) {
-  const months = Array.from({ length: 12 }, (_, i) => addMonths(startOfYear(year), i))
-  const appointmentsByDay = useMemo(() => {
-    const map = new Map<string, AppointmentNormalized[]>()
-    appointments.forEach((a) => {
-      const key = format(parseISO(a.start_time), 'yyyy-MM-dd')
-      if (!map.has(key)) map.set(key, [])
-      map.get(key)!.push(a)
-    })
-    return map
-  }, [appointments])
-  const maxCount = Math.max(1, ...Array.from(appointmentsByDay.values()).map((arr) => arr.length))
-  return (
-    <div className="p-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-      {months.map((m) => {
-        const start = startOfMonth(m)
-        const end = endOfMonth(m)
-        const startPad = getDay(start) === 0 ? 6 : getDay(start) - 1
-        const daysInMonth = eachDayOfInterval({ start, end })
-        const pad = Array(startPad).fill(null)
-        const allDays = [...pad, ...daysInMonth]
-        return (
-          <div key={m.toISOString()} className="border border-zinc-800 p-2">
-            <p className="text-xs font-medium text-zinc-100 capitalize mb-2 text-center">
-              {format(m, 'MMMM', { locale: es })}
-            </p>
-            <div className="grid grid-cols-7 gap-0.5">
-              {['L', 'M', 'X', 'J', 'V', 'S', 'D'].map((l) => (
-                <span key={l} className="text-[9px] text-zinc-400 text-center">{l}</span>
-              ))}
-              {allDays.map((d, i) => {
-                if (d === null) return <div key={i} className="aspect-square" />
-                const key = format(d, 'yyyy-MM-dd')
-                const apts = appointmentsByDay.get(key) ?? []
-                const count = apts.length
-                const intensity = maxCount > 0 ? count / maxCount : 0
-                const isToday = isSameDay(d, new Date())
-                return (
-                  <button
-                    key={d.toISOString()}
-                    type="button"
-                    onClick={() => onGoToDay(d)}
-                    className={cn(
-                      'aspect-square rounded-sm flex flex-col items-center justify-start pt-0.5 text-[9px] cursor-pointer transition-opacity hover:opacity-90',
-                      isToday && 'ring-1 ring-blue-500 ring-inset',
-                      count > 0 ? 'bg-blue-900/50 text-blue-200' : 'bg-zinc-950 text-zinc-400'
-                    )}
-                    style={
-                      count > 0
-                        ? { backgroundColor: `rgb(37 99 235 / ${0.15 + intensity * 0.5})`, color: '#1e3a8a' }
-                        : undefined
-                    }
-                    title={
-                      count > 0
-                        ? apts.map((a) => `${a.client_name ?? 'Cita'} ${format(parseISO(a.start_time), 'HH:mm')}`).join('\n')
-                        : format(d, 'd MMM', { locale: es })
-                    }
-                  >
-                    <span className="font-medium">{format(d, 'd')}</span>
-                    {count > 0 && (
-                      <span className="mt-0.5 flex gap-0.5 flex-wrap justify-center max-w-full">
-                        {apts.slice(0, 3).map((a) => (
-                          <span
-                            key={a.id}
-                            className="w-1.5 h-1.5 rounded-full shrink-0"
-                            style={{
-                              backgroundColor:
-                                a.status === 'completed'
-                                  ? 'rgb(16 185 129)'
-                                  : a.status === 'cancelled' || a.status === 'no_show'
-                                    ? 'rgb(107 114 128)'
-                                    : a.status === 'confirmed'
-                                      ? 'rgb(59 130 246)'
-                                      : a.status === 'in_progress'
-                                        ? 'rgb(139 92 246)'
-                                        : 'rgb(245 158 11)',
-                            }}
-                          />
-                        ))}
-                        {count > 3 && <span className="text-[8px]">+{count - 3}</span>}
-                      </span>
-                    )}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-        )
-      })}
-    </div>
   )
 }

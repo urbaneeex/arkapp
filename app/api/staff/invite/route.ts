@@ -10,7 +10,7 @@ const SITE_URL =
     ? `https://${process.env.VERCEL_URL}`
     : 'http://localhost:3000')
 
-const RESEND_FROM = process.env.RESEND_FROM_EMAIL || 'Arkapp <contact@blindxworld.com>'
+const RESEND_FROM = process.env.RESEND_FROM_EMAIL || 'Arkapp <hello@arkapp.es>'
 
 function buildInviteEmailHtml(name: string, inviteUrl: string): string {
   return `
