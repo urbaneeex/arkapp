@@ -1,317 +1,269 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Check, X } from 'lucide-react'
-
-const generateSlug = (name: string) => {
-  return name
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^\w\s-]/g, '')
-    .replace(/\s+/g, '-')
-    .replace(/-+/g, '-')
-    .trim()
+const ERROR_MAP: Record<string, string> = {
+  invalid_credentials: 'Email o contraseña incorrectos',
+  email_not_confirmed: 'Confirma tu email antes de entrar. Revisa tu bandeja de entrada.',
+  user_already_exists: 'Ya existe una cuenta con ese email',
+  weak_password: 'La contraseña no cumple los requisitos mínimos',
+  over_email_send_rate_limit: 'Demasiados intentos. Espera unos minutos e inténtalo de nuevo.',
+  email_address_not_authorized: 'Este email no está autorizado. Usa otro email.',
+  signup_disabled: 'El registro está desactivado temporalmente. Inténtalo más tarde.',
+  anonymous_provider_disabled: 'Registro no disponible. Usa Google o contacta soporte.',
 }
 
-const SLUG_REGEX = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
+function mapAuthError(error: { code?: string; message?: string } | null): string {
+  if (!error) return 'Ha ocurrido un error. Inténtalo de nuevo.'
+  const byCode = error.code ? ERROR_MAP[error.code] : null
+  if (byCode) return byCode
+  const message = (error.message ?? '').toLowerCase()
+  if (message.includes('signups not allowed') || message.includes('signup is disabled')) return ERROR_MAP.signup_disabled
+  if (message.includes('email provider is disabled')) return 'El registro por email está desactivado en Supabase.'
+  if (message.includes('redirect url') || message.includes('not allowed redirect')) return 'URL de redirección no permitida. Revisa la configuración de Supabase.'
+  if (message.includes('rate limit')) return ERROR_MAP.over_email_send_rate_limit
+  if (message.includes('network')) return 'Error de red al registrar. Verifica tu conexión e inténtalo de nuevo.'
+  if (message.includes('already registered') || message.includes('already exists')) return ERROR_MAP.user_already_exists
+  if (message.includes('weak password')) return ERROR_MAP.weak_password
+  if (message.trim().length > 0) return error.message as string
+  return 'Ha ocurrido un error. Inténtalo de nuevo.'
+}
+
+function isValidPassword(password: string) {
+  return password.length >= 8 && /[A-Z]/.test(password) && /\d/.test(password)
+}
+
+function Spinner() {
+  return (
+    <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" aria-hidden>
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+    </svg>
+  )
+}
+
+function GoogleIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden>
+      <path fill="#EA4335" d="M12 10.2v3.9h5.5c-.2 1.3-1.6 3.9-5.5 3.9-3.3 0-6-2.8-6-6.2s2.7-6.2 6-6.2c1.9 0 3.1.8 3.8 1.5l2.6-2.5C16.8 3 14.6 2 12 2 6.9 2 2.8 6.5 2.8 12S6.9 22 12 22c6.9 0 9.2-5 9.2-7.6 0-.5 0-.8-.1-1.2H12z" />
+    </svg>
+  )
+}
 
 export default function RegisterPage() {
-  const router = useRouter()
   const supabase = createClient()
+  const [fullName, setFullName] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [form, setForm] = useState({
-    owner_name: '',
-    owner_phone: '',
-    business_name: '',
-    slug: '',
-    email: '',
-    password: '',
-    confirmPassword: '',
-  })
-  const [slugTouched, setSlugTouched] = useState(false)
-  const [slugExists, setSlugExists] = useState<boolean | null>(null)
+  const [success, setSuccess] = useState('')
+  const [cooldownUntil, setCooldownUntil] = useState(0)
+  const oauthRedirect = useMemo(
+    () => (typeof window !== 'undefined' ? `${window.location.origin}/auth/callback` : undefined),
+    []
+  )
+  const inCooldown = Date.now() < cooldownUntil
+  const disabled = loading || inCooldown
 
-  const updateForm = useCallback((updates: Partial<typeof form>) => {
-    setForm((prev) => {
-      const next = { ...prev, ...updates }
-      if ('business_name' in updates && !slugTouched) {
-        next.slug = generateSlug(next.business_name)
-      }
-      return next
-    })
-  }, [slugTouched])
-
-  const checkSlugUniqueness = useCallback(async (slug: string) => {
-    if (!slug || !SLUG_REGEX.test(slug)) {
-      setSlugExists(null)
-      return
-    }
-    const { data } = await supabase
-      .from('businesses')
-      .select('id')
-      .eq('slug', slug)
-      .maybeSingle()
-    setSlugExists(!!data)
-  }, [])
-
-  const handleSlugChange = (value: string) => {
-    setSlugTouched(true)
-    const normalized = value
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^\w\s-]/g, '')
-      .replace(/\s+/g, '-')
-      .replace(/-+/g, '-')
-      .trim()
-    updateForm({ slug: normalized })
-    if (normalized) {
-      checkSlugUniqueness(normalized)
-    } else {
-      setSlugExists(null)
-    }
-  }
-
-  const passwordsMatch = form.password === form.confirmPassword
-  const passwordsMatchTouched = form.confirmPassword.length > 0
-  const slugValid = form.slug.length > 0 && SLUG_REGEX.test(form.slug)
+  const requirements = [
+    { id: 'len', label: 'Mínimo 8 caracteres', ok: password.length >= 8 },
+    { id: 'upper', label: 'Al menos 1 mayúscula', ok: /[A-Z]/.test(password) },
+    { id: 'num', label: 'Al menos 1 número', ok: /\d/.test(password) },
+  ]
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (disabled) return
     setError('')
+    setSuccess('')
 
-    if (form.password.length < 6) {
-      setError('La contraseña debe tener al menos 6 caracteres')
-      return
-    }
-    if (form.password !== form.confirmPassword) {
-      setError('Las contraseñas no coinciden')
-      return
-    }
-    if (!slugValid) {
-      setError('La URL del negocio no es válida (solo letras, números y guiones)')
-      return
-    }
-    if (slugExists === true) {
-      setError('Este nombre de negocio ya está en uso')
+    if (!isValidPassword(password)) {
+      setError('La contraseña no cumple los requisitos mínimos')
       return
     }
 
     setLoading(true)
     try {
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: form.email,
-        password: form.password,
+      const { error: signUpError } = await supabase.auth.signUp({
+        email: email.trim(),
+        password,
         options: {
           data: {
-            pending_business: {
-              owner_name: form.owner_name.trim(),
-              owner_phone: form.owner_phone.trim(),
-              business_name: form.business_name.trim(),
-              name: form.business_name.trim(),
-              slug: form.slug.trim(),
-            },
+            full_name: fullName.trim(),
           },
           emailRedirectTo: `${typeof window !== 'undefined' ? window.location.origin : ''}/auth/callback`,
         },
       })
-
-      if (authError) {
-        if (authError.message.includes('already registered') || authError.message.includes('already exists')) {
-          setError('Este email ya está registrado')
-        } else {
-          setError(authError.message)
-        }
-        setLoading(false)
-        return
-      }
-
-      if (!authData.user) {
-        setError('No se pudo crear la cuenta. Inténtalo de nuevo.')
-        setLoading(false)
-        return
-      }
-
-      if (authData.session) {
-        router.push('/dashboard')
-        router.refresh()
-        return
-      }
-
-      router.push('/register/check-email')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error inesperado')
-    } finally {
       setLoading(false)
+
+      if (signUpError) {
+        console.warn('[register] signUpError raw:', signUpError)
+        console.warn('[register] signUpError:', {
+          code: signUpError.code,
+          message: signUpError.message,
+          status: (signUpError as { status?: number }).status,
+        })
+        setError(mapAuthError(signUpError))
+        setPassword('')
+        setCooldownUntil(Date.now() + 3000)
+        return
+      }
+    } catch (unexpectedError) {
+      setLoading(false)
+      console.warn('[register] unexpected signUp error:', unexpectedError)
+      setError('Ha ocurrido un error. Inténtalo de nuevo.')
+      setPassword('')
+      setCooldownUntil(Date.now() + 3000)
+      return
+    }
+
+    setSuccess('Revisa tu email para confirmar tu cuenta')
+  }
+
+  const signInWithGoogle = async () => {
+    if (disabled) return
+    setError('')
+    setSuccess('')
+    const { error: oauthError } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: oauthRedirect,
+        queryParams: {
+          prompt: 'select_account',
+          access_type: 'offline',
+        },
+      },
+    })
+    if (oauthError) {
+      setError(mapAuthError(oauthError))
+      setCooldownUntil(Date.now() + 3000)
     }
   }
 
   return (
-    <div className="bg-zinc-900 rounded-xl shadow-lg p-6 sm:p-8 w-full max-w-md mx-auto">
-      <h1 className="text-2xl font-bold text-zinc-100 mb-2">Crear cuenta</h1>
-      <p className="text-zinc-400 mb-6">
-        Completa los datos y empieza a gestionar tu negocio
-      </p>
+    <div className="w-full max-w-md rounded-2xl bg-[#1c1c1e] p-8 shadow-lg">
+      <h1 className="mb-2 text-[28px] font-bold text-white">Crear cuenta</h1>
+      <p className="mb-6 text-[15px] text-[#8e8e93]">Empieza con Arkapp en segundos</p>
 
-      <form onSubmit={handleSubmit} className="space-y-5">
-        {error && (
-          <div className="p-3 rounded-lg bg-red-950/50 text-red-300 text-sm">
-            {error}
-          </div>
-        )}
+      <div className="space-y-3">
+        <button
+          type="button"
+          onClick={signInWithGoogle}
+          disabled={disabled}
+          className="flex h-11 w-full items-center justify-center gap-2 rounded-full border border-[#3a3a3c] bg-[#2c2c2e] text-sm font-medium text-white transition-colors hover:bg-[#3a3a3c] disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <GoogleIcon />
+          Continuar con Google
+        </button>
+      </div>
+
+      <div className="my-6 flex items-center gap-3 text-xs text-[#8e8e93]">
+        <span className="h-px flex-1 bg-[#3a3a3c]" />
+        <span>o continúa con email</span>
+        <span className="h-px flex-1 bg-[#3a3a3c]" />
+      </div>
+
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {error && <div className="rounded-lg bg-red-950/50 p-3 text-sm text-red-300">{error}</div>}
+        {success && <div className="rounded-lg bg-emerald-950/50 p-3 text-sm text-emerald-300">{success}</div>}
 
         <div>
-          <Label htmlFor="owner_name">Tu nombre completo</Label>
-          <Input
-            id="owner_name"
+          <label htmlFor="fullName" className="text-sm text-[#aeaeb2]">
+            Nombre completo
+          </label>
+          <input
+            id="fullName"
             type="text"
-            value={form.owner_name}
-            onChange={(e) => updateForm({ owner_name: e.target.value })}
-            placeholder="Juan Pérez"
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
             required
-            className="mt-1"
+            className="mt-1 h-11 w-full rounded-[10px] border border-[#3a3a3c] bg-[#2c2c2e] px-3 text-white placeholder:text-[#6b6b6d] outline-none focus:border-[#3b82f6]"
           />
         </div>
 
         <div>
-          <Label htmlFor="owner_phone">Tu teléfono</Label>
-          <Input
-            id="owner_phone"
-            type="tel"
-            value={form.owner_phone}
-            onChange={(e) => updateForm({ owner_phone: e.target.value })}
-            placeholder="+34 612 34 56 78"
-            required
-            className="mt-1"
-          />
-        </div>
-
-        <div>
-          <Label htmlFor="business_name">Nombre de tu negocio</Label>
-          <Input
-            id="business_name"
-            type="text"
-            value={form.business_name}
-            onChange={(e) => {
-              const v = e.target.value
-              updateForm({ business_name: v })
-              if (!slugTouched) {
-                const newSlug = generateSlug(v)
-                if (newSlug) checkSlugUniqueness(newSlug)
-                else setSlugExists(null)
-              }
-            }}
-            placeholder="Mi Empresa"
-            required
-            className="mt-1"
-          />
-        </div>
-
-        <div>
-          <Label htmlFor="slug">URL de tu negocio</Label>
-          <Input
-            id="slug"
-            type="text"
-            value={form.slug}
-            onChange={(e) => handleSlugChange(e.target.value)}
-            placeholder="mi-empresa"
-            required
-            className="mt-1 font-mono text-sm"
-          />
-          <p className="mt-1.5 text-xs text-zinc-400">
-            tuapp.com/book/{form.slug || 'tu-slug'}
-          </p>
-          {form.slug.length > 0 && !SLUG_REGEX.test(form.slug) && (
-            <p className="mt-1 text-xs text-amber-600">
-              Solo letras minúsculas, números y guiones
-            </p>
-          )}
-          {slugExists === true && (
-            <p className="mt-1 text-xs text-red-600 flex items-center gap-1">
-              <X className="w-3.5 h-3.5" /> Este nombre ya está en uso
-            </p>
-          )}
-          {slugExists === false && slugValid && (
-            <p className="mt-1 text-xs text-emerald-600 flex items-center gap-1">
-              <Check className="w-3.5 h-3.5" /> URL disponible
-            </p>
-          )}
-        </div>
-
-        <div>
-          <Label htmlFor="email">Email</Label>
-          <Input
+          <label htmlFor="email" className="text-sm text-[#aeaeb2]">
+            Email
+          </label>
+          <input
             id="email"
             type="email"
-            value={form.email}
-            onChange={(e) => updateForm({ email: e.target.value })}
-            placeholder="tu@email.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
             required
-            className="mt-1"
+            className="mt-1 h-11 w-full rounded-[10px] border border-[#3a3a3c] bg-[#2c2c2e] px-3 text-white placeholder:text-[#6b6b6d] outline-none focus:border-[#3b82f6]"
           />
         </div>
 
         <div>
-          <Label htmlFor="password">Contraseña</Label>
-          <Input
-            id="password"
-            type="password"
-            value={form.password}
-            onChange={(e) => updateForm({ password: e.target.value })}
-            placeholder="Mínimo 6 caracteres"
-            required
-            minLength={6}
-            className="mt-1"
-          />
-        </div>
-
-        <div>
-          <Label htmlFor="confirmPassword">Confirmar contraseña</Label>
+          <label htmlFor="password" className="text-sm text-[#aeaeb2]">
+            Contraseña
+          </label>
           <div className="relative mt-1">
-            <Input
-              id="confirmPassword"
-              type="password"
-              value={form.confirmPassword}
-              onChange={(e) => updateForm({ confirmPassword: e.target.value })}
-              placeholder="Repite tu contraseña"
+            <input
+              id="password"
+              type={showPassword ? 'text' : 'password'}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
               required
-              className="pr-9"
+              className="h-11 w-full rounded-[10px] border border-[#3a3a3c] bg-[#2c2c2e] px-3 pr-10 text-white placeholder:text-[#6b6b6d] outline-none focus:border-[#3b82f6]"
             />
-            {passwordsMatchTouched && (
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400">
-                {passwordsMatch ? (
-                  <Check className="w-5 h-5 text-emerald-600" />
-                ) : (
-                  <X className="w-5 h-5 text-red-500" />
-                )}
-              </span>
-            )}
+            <button
+              type="button"
+              tabIndex={-1}
+              aria-label={showPassword ? 'Ocultar' : 'Ver'}
+              onClick={() => setShowPassword((v) => !v)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-[#6b6b6d] hover:text-[#aeaeb2] transition-colors"
+            >
+              {!showPassword ? (
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+                  fill="none" stroke="currentColor" strokeWidth="2"
+                  strokeLinecap="round" strokeLinejoin="round"
+                  className="h-4 w-4" aria-hidden>
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                  <circle cx="12" cy="12" r="3"/>
+                </svg>
+              ) : (
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+                  fill="none" stroke="currentColor" strokeWidth="2"
+                  strokeLinecap="round" strokeLinejoin="round"
+                  className="h-4 w-4" aria-hidden>
+                  <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8
+                    a18.45 18.45 0 015.06-5.94"/>
+                  <path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8
+                    a18.5 18.5 0 01-2.16 3.19"/>
+                  <line x1="1" y1="1" x2="23" y2="23"/>
+                </svg>
+              )}
+            </button>
           </div>
-          {passwordsMatchTouched && !passwordsMatch && (
-            <p className="mt-1 text-xs text-red-600">Las contraseñas no coinciden</p>
+          {password.length > 0 && (
+            <ul className="mt-2 space-y-1 text-xs">
+              {requirements.map((req) => (
+                <li key={req.id} className={req.ok ? 'text-emerald-400' : 'text-[#8e8e93]'}>
+                  {req.ok ? '✓' : '•'} {req.label}
+                </li>
+              ))}
+            </ul>
           )}
         </div>
 
-        <Button
+        <button
           type="submit"
-          className="w-full h-12 text-base"
-          disabled={loading || slugExists === true || !passwordsMatch}
+          disabled={disabled}
+          className="flex h-11 w-full items-center justify-center gap-2 rounded-full bg-[#3b82f6] text-sm font-medium text-white transition-colors hover:bg-[#2563eb] disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {loading ? 'Creando cuenta...' : 'Crear mi cuenta'}
-        </Button>
+          {loading && <Spinner />}
+          {loading ? 'Creando cuenta...' : inCooldown ? 'Espera 3 segundos...' : 'Crear cuenta'}
+        </button>
       </form>
 
-      <p className="mt-6 text-center text-sm text-zinc-400">
+      <p className="mt-6 text-center text-sm text-[#8e8e93]">
         ¿Ya tienes cuenta?{' '}
-        <Link href="/login" className="text-[#3B82F6] font-medium hover:underline cursor-pointer">
+        <Link href="/login" className="text-[#3b82f6] hover:underline">
           Inicia sesión
         </Link>
       </p>

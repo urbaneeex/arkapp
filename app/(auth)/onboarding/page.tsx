@@ -1,0 +1,182 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client'
+
+function Spinner() {
+  return (
+    <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" aria-hidden>
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+    </svg>
+  )
+}
+
+function generateSlug(name: string): string {
+  const base = name
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40)
+  const suffix = Math.random().toString(36).substring(2, 6)
+  return `${base || 'negocio'}-${suffix}`
+}
+
+export default function OnboardingPage() {
+  const router = useRouter()
+  const supabase = createClient()
+
+  const [userId, setUserId] = useState('')
+  const [businessName, setBusinessName] = useState('')
+  const [ownerName, setOwnerName] = useState('')
+  const [ownerPhone, setOwnerPhone] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [checking, setChecking] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    const load = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      if (!user) {
+        router.replace('/login')
+        return
+      }
+
+      setOwnerName((user.user_metadata?.full_name as string) ?? '')
+      setUserId(user.id)
+
+      const { data: existingBusiness } = await supabase
+        .from('businesses')
+        .select('id')
+        .eq('owner_uid', user.id)
+        .maybeSingle()
+
+      if (existingBusiness?.id) {
+        router.replace('/dashboard/calendar')
+        return
+      }
+
+      setChecking(false)
+    }
+
+    load()
+  }, [router, supabase])
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+
+    if (!businessName.trim()) {
+      setError('El nombre del negocio es obligatorio')
+      return
+    }
+
+    if (!ownerName.trim()) {
+      setError('Tu nombre es obligatorio')
+      return
+    }
+
+    if (!userId) {
+      setError('No se pudo validar tu sesión. Vuelve a iniciar sesión.')
+      return
+    }
+
+    setLoading(true)
+    const slug = generateSlug(businessName)
+
+    const { error: insertError } = await supabase.from('businesses').insert({
+      name: businessName.trim(),
+      owner_uid: userId,
+      slug,
+      owner_name: ownerName.trim(),
+      owner_phone: ownerPhone.trim() || null,
+      onboarding_completed: true,
+    })
+
+    if (insertError) {
+      setError('Ha ocurrido un error. Inténtalo de nuevo.')
+      setLoading(false)
+      return
+    }
+
+    router.push('/dashboard/calendar')
+  }
+
+  if (checking) {
+    return (
+      <div className="w-full max-w-md rounded-2xl bg-[#1c1c1e] p-8 shadow-lg">
+        <p className="text-[15px] text-[#8e8e93]">Comprobando tu cuenta...</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="w-full max-w-md rounded-2xl bg-[#1c1c1e] p-8 shadow-lg">
+      <h1 className="mb-2 text-[28px] font-bold text-white">Configura tu negocio</h1>
+      <p className="mb-6 text-[15px] text-[#8e8e93]">Un último paso antes de entrar a tu panel</p>
+
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {error && <div className="rounded-lg bg-red-950/50 p-3 text-sm text-red-300">{error}</div>}
+
+        <div>
+          <label htmlFor="businessName" className="text-sm text-[#aeaeb2]">
+            Nombre de tu negocio
+          </label>
+          <input
+            id="businessName"
+            type="text"
+            required
+            value={businessName}
+            onChange={(e) => setBusinessName(e.target.value)}
+            placeholder="Ej. Peluquería Carmen"
+            className="mt-1 h-11 w-full rounded-[10px] border border-[#3a3a3c] bg-[#2c2c2e] px-3 text-white outline-none focus:border-[#3b82f6]"
+          />
+        </div>
+
+        <div>
+          <label htmlFor="ownerName" className="text-sm text-[#aeaeb2]">
+            Tu nombre
+          </label>
+          <input
+            id="ownerName"
+            type="text"
+            required
+            value={ownerName}
+            onChange={(e) => setOwnerName(e.target.value)}
+            placeholder="Tu nombre completo"
+            className="mt-1 h-11 w-full rounded-[10px] border border-[#3a3a3c] bg-[#2c2c2e] px-3 text-white outline-none focus:border-[#3b82f6]"
+          />
+        </div>
+
+        <div>
+          <label htmlFor="ownerPhone" className="text-sm text-[#aeaeb2]">
+            Teléfono de contacto
+          </label>
+          <input
+            id="ownerPhone"
+            type="tel"
+            value={ownerPhone}
+            onChange={(e) => setOwnerPhone(e.target.value)}
+            placeholder="+34 600 000 000"
+            className="mt-1 h-11 w-full rounded-[10px] border border-[#3a3a3c] bg-[#2c2c2e] px-3 text-white outline-none focus:border-[#3b82f6]"
+          />
+        </div>
+
+        <button
+          type="submit"
+          disabled={loading}
+          className="flex h-11 w-full items-center justify-center gap-2 rounded-full bg-[#3b82f6] text-sm font-medium text-white transition-colors hover:bg-[#2563eb] disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {loading && <Spinner />}
+          {loading ? 'Creando...' : 'Entrar a mi panel →'}
+        </button>
+      </form>
+    </div>
+  )
+}
