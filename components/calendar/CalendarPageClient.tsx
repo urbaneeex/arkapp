@@ -1,10 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Plus } from 'lucide-react'
 import { CalendarView } from '@/components/calendar/CalendarView'
 import { usePermissions } from '@/hooks/usePermissions'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 
 type AppointmentRow = {
   id: string
@@ -45,6 +46,16 @@ export function CalendarPageClient({
   const { hasPermission, loading } = usePermissions()
   const canCreateAppointments = hasPermission('appointments_create')
   const [triggerNewPanel, setTriggerNewPanel] = useState(false)
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const pathname = usePathname()
+
+  useEffect(() => {
+    if (!canCreateAppointments) return
+    if (searchParams.get('new') !== '1') return
+    setTriggerNewPanel(true)
+    router.replace(pathname, { scroll: false })
+  }, [canCreateAppointments, searchParams, router, pathname])
 
   if (loading) {
     return (

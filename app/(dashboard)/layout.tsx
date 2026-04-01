@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { GlobalHeader } from '@/components/layout/GlobalHeader'
 import { Sidebar } from '@/components/layout/Sidebar'
+import { MobileBottomNav } from '@/components/layout/MobileBottomNav'
 import { DashboardMain } from '@/components/layout/DashboardMain'
 import { PermissionsProvider } from '@/contexts/PermissionsContext'
 import { getBusinessAccess } from '@/lib/supabase/business'
@@ -38,6 +39,7 @@ export default async function DashboardLayout({
         <GlobalHeader />
         <Sidebar />
         <DashboardMain>{children}</DashboardMain>
+        <MobileBottomNav />
       </div>
     </PermissionsProvider>
   )
