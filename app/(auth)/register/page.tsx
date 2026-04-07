@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
+import { useToastFeedback } from '@/hooks/use-toast-feedback'
 const ERROR_MAP: Record<string, string> = {
   invalid_credentials: 'Email o contraseña incorrectos',
   email_not_confirmed: 'Confirma tu email antes de entrar. Revisa tu bandeja de entrada.',
@@ -67,6 +68,7 @@ export default function RegisterPage() {
   )
   const inCooldown = Date.now() < cooldownUntil
   const disabled = loading || inCooldown
+  useToastFeedback({ error, success })
 
   const requirements = [
     { id: 'len', label: 'Mínimo 8 caracteres', ok: password.length >= 8 },

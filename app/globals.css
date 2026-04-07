@@ -53,3 +53,23 @@ html.light body {
 *::-webkit-scrollbar-thumb:hover {
   background: #52525b;
 }
+
+/* Iconos nativos de fecha/hora (calendario, reloj) en UI oscura — forzar blanco */
+.datetime-input-dark {
+  color-scheme: dark;
+}
+
+.datetime-input-dark::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 1 !important;
+  width: 1.125rem;
+  height: 1.125rem;
+  /* Fuerza el glifo del UA a blanco (mejor que invert suelto en Chromium/Safari) */
+  filter: brightness(0) invert(1);
+}
+
+.datetime-input-dark::-moz-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 1 !important;
+  filter: brightness(0) invert(1);
+}

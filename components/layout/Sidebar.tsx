@@ -11,6 +11,7 @@ import {
   Settings,
   BarChart3,
   DollarSign,
+  Clock,
 } from 'lucide-react'
 import { useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
@@ -23,6 +24,7 @@ import type { PermissionKey } from '@/lib/permissions'
 
 const mainNavItems: { href: string; label: string; icon: typeof Home; permission?: PermissionKey }[] = [
   { href: '/dashboard', label: 'Dashboard', icon: Home },
+  { href: '/dashboard/fichar', label: 'Fichar', icon: Clock },
   { href: '/dashboard/calendar', label: 'Calendario', icon: Calendar, permission: 'calendar_view' },
   { href: '/dashboard/clients', label: 'Clientes', icon: Users, permission: 'clients_view' },
   { href: '/dashboard/services', label: 'Servicios', icon: Briefcase, permission: 'services_view' },

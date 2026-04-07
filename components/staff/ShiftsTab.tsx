@@ -1,11 +1,11 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { format, startOfWeek, addWeeks, subWeeks, addDays, isToday, parseISO, eachDayOfInterval, isSameDay, getDay } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { ChevronLeft, ChevronRight, Edit2, Plus, Calendar, Clock, AlertTriangle } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, Calendar, Clock, AlertTriangle, Loader2, PenLine } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Avatar, getInitials } from '@/components/ui/avatar'
@@ -23,6 +23,7 @@ import { cn } from '@/lib/utils'
 import { timeToMinutes } from '@/lib/availability'
 import Link from 'next/link'
 import type { Database } from '@/types/database.types'
+import { notifyError, notifySuccess } from '@/lib/notify'
 
 type StaffRow = Database['public']['Tables']['staff']['Row']
 
@@ -34,10 +35,47 @@ type Shift = {
   start_time: string
   end_time: string
   duration_hours: number
-  shift_type: 'regular' | 'overtime' | 'holiday' | 'day_off'
+  shift_type: 'regular' | 'overtime' | 'holiday' | 'day_off' | 'vacation'
   notes: string | null
   is_recurring: boolean
   recurrence_pattern: any
+}
+
+const WORKED_SHIFT_TYPES: Shift['shift_type'][] = ['regular', 'overtime']
+
+/** PostgREST suele fallar con .eq en jsonb; comparamos en cliente con claves ordenadas. */
+function parseJsonField(value: unknown): unknown {
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value) as unknown
+    } catch {
+      return value
+    }
+  }
+  return value
+}
+
+function normalizeJsonForCompare(value: unknown): unknown {
+  const v = parseJsonField(value)
+  if (v === null || typeof v !== 'object') return v
+  if (Array.isArray(v)) return v.map(normalizeJsonForCompare)
+  const obj = v as Record<string, unknown>
+  const sorted: Record<string, unknown> = {}
+  for (const key of Object.keys(obj).sort()) {
+    sorted[key] = normalizeJsonForCompare(obj[key])
+  }
+  return sorted
+}
+
+function recurrencePatternsEqual(a: unknown, b: unknown): boolean {
+  try {
+    return (
+      JSON.stringify(normalizeJsonForCompare(a)) ===
+      JSON.stringify(normalizeJsonForCompare(b))
+    )
+  } catch {
+    return false
+  }
 }
 
 export function ShiftsTab({
@@ -49,7 +87,10 @@ export function ShiftsTab({
 }) {
   const router = useRouter()
   const supabase = createClient()
-  const [selectedStaffId, setSelectedStaffId] = useState<string>(staff[0]?.id || '')
+  type StaffStatusFilter = 'activos' | 'inactivos'
+  const [staffStatusFilter, setStaffStatusFilter] =
+    useState<StaffStatusFilter>('activos')
+  const [modalStaffId, setModalStaffId] = useState<string>('')
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: 1 }))
   const [shifts, setShifts] = useState<Shift[]>([])
   const [loading, setLoading] = useState(true)
@@ -62,6 +103,14 @@ export function ShiftsTab({
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
   const [selectedShift, setSelectedShift] = useState<Shift | null>(null)
 
+  const visibleStaff = useMemo(() => {
+    return [...staff]
+      .filter((s) =>
+        staffStatusFilter === 'activos' ? !s.deleted_at : !!s.deleted_at
+      )
+      .sort((a, b) => (a.name ?? '').localeCompare(b.name ?? '', 'es'))
+  }, [staff, staffStatusFilter])
+
   const weekDays = useMemo(() => {
     return eachDayOfInterval({
       start: weekStart,
@@ -69,20 +118,25 @@ export function ShiftsTab({
     })
   }, [weekStart])
 
-  const selectedStaff = useMemo(() => {
-    return staff.find((s) => s.id === selectedStaffId)
-  }, [staff, selectedStaffId])
-
   const weekShifts = useMemo(() => {
-    if (!selectedStaffId) return []
     return shifts.filter((shift) => {
       const shiftDate = parseISO(shift.date)
       return weekDays.some((day) => isSameDay(shiftDate, day))
     })
-  }, [shifts, weekDays, selectedStaffId])
+  }, [shifts, weekDays])
 
   const totalWeekHours = useMemo(() => {
-    return weekShifts.reduce((sum, shift) => sum + (shift.duration_hours || 0), 0)
+    return weekShifts
+      .filter((s) => WORKED_SHIFT_TYPES.includes(s.shift_type))
+      .reduce((sum, shift) => sum + (shift.duration_hours || 0), 0)
+  }, [weekShifts])
+
+  const totalWeekDaysOff = useMemo(() => {
+    return weekShifts.filter((s) => s.shift_type === 'day_off').length
+  }, [weekShifts])
+
+  const totalWeekVacationDays = useMemo(() => {
+    return weekShifts.filter((s) => s.shift_type === 'vacation').length
   }, [weekShifts])
 
   const shiftsByDate = useMemo(() => {
@@ -97,15 +151,19 @@ export function ShiftsTab({
     return map
   }, [weekShifts])
 
-  useEffect(() => {
-    if (selectedStaffId) {
-      loadShifts()
-    }
-  }, [selectedStaffId, weekStart])
+  const loadShifts = useCallback(async () => {
+    const ids = staff
+      .filter((s) =>
+        staffStatusFilter === 'activos' ? !s.deleted_at : !!s.deleted_at
+      )
+      .map((s) => s.id)
 
-  const loadShifts = async () => {
-    if (!selectedStaffId) return
-    
+    if (ids.length === 0) {
+      setShifts([])
+      setLoading(false)
+      return
+    }
+
     setLoading(true)
     setError('')
     
@@ -114,7 +172,7 @@ export function ShiftsTab({
       const { data, error: err } = await supabase
         .from('staff_shifts')
         .select('*')
-        .eq('staff_id', selectedStaffId)
+        .in('staff_id', ids)
         .gte('date', format(weekStart, 'yyyy-MM-dd'))
         .lte('date', format(weekEnd, 'yyyy-MM-dd'))
         .order('date')
@@ -127,7 +185,11 @@ export function ShiftsTab({
     } finally {
       setLoading(false)
     }
-  }
+  }, [staff, staffStatusFilter, weekStart])
+
+  useEffect(() => {
+    void loadShifts()
+  }, [loadShifts])
 
   const goToPreviousWeek = () => {
     setWeekStart(subWeeks(weekStart, 1))
@@ -141,7 +203,8 @@ export function ShiftsTab({
     setWeekStart(startOfWeek(new Date(), { weekStartsOn: 1 }))
   }
 
-  const handleCellClick = (date: Date, shift?: Shift) => {
+  const handleCellClick = (staffMember: StaffRow, date: Date, shift?: Shift) => {
+    setModalStaffId(staffMember.id)
     setSelectedDate(date)
     setSelectedShift(shift || null)
     setShowShiftModal(true)
@@ -168,12 +231,16 @@ export function ShiftsTab({
   const getDayHours = (date: Date): number => {
     const dateKey = format(date, 'yyyy-MM-dd')
     const dayShifts = shiftsByDate.get(dateKey) || []
-    return dayShifts.reduce((sum, shift) => sum + (shift.duration_hours || 0), 0)
+    return dayShifts
+      .filter((s) => WORKED_SHIFT_TYPES.includes(s.shift_type))
+      .reduce((sum, shift) => sum + (shift.duration_hours || 0), 0)
   }
 
   const formatTimeRange = (start: string, end: string): string => {
     return `${start} - ${end}`
   }
+
+  const staffIdForModals = modalStaffId || visibleStaff[0]?.id || ''
 
   if (staff.length === 0) {
     return (
@@ -197,43 +264,37 @@ export function ShiftsTab({
             <div className="flex-1">
               <CardTitle className="text-xl mb-2">Turnos y horarios</CardTitle>
               <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                <div className="flex-1">
-                  <Label htmlFor="staff-select" className="text-sm text-zinc-400 mb-1 block">
-                    Empleado
+                <div className="flex-1 max-w-xs">
+                  <Label htmlFor="staff-status-filter" className="text-sm text-zinc-400 mb-1 block">
+                    Empleados
                   </Label>
                   <select
-                    id="staff-select"
-                    value={selectedStaffId}
-                    onChange={(e) => setSelectedStaffId(e.target.value)}
+                    id="staff-status-filter"
+                    value={staffStatusFilter}
+                    onChange={(e) =>
+                      setStaffStatusFilter(e.target.value as StaffStatusFilter)
+                    }
                     className="w-full h-10 rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#3B82F6] focus:ring-offset-2"
                   >
-                    {staff
-                      .filter((s) => s.is_active !== false)
-                      .map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.name}
-                        </option>
-                      ))}
+                    <option value="activos">Activos</option>
+                    <option value="inactivos">Inactivos</option>
                   </select>
                 </div>
-                {selectedStaff && (
-                  <div className="flex items-center gap-3">
-                    <Avatar name={selectedStaff.name} src={selectedStaff.avatar_url} size="md" />
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-zinc-100">{selectedStaff.name}</span>
-                        <Link href={`/dashboard/staff/${selectedStaff.id}/edit`}>
-                          <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
-                            <Edit2 className="h-3 w-3" />
-                          </Button>
-                        </Link>
-                      </div>
-                      <p className="text-sm text-zinc-400">
-                        {totalWeekHours.toFixed(1)} h esta semana
-                      </p>
-                    </div>
-                  </div>
-                )}
+                <div className="flex flex-col justify-center text-sm text-zinc-400">
+                  <span>
+                    {visibleStaff.length}{' '}
+                    {visibleStaff.length === 1 ? 'empleado' : 'empleados'} ·{' '}
+                    <span className="text-zinc-200 font-medium">
+                      {totalWeekHours.toFixed(1)} h trabajadas
+                    </span>
+                    {totalWeekDaysOff > 0 && (
+                      <span className="ml-2 text-zinc-500">· {totalWeekDaysOff} días libres</span>
+                    )}
+                    {totalWeekVacationDays > 0 && (
+                      <span className="ml-2 text-blue-400">· {totalWeekVacationDays} días vacaciones</span>
+                    )}
+                  </span>
+                </div>
               </div>
             </div>
             <div className="flex flex-col gap-2">
@@ -278,10 +339,12 @@ export function ShiftsTab({
 
           {/* Grid semanal */}
           <div className="overflow-x-auto">
-            <div className="min-w-[800px]">
+            <div className="min-w-[920px]">
               {/* Header de días */}
-              <div className="grid grid-cols-8 gap-2 mb-2">
-                <div className="font-medium text-zinc-300"></div>
+              <div className="grid gap-2 mb-2 grid-cols-[minmax(12rem,18rem)_repeat(7,minmax(0,1fr))]">
+                <div className="font-medium text-xs text-zinc-500 pt-2 px-2 self-end pb-1">
+                  Empleado
+                </div>
                 {weekDays.map((day) => {
                   const dayHours = getDayHours(day)
                   const isCurrentDay = isToday(day)
@@ -290,7 +353,7 @@ export function ShiftsTab({
                       key={day.toISOString()}
                       className={cn(
                         'text-center p-2 rounded-lg border',
-                        isCurrentDay ? 'bg-blue-900/50 border-blue-700' : 'bg-zinc-950 border-zinc-800'
+                        isCurrentDay ? 'bg-[#3B82F6]/15 border-[#3B82F6]/45' : 'bg-zinc-950 border-zinc-800'
                       )}
                     >
                       <div className="text-xs font-medium text-zinc-400 uppercase">
@@ -307,62 +370,116 @@ export function ShiftsTab({
                 })}
               </div>
 
-              {/* Fila del empleado */}
-              {selectedStaff && (
-                <div className="grid grid-cols-8 gap-2">
-                  <div className="flex items-center gap-2 p-2">
-                    <Avatar name={selectedStaff.name} src={selectedStaff.avatar_url} size="sm" />
-                    <span className="font-medium text-zinc-100 text-sm">{selectedStaff.name}</span>
-                  </div>
-                  {weekDays.map((day) => {
-                    const dateKey = format(day, 'yyyy-MM-dd')
-                    const dayShifts = shiftsByDate.get(dateKey) || []
-                    const isCurrentDay = isToday(day)
-                    
-                    return (
-                      <div
-                        key={day.toISOString()}
-                        className={cn(
-                          'min-h-[80px] p-2 rounded-lg border cursor-pointer transition-colors',
-                          isCurrentDay ? 'border-blue-300' : 'border-zinc-800',
-                          dayShifts.length === 0
-                            ? 'bg-zinc-950 hover:bg-zinc-800'
-                            : 'bg-blue-900/50 hover:bg-blue-800'
-                        )}
-                        onClick={() => handleCellClick(day, dayShifts[0] || undefined)}
-                      >
-                        {dayShifts.length > 0 ? (
-                          <div className="space-y-1">
-                            {dayShifts.map((shift) => (
-                              <div
-                                key={shift.id}
-                                className={cn(
-                                  'text-xs p-1.5 rounded',
-                                  shift.shift_type === 'day_off'
-                                    ? 'bg-zinc-700 text-zinc-300'
-                                    : shift.shift_type === 'overtime'
-                                    ? 'bg-orange-100 text-orange-800'
-                                    : 'bg-blue-200 text-blue-900'
-                                )}
-                              >
-                                <div className="font-medium">
-                                  {formatTimeRange(shift.start_time.slice(0, 5), shift.end_time.slice(0, 5))}
-                                </div>
-                                {shift.shift_type === 'day_off' && (
-                                  <div className="text-[10px] mt-0.5">Día libre</div>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="flex items-center justify-center h-full text-zinc-400 text-xs">
-                            <Plus className="h-4 w-4" />
-                          </div>
-                        )}
+              {/* Una fila por empleado */}
+              {visibleStaff.length === 0 ? (
+                <p className="text-sm text-zinc-500 py-6 text-center">
+                  No hay empleados {staffStatusFilter === 'activos' ? 'activos' : 'inactivos'}.
+                </p>
+              ) : (
+                visibleStaff.map((member) => {
+                  const isRowInactive = !!member.deleted_at
+                  const rowClass = isRowInactive
+                    ? 'border-l-2 border-l-zinc-600 bg-zinc-950/70 shadow-[inset_0_0_0_9999px_rgba(9,9,11,0.35)]'
+                    : ''
+                  const memberShifts = weekShifts.filter((sh) => sh.staff_id === member.id)
+                  const memberWeekHours = memberShifts
+                    .filter((s) => WORKED_SHIFT_TYPES.includes(s.shift_type))
+                    .reduce((sum, s) => sum + (s.duration_hours || 0), 0)
+                  const memberDaysOff = memberShifts.filter((s) => s.shift_type === 'day_off').length
+                  const memberVacationDays = memberShifts.filter((s) => s.shift_type === 'vacation').length
+                  return (
+                    <div
+                      key={member.id}
+                      className={cn(
+                        'grid gap-2 mb-2 rounded-lg grid-cols-[minmax(12rem,18rem)_repeat(7,minmax(0,1fr))]',
+                        rowClass
+                      )}
+                    >
+                      <div className="flex items-start gap-2 p-2 min-w-0">
+                        <Avatar
+                          name={member.name}
+                          src={member.avatar_url}
+                          size="sm"
+                          className="shrink-0 mt-0.5"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p
+                            className={cn(
+                              'text-sm font-medium leading-snug break-words whitespace-normal [overflow-wrap:anywhere]',
+                              isRowInactive ? 'text-zinc-400' : 'text-zinc-100'
+                            )}
+                          >
+                            {member.name}
+                          </p>
+                          <p className="text-xs text-zinc-400 mt-1.5 tabular-nums">
+                            {memberWeekHours.toFixed(1)} h
+                            {memberDaysOff > 0 && (
+                              <span className="ml-1 text-zinc-500">· {memberDaysOff}d libre</span>
+                            )}
+                            {memberVacationDays > 0 && (
+                              <span className="ml-1 text-blue-400">· {memberVacationDays}d vac.</span>
+                            )}
+                          </p>
+                        </div>
                       </div>
-                    )
-                  })}
-                </div>
+                      {weekDays.map((day) => {
+                        const dateKey = format(day, 'yyyy-MM-dd')
+                        const dayShifts = (shiftsByDate.get(dateKey) || []).filter(
+                          (sh) => sh.staff_id === member.id
+                        )
+                        const isCurrentDay = isToday(day)
+
+                        return (
+                          <div
+                            key={`${member.id}-${day.toISOString()}`}
+                            className={cn(
+                              'min-h-[80px] p-2 rounded-lg border cursor-pointer transition-colors',
+                              isCurrentDay ? 'border-[#3B82F6]/55' : 'border-zinc-800',
+                              dayShifts.length === 0
+                                ? 'bg-zinc-950 hover:bg-zinc-800'
+                                : 'bg-[#3B82F6]/20 hover:bg-[#3B82F6]/35'
+                            )}
+                            onClick={() =>
+                              handleCellClick(member, day, dayShifts[0] || undefined)
+                            }
+                          >
+                            {dayShifts.length > 0 ? (
+                              <div className="space-y-1">
+                                {dayShifts.map((shift) => (
+                                  <div
+                                    key={shift.id}
+                                    className={cn(
+                                      'text-xs p-1.5 rounded',
+                                      shift.shift_type === 'day_off'
+                                        ? 'bg-zinc-700 text-zinc-300'
+                                        : shift.shift_type === 'overtime'
+                                          ? 'bg-orange-100 text-orange-800'
+                                          : 'bg-[#3B82F6]/40 text-white'
+                                    )}
+                                  >
+                                    <div className="font-medium">
+                                      {formatTimeRange(
+                                        shift.start_time.slice(0, 5),
+                                        shift.end_time.slice(0, 5)
+                                      )}
+                                    </div>
+                                    {shift.shift_type === 'day_off' && (
+                                      <div className="text-[10px] mt-0.5">Día libre</div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="flex items-center justify-center h-full text-zinc-400 text-xs">
+                                <Plus className="h-4 w-4" />
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )
+                })
               )}
             </div>
           </div>
@@ -374,7 +491,7 @@ export function ShiftsTab({
         open={showShiftModal}
         onOpenChange={setShowShiftModal}
         businessId={businessId}
-        staffId={selectedStaffId}
+        staffId={staffIdForModals}
         date={selectedDate}
         shift={selectedShift}
         weekStart={weekStart}
@@ -388,7 +505,7 @@ export function ShiftsTab({
         open={showRecurringModal}
         onOpenChange={setShowRecurringModal}
         businessId={businessId}
-        staffId={selectedStaffId}
+        staffId={staffIdForModals}
         weekStart={weekStart}
         onSave={loadShifts}
       />
@@ -398,7 +515,7 @@ export function ShiftsTab({
         open={showDaysOffModal}
         onOpenChange={setShowDaysOffModal}
         businessId={businessId}
-        staffId={selectedStaffId}
+        staffId={staffIdForModals}
         weekStart={weekStart}
         onSave={loadShifts}
       />
@@ -432,6 +549,8 @@ function ShiftModal({
 }) {
   const supabase = createClient()
   const [loading, setLoading] = useState(false)
+  const [deleteAction, setDeleteAction] = useState<'single' | 'series' | null>(null)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [error, setError] = useState('')
   const [form, setForm] = useState({
     date: date ? format(date, 'yyyy-MM-dd') : '',
@@ -459,6 +578,10 @@ function ShiftModal({
       })
     }
   }, [date, shift])
+
+  useEffect(() => {
+    if (!open) setShowDeleteConfirm(false)
+  }, [open])
 
   const hours = useMemo(() => {
     return calculateHours(form.start_time, form.end_time)
@@ -572,6 +695,7 @@ function ShiftModal({
           .eq('id', shift.id)
 
         if (err) throw err
+        notifySuccess('Turno actualizado')
       } else {
         // Crear nuevos turnos
         const { error: err } = await supabase
@@ -579,39 +703,94 @@ function ShiftModal({
           .insert(shiftsToCreate)
 
         if (err) throw err
+        notifySuccess(
+          shiftsToCreate.length > 1
+            ? `${shiftsToCreate.length} turnos creados`
+            : 'Turno guardado'
+        )
       }
 
       onSave()
       onOpenChange(false)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al guardar el turno')
+      const msg = err instanceof Error ? err.message : 'Error al guardar el turno'
+      setError(msg)
+      notifyError(msg)
     } finally {
       setLoading(false)
     }
   }
 
-  const handleDelete = async () => {
-    if (!shift) return
-    if (!confirm('¿Eliminar este turno?')) return
+  const isRecurringSeries =
+    !!shift &&
+    shift.is_recurring === true &&
+    shift.recurrence_pattern != null &&
+    typeof shift.recurrence_pattern === 'object'
 
+  const handleDeleteConfirm = async (scope: 'single' | 'series') => {
+    if (!shift) return
+
+    setDeleteAction(scope)
     setLoading(true)
     try {
-      const { error: err } = await supabase
-        .from('staff_shifts')
-        .delete()
-        .eq('id', shift.id)
+      if (scope === 'series' && isRecurringSeries) {
+        const pattern = shift.recurrence_pattern
+        const { data: candidates, error: fetchErr } = await supabase
+          .from('staff_shifts')
+          .select('id, recurrence_pattern')
+          .eq('staff_id', shift.staff_id)
+          .eq('business_id', shift.business_id)
+          .eq('is_recurring', true)
+          .eq('start_time', shift.start_time)
+          .eq('end_time', shift.end_time)
+          .eq('shift_type', shift.shift_type)
 
-      if (err) throw err
+        if (fetchErr) throw fetchErr
+
+        const ids = (candidates ?? [])
+          .filter((row) => recurrencePatternsEqual(row.recurrence_pattern, pattern))
+          .map((row) => row.id)
+
+        if (ids.length === 0) {
+          notifySuccess('No se encontraron turnos de esta serie para eliminar')
+        } else {
+          const chunkSize = 100
+          for (let i = 0; i < ids.length; i += chunkSize) {
+            const chunk = ids.slice(i, i + chunkSize)
+            const { error: delErr } = await supabase
+              .from('staff_shifts')
+              .delete()
+              .in('id', chunk)
+            if (delErr) throw delErr
+          }
+          notifySuccess('Eliminados todos los turnos de esta serie recurrente')
+        }
+      } else {
+        const { error: err } = await supabase
+          .from('staff_shifts')
+          .delete()
+          .eq('id', shift.id)
+
+        if (err) throw err
+        notifySuccess(
+          isRecurringSeries ? 'Eliminado el turno solo de este día' : 'Turno eliminado'
+        )
+      }
+      setShowDeleteConfirm(false)
       onSave()
       onOpenChange(false)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al eliminar el turno')
+      const msg = err instanceof Error ? err.message : 'Error al eliminar el turno'
+      setError(msg)
+      notifyError(msg)
     } finally {
       setLoading(false)
+      setDeleteAction(null)
     }
   }
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
@@ -636,7 +815,7 @@ function ShiftModal({
               value={form.date}
               onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
               required
-              className="mt-1"
+              className="mt-1 text-zinc-100 datetime-input-dark"
             />
           </div>
 
@@ -649,7 +828,7 @@ function ShiftModal({
                 value={form.start_time}
                 onChange={(e) => setForm((f) => ({ ...f, start_time: e.target.value }))}
                 required
-                className="mt-1"
+                className="mt-1 text-zinc-100 datetime-input-dark"
               />
             </div>
             <div>
@@ -660,18 +839,18 @@ function ShiftModal({
                 value={form.end_time}
                 onChange={(e) => setForm((f) => ({ ...f, end_time: e.target.value }))}
                 required
-                className="mt-1"
+                className="mt-1 text-zinc-100 datetime-input-dark"
               />
             </div>
           </div>
 
-          <div className="p-3 bg-blue-900/50 rounded-lg">
-            <div className="text-sm font-medium text-blue-900">
+          <div className="p-3 rounded-lg border border-zinc-700 bg-zinc-950/90">
+            <div className="text-sm font-medium text-white">
               Total: {hours.toFixed(1)} horas
             </div>
             {hours > 12 && (
-              <div className="text-xs text-orange-700 mt-1 flex items-center gap-1">
-                <AlertTriangle className="h-3 w-3" />
+              <div className="text-xs text-amber-200 mt-1 flex items-center gap-1.5">
+                <AlertTriangle className="h-3.5 w-3.5 text-amber-400 shrink-0" />
                 Este turno excede 12 horas
               </div>
             )}
@@ -698,7 +877,7 @@ function ShiftModal({
               id="notes"
               value={form.notes}
               onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-              className="mt-1"
+              className="mt-1 resize-none"
               rows={3}
               placeholder="Notas sobre el turno..."
             />
@@ -721,25 +900,44 @@ function ShiftModal({
 
           {form.applyToMultiple && !shift && (
             <div>
-              <Label>Seleccionar días</Label>
-              <div className="mt-2 space-y-2">
-                {['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'].map((day, idx) => (
-                  <label key={day} className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={form.selectedDays.includes(day)}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setForm((f) => ({ ...f, selectedDays: [...f.selectedDays, day] }))
-                        } else {
-                          setForm((f) => ({ ...f, selectedDays: f.selectedDays.filter((d) => d !== day) }))
-                        }
+              <Label className="text-zinc-300">Seleccionar días</Label>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {(
+                  [
+                    ['L', 'Lunes'],
+                    ['M', 'Martes'],
+                    ['X', 'Miércoles'],
+                    ['J', 'Jueves'],
+                    ['V', 'Viernes'],
+                    ['S', 'Sábado'],
+                    ['D', 'Domingo'],
+                  ] as const
+                ).map(([initial, dayKey]) => {
+                  const selected = form.selectedDays.includes(dayKey)
+                  return (
+                    <button
+                      key={dayKey}
+                      type="button"
+                      onClick={() => {
+                        setForm((f) => ({
+                          ...f,
+                          selectedDays: selected
+                            ? f.selectedDays.filter((d) => d !== dayKey)
+                            : [...f.selectedDays, dayKey],
+                        }))
                       }}
-                      className="rounded border-zinc-700"
-                    />
-                    <span className="text-sm">{day}</span>
-                  </label>
-                ))}
+                      title={dayKey}
+                      className={cn(
+                        'h-9 min-w-[2.25rem] flex-1 cursor-pointer rounded-lg border text-sm font-semibold transition-colors',
+                        selected
+                          ? 'bg-[#3B82F6] text-white border-[#3B82F6] shadow-sm'
+                          : 'bg-zinc-900 text-zinc-400 border-zinc-700 hover:bg-zinc-800 hover:text-zinc-200'
+                      )}
+                    >
+                      {initial}
+                    </button>
+                  )
+                })}
               </div>
             </div>
           )}
@@ -752,7 +950,7 @@ function ShiftModal({
               <Button
                 type="button"
                 variant="outline"
-                onClick={handleDelete}
+                onClick={() => setShowDeleteConfirm(true)}
                 disabled={loading}
                 className="text-red-400 hover:text-red-300 hover:bg-red-900/50"
               >
@@ -797,6 +995,131 @@ function ShiftModal({
         </form>
       </DialogContent>
     </Dialog>
+
+    <Dialog
+      open={showDeleteConfirm}
+      onOpenChange={(next) => {
+        if (!loading) setShowDeleteConfirm(next)
+      }}
+    >
+      <DialogContent className="max-w-md" showClose={true}>
+        <DialogHeader>
+          <DialogTitle className="text-zinc-100">
+            {isRecurringSeries ? '¿Eliminar turno recurrente?' : '¿Eliminar este turno?'}
+          </DialogTitle>
+          <DialogDescription className="text-left text-zinc-400">
+            {shift ? (
+              isRecurringSeries ? (
+                <>
+                  Turno del{' '}
+                  <span className="text-zinc-300">
+                    {format(parseISO(shift.date), 'd MMM yyyy', { locale: es })}
+                  </span>
+                  {' · '}
+                  {shift.start_time.slice(0, 5)} – {shift.end_time.slice(0, 5)}.
+                  <br />
+                  <br />
+                  Este día forma parte de una <strong className="text-zinc-300">serie recurrente</strong>{' '}
+                  creada para este empleado. Elige si quieres quitar solo este día o borrar todos los días de
+                  esa serie (misma hora y patrón).
+                  <br />
+                  <br />
+                  Esta acción no se puede deshacer.
+                </>
+              ) : (
+                <>
+                  Se eliminará el turno del{' '}
+                  <span className="text-zinc-300">
+                    {format(parseISO(shift.date), 'd MMM yyyy', { locale: es })}
+                  </span>
+                  {' · '}
+                  {shift.start_time.slice(0, 5)} – {shift.end_time.slice(0, 5)}.
+                  <br />
+                  <br />
+                  Esta acción no se puede deshacer.
+                </>
+              )
+            ) : (
+              'Esta acción no se puede deshacer.'
+            )}
+          </DialogDescription>
+        </DialogHeader>
+        {isRecurringSeries ? (
+          <div className="flex flex-col gap-2 mt-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void handleDeleteConfirm('single')}
+              disabled={loading}
+              className="cursor-pointer w-full justify-center inline-flex items-center"
+            >
+              {loading && deleteAction === 'single' ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin shrink-0" />
+                  Eliminando...
+                </>
+              ) : (
+                'Solo este día'
+              )}
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => void handleDeleteConfirm('series')}
+              disabled={loading}
+              className="cursor-pointer w-full justify-center bg-red-700 hover:bg-red-600 text-white inline-flex items-center"
+            >
+              {loading && deleteAction === 'series' ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin shrink-0" />
+                  Eliminando...
+                </>
+              ) : (
+                'Eliminar toda la serie recurrente'
+              )}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setShowDeleteConfirm(false)}
+              disabled={loading}
+              className="cursor-pointer text-zinc-400 hover:text-zinc-200"
+            >
+              Cancelar
+            </Button>
+          </div>
+        ) : (
+          <div className="flex flex-col-reverse sm:flex-row gap-2 justify-end mt-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowDeleteConfirm(false)}
+              disabled={loading}
+              className="cursor-pointer"
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => void handleDeleteConfirm('single')}
+              disabled={loading}
+              className="cursor-pointer bg-red-700 hover:bg-red-600 text-white inline-flex items-center"
+            >
+              {loading && deleteAction === 'single' ? (
+                <>
+                  <Loader2 className="w-3 h-3 mr-2 animate-spin shrink-0" />
+                  Eliminando...
+                </>
+              ) : (
+                'Sí, eliminar'
+              )}
+            </Button>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+    </>
   )
 }
 
@@ -831,27 +1154,6 @@ function RecurringShiftsModal({
   const hours = useMemo(() => {
     return calculateHours(form.start_time, form.end_time)
   }, [form.start_time, form.end_time])
-
-  const previewCount = useMemo(() => {
-    if (!form.start_date || form.daysOfWeek.length === 0) return 0
-    const start = parseISO(form.start_date)
-    const end = form.indefinite
-      ? addDays(start, 90) // Preview de 3 meses
-      : form.end_date
-      ? parseISO(form.end_date)
-      : start
-
-    let count = 0
-    let current = start
-    while (current <= end && count < 100) {
-      const dayOfWeek = getDay(current) === 0 ? 7 : getDay(current)
-      if (form.daysOfWeek.includes(dayOfWeek)) {
-        count++
-      }
-      current = addDays(current, 1)
-    }
-    return count
-  }, [form])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -915,6 +1217,7 @@ function RecurringShiftsModal({
       const { error: err } = await supabase.from('staff_shifts').insert(shifts)
 
       if (err) throw err
+      notifySuccess('Turno establecido')
       onSave()
       onOpenChange(false)
       setForm({
@@ -973,9 +1276,9 @@ function RecurringShiftsModal({
                     }
                   }}
                   className={cn(
-                    'flex-1 h-10 rounded-md border text-sm font-medium transition-colors',
+                    'flex-1 h-10 cursor-pointer rounded-md border text-sm font-medium transition-colors',
                     form.daysOfWeek.includes(day)
-                      ? 'bg-blue-600 text-white border-blue-600'
+                      ? 'bg-[#3B82F6] text-white border-[#3B82F6]'
                       : 'bg-zinc-900 text-zinc-300 border-zinc-700 hover:bg-zinc-950'
                   )}
                 >
@@ -994,7 +1297,7 @@ function RecurringShiftsModal({
                 value={form.start_time}
                 onChange={(e) => setForm((f) => ({ ...f, start_time: e.target.value }))}
                 required
-                className="mt-1"
+                className="mt-1 text-zinc-100 datetime-input-dark"
               />
             </div>
             <div>
@@ -1005,17 +1308,14 @@ function RecurringShiftsModal({
                 value={form.end_time}
                 onChange={(e) => setForm((f) => ({ ...f, end_time: e.target.value }))}
                 required
-                className="mt-1"
+                className="mt-1 text-zinc-100 datetime-input-dark"
               />
             </div>
           </div>
 
-          <div className="p-3 bg-blue-900/50 rounded-lg">
-            <div className="text-sm font-medium text-blue-900">
+          <div className="p-3 rounded-lg border border-zinc-700 bg-zinc-950/90">
+            <div className="text-sm font-medium text-white">
               {hours.toFixed(1)} horas por turno
-            </div>
-            <div className="text-xs text-blue-700 mt-1">
-              Vista previa: {previewCount} turnos se crearán
             </div>
           </div>
 
@@ -1027,7 +1327,7 @@ function RecurringShiftsModal({
               value={form.start_date}
               onChange={(e) => setForm((f) => ({ ...f, start_date: e.target.value }))}
               required
-              className="mt-1"
+              className="mt-1 text-zinc-100 datetime-input-dark"
             />
           </div>
 
@@ -1053,14 +1353,47 @@ function RecurringShiftsModal({
                 value={form.end_date}
                 onChange={(e) => setForm((f) => ({ ...f, end_date: e.target.value }))}
                 min={form.start_date}
-                className="mt-1"
+                className="mt-1 text-zinc-100 datetime-input-dark"
               />
             </div>
           )}
 
           <div className="flex gap-3 pt-4">
             <Button type="submit" disabled={loading} className="flex-1">
-              {loading ? 'Creando...' : `Aplicar ${previewCount} turnos`}
+              {loading ? 'Estableciendo...' : 'Establecer turno'}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={loading}
+              onClick={async () => {
+                const daysLabel = form.daysOfWeek.map(d => ['L','M','X','J','V','S','D'][d - 1]).join(', ')
+                const description = `Horario ${form.start_time}–${form.end_time} (${daysLabel}) desde ${form.start_date}`
+                try {
+                  const res = await fetch('/api/staff/signatures/request', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      business_id: businessId,
+                      staff_id: staffId,
+                      document_type: 'schedule',
+                      description,
+                    }),
+                  })
+                  const json = await res.json()
+                  if (!res.ok) {
+                    notifyError(json.error || 'Error solicitando firma')
+                  } else {
+                    notifySuccess('Solicitud de firma enviada al empleado')
+                  }
+                } catch {
+                  notifyError('Error al enviar la solicitud de firma')
+                }
+              }}
+              className="gap-1.5"
+            >
+              <PenLine className="h-4 w-4" />
+              Solicitar firma
             </Button>
             <Button
               type="button"
@@ -1098,7 +1431,7 @@ function DaysOffModal({
   const [form, setForm] = useState({
     start_date: format(weekStart, 'yyyy-MM-dd'),
     end_date: format(weekStart, 'yyyy-MM-dd'),
-    type: 'day_off' as 'day_off' | 'holiday' | 'vacation',
+    type: 'day_off' as Shift['shift_type'],
     notes: '',
   })
 
@@ -1185,7 +1518,7 @@ function DaysOffModal({
                 value={form.start_date}
                 onChange={(e) => setForm((f) => ({ ...f, start_date: e.target.value }))}
                 required
-                className="mt-1"
+                className="mt-1 text-zinc-100 datetime-input-dark"
               />
             </div>
             <div>
@@ -1196,7 +1529,7 @@ function DaysOffModal({
                 value={form.end_date}
                 onChange={(e) => setForm((f) => ({ ...f, end_date: e.target.value }))}
                 min={form.start_date}
-                className="mt-1"
+                className="mt-1 text-zinc-100 datetime-input-dark"
               />
             </div>
           </div>
@@ -1206,7 +1539,7 @@ function DaysOffModal({
             <select
               id="days-off-type"
               value={form.type}
-              onChange={(e) => setForm((f) => ({ ...f, type: e.target.value as any }))}
+              onChange={(e) => setForm((f) => ({ ...f, type: e.target.value as Shift['shift_type'] }))}
               className="mt-1 flex h-10 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm"
             >
               <option value="day_off">Día libre</option>

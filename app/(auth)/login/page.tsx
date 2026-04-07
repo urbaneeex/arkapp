@@ -1,9 +1,11 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import { toast } from 'sonner'
+import { useToastFeedback } from '@/hooks/use-toast-feedback'
 
 const ERROR_MAP: Record<string, string> = {
   invalid_credentials: 'Email o contraseña incorrectos',
@@ -44,7 +46,7 @@ function GoogleIcon() {
   )
 }
 
-export default function LoginPage() {
+function LoginPageInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const supabase = createClient()
@@ -62,6 +64,19 @@ export default function LoginPage() {
   )
   const querySuccess = searchParams.get('success')
   const queryError = searchParams.get('error')
+  useToastFeedback({ error, success })
+
+  useEffect(() => {
+    if (querySuccess === 'password_updated') {
+      toast.success('Tu contraseña se actualizó correctamente. Ya puedes iniciar sesión.')
+    }
+  }, [querySuccess])
+
+  useEffect(() => {
+    if (queryError === 'auth_callback_failed') {
+      toast.error('No pudimos completar la autenticación. Inténtalo de nuevo.')
+    }
+  }, [queryError])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -189,5 +204,13 @@ export default function LoginPage() {
         </Link>
       </p>
     </div>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginPageInner />
+    </Suspense>
   )
 }

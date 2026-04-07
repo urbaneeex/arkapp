@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { useToastFeedback } from '@/hooks/use-toast-feedback'
 
 const ERROR_MAP: Record<string, string> = {
   weak_password: 'La contraseña no cumple los requisitos mínimos',
@@ -42,6 +43,7 @@ export default function ResetPasswordPage() {
   const [cooldownUntil, setCooldownUntil] = useState(0)
   const inCooldown = Date.now() < cooldownUntil
   const disabled = loading || inCooldown
+  useToastFeedback({ error, success })
 
   useEffect(() => {
     const {

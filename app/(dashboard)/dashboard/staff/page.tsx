@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import { Suspense } from 'react'
 import { StaffClient } from '@/components/staff/StaffClient'
 import { RequirePermission } from '@/components/auth/RequirePermission'
 import { getBusinessIdForUser } from '@/lib/supabase/business'
@@ -39,11 +40,13 @@ export default async function StaffPage() {
 
   return (
     <RequirePermission permission="staff_view">
-      <StaffClient
-        staff={staffResult.data ?? []}
-        businessId={businessId}
-        roles={rolesResult.data ?? []}
-      />
+      <Suspense fallback={<div className="flex items-center justify-center py-20 text-zinc-500 text-sm">Cargando...</div>}>
+        <StaffClient
+          staff={staffResult.data ?? []}
+          businessId={businessId}
+          roles={rolesResult.data ?? []}
+        />
+      </Suspense>
     </RequirePermission>
   )
 }

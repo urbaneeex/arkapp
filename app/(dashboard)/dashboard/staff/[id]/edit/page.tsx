@@ -32,6 +32,15 @@ export default async function EditStaffPage({
 
   if (error || !staff) notFound()
 
+  const { data: pendingInvite } = await supabase
+    .from('staff_invites')
+    .select('id')
+    .eq('staff_id', staff.id)
+    .eq('used', false)
+    .maybeSingle()
+
+  const hasPendingInvite = !!pendingInvite
+
   const { data: roles } = await supabase
     .from('roles')
     .select('id, name, description')
@@ -41,7 +50,12 @@ export default async function EditStaffPage({
   return (
     <div className="max-w-xl">
       <PageHeader title="Editar empleado" subtitle={staff.name} />
-      <StaffForm businessId={business.id} staff={staff} initialRoles={roles ?? []} />
+      <StaffForm
+        businessId={business.id}
+        staff={staff}
+        initialRoles={roles ?? []}
+        hasPendingInvite={hasPendingInvite}
+      />
     </div>
   )
 }

@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
+import { useToastFeedback } from '@/hooks/use-toast-feedback'
 
 function Spinner() {
   return (
@@ -22,6 +23,7 @@ export default function ForgotPasswordPage() {
   const [cooldownUntil, setCooldownUntil] = useState(0)
   const inCooldown = Date.now() < cooldownUntil
   const disabled = loading || inCooldown
+  useToastFeedback({ error, success })
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

@@ -22,7 +22,8 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog'
-import { Mail, Loader2, UserMinus, Search, UserPlus } from 'lucide-react'
+import { Mail, Loader2, UserMinus, Search, UserPlus, Trash2 } from 'lucide-react'
+import { notifyError, notifySuccess } from '@/lib/notify'
 
 type StaffRow = Database['public']['Tables']['staff']['Row']
 
@@ -59,16 +60,15 @@ export function StaffList({
   const [resendError, setResendError] = useState<string | null>(null)
   const [resendSuccess, setResendSuccess] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
-  const [deleteError, setDeleteError] = useState<string | null>(null)
   const [staffToDeactivate, setStaffToDeactivate] = useState<StaffRow | null>(null)
   const [staffToReactivate, setStaffToReactivate] = useState<StaffRow | null>(null)
   const [reactivatingId, setReactivatingId] = useState<string | null>(null)
-  const [reactivateError, setReactivateError] = useState<string | null>(null)
+  const [staffToDelete, setStaffToDelete] = useState<StaffRow | null>(null)
+  const [deletingPermanently, setDeletingPermanently] = useState<string | null>(null)
   const [updatingId, setUpdatingId] = useState<string | null>(null)
-  const [updateError, setUpdateError] = useState<string | null>(null)
 
   const [searchQuery, setSearchQuery] = useState('')
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('activos')
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('todos')
 
   const filteredStaff = useMemo(() => {
     let list = staff
@@ -76,7 +76,12 @@ export function StaffList({
     else if (statusFilter === 'desactivados') list = list.filter((s) => !!s.deleted_at)
     const q = searchQuery.trim().toLowerCase()
     if (q) list = list.filter((s) => s.name?.toLowerCase().includes(q))
-    return list
+    return [...list].sort((a, b) => {
+      const aInactive = !!a.deleted_at
+      const bInactive = !!b.deleted_at
+      if (aInactive !== bInactive) return aInactive ? 1 : -1
+      return (a.name ?? '').localeCompare(b.name ?? '', 'es')
+    })
   }, [staff, statusFilter, searchQuery])
 
   const getPermissionLevel = (staffMember: StaffRow): PermissionLevel | '' => {
@@ -85,7 +90,6 @@ export function StaffList({
 
   const handleRoleChange = async (staffId: string, newRole: string) => {
     setUpdatingId(staffId)
-    setUpdateError(null)
 
     try {
       const { error } = await supabase
@@ -95,14 +99,16 @@ export function StaffList({
         .eq('business_id', businessId)
 
       if (error) {
-        setUpdateError(`Error al actualizar rol: ${error.message}`)
+        notifyError(`Error al actualizar rol: ${error.message}`)
         return
       }
 
+      const label = newRole.trim() || 'Sin rol'
+      notifySuccess(`Rol actualizado: ${label}`)
       router.refresh()
     } catch (error) {
       console.error('Error al actualizar rol:', error)
-      setUpdateError('Error al actualizar el rol')
+      notifyError('Error al actualizar el rol')
     } finally {
       setUpdatingId(null)
     }
@@ -113,7 +119,6 @@ export function StaffList({
     newLevel: PermissionLevel | ''
   ) => {
     setUpdatingId(staffId)
-    setUpdateError(null)
 
     try {
       const { error } = await supabase
@@ -123,14 +128,18 @@ export function StaffList({
         .eq('business_id', businessId)
 
       if (error) {
-        setUpdateError(`Error al actualizar nivel de acceso: ${error.message}`)
+        notifyError(`Error al actualizar nivel de acceso: ${error.message}`)
         return
       }
 
+      const levelId = (newLevel || 'basico') as PermissionLevel
+      const levelLabel =
+        PERMISSION_LEVELS.find((l) => l.id === levelId)?.label ?? levelId
+      notifySuccess(`Nivel de acceso actualizado: ${levelLabel}`)
       router.refresh()
     } catch (error) {
       console.error('Error al actualizar nivel de acceso:', error)
-      setUpdateError('Error al actualizar el nivel de acceso')
+      notifyError('Error al actualizar el nivel de acceso')
     } finally {
       setUpdatingId(null)
     }
@@ -181,7 +190,6 @@ export function StaffList({
   const handleDeactivateConfirm = async () => {
     if (!staffToDeactivate) return
     setDeletingId(staffToDeactivate.id)
-    setDeleteError(null)
 
     try {
       const { error } = await supabase
@@ -194,15 +202,20 @@ export function StaffList({
         .eq('business_id', businessId)
 
       if (error) {
-        setDeleteError(`Error al desactivar: ${error.message}`)
+        notifyError(`Error al desactivar: ${error.message}`)
         return
       }
 
+      notifySuccess(
+        staffToDeactivate.name
+          ? `${staffToDeactivate.name} desactivado`
+          : 'Empleado desactivado'
+      )
       setStaffToDeactivate(null)
       router.refresh()
     } catch (error) {
       console.error('Error al desactivar empleado:', error)
-      setDeleteError('Error al desactivar el empleado')
+      notifyError('Error al desactivar el empleado')
     } finally {
       setDeletingId(null)
     }
@@ -219,7 +232,6 @@ export function StaffList({
   const handleReactivateConfirm = async () => {
     if (!staffToReactivate) return
     setReactivatingId(staffToReactivate.id)
-    setReactivateError(null)
     try {
       const { error } = await supabase
         .from('staff')
@@ -227,16 +239,55 @@ export function StaffList({
         .eq('id', staffToReactivate.id)
         .eq('business_id', businessId)
       if (error) {
-        setReactivateError(`Error al reactivar: ${error.message}`)
+        notifyError(`Error al reactivar: ${error.message}`)
         return
       }
+      notifySuccess(
+        staffToReactivate.name
+          ? `${staffToReactivate.name} reactivado`
+          : 'Empleado reactivado'
+      )
       setStaffToReactivate(null)
       router.refresh()
     } catch (e) {
       console.error('Error al reactivar empleado:', e)
-      setReactivateError('Error al reactivar el empleado')
+      notifyError('Error al reactivar el empleado')
     } finally {
       setReactivatingId(null)
+    }
+  }
+
+  const handlePermanentDeleteConfirm = async () => {
+    if (!staffToDelete) return
+    setDeletingPermanently(staffToDelete.id)
+
+    try {
+      const response = await fetch('/api/staff/delete', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          staff_id: staffToDelete.id,
+          business_id: businessId,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        notifyError(data.error || 'No se pudo eliminar el empleado')
+        setStaffToDelete(null)
+        return
+      }
+
+      notifySuccess('Empleado eliminado definitivamente')
+      setStaffToDelete(null)
+      router.refresh()
+    } catch (e) {
+      console.error('Error al eliminar empleado:', e)
+      notifyError('Error al eliminar el empleado. Inténtalo de nuevo.')
+      setStaffToDelete(null)
+    } finally {
+      setDeletingPermanently(null)
     }
   }
 
@@ -260,21 +311,6 @@ export function StaffList({
           {resendSuccess}
         </div>
       )}
-      {deleteError && (
-        <div className="p-3 rounded-lg bg-red-950/50 text-red-300 text-sm">
-          {deleteError}
-        </div>
-      )}
-      {updateError && (
-        <div className="p-3 rounded-lg bg-red-950/50 text-red-300 text-sm">
-          {updateError}
-        </div>
-      )}
-      {reactivateError && (
-        <div className="p-3 rounded-lg bg-red-950/50 text-red-300 text-sm">
-          {reactivateError}
-        </div>
-      )}
       <div className="flex flex-wrap items-center gap-3 mb-4">
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
@@ -291,9 +327,9 @@ export function StaffList({
           onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
           className="h-9 rounded-md border border-zinc-600 bg-zinc-900 px-3 py-1 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-[#3B82F6] focus:ring-offset-1 focus:border-[#3B82F6] min-w-[160px]"
         >
+          <option value="todos">Todos</option>
           <option value="activos">Activos</option>
           <option value="desactivados">Desactivados</option>
-          <option value="todos">Todos</option>
         </select>
       </div>
       <div className="rounded-lg border border-zinc-800 bg-zinc-900 overflow-hidden">
@@ -319,12 +355,28 @@ export function StaffList({
               filteredStaff.map((s) => {
               const isUpdating = updatingId === s.id
               const isInactive = !!s.deleted_at
+              const canPermanentDelete = isInactive
               const currentPermissionLevel = getPermissionLevel(s)
+              const rowInactiveClass =
+                'border-l-2 border-l-zinc-600 bg-zinc-950/70 shadow-[inset_0_0_0_9999px_rgba(9,9,11,0.35)]'
               return (
-                <TableRow key={s.id}>
-                  <TableCell className="font-medium text-zinc-100">{s.name}</TableCell>
-                  <TableCell className="text-zinc-300">{s.phone ?? '-'}</TableCell>
-                  <TableCell>
+                <TableRow
+                  key={s.id}
+                  className={isInactive ? rowInactiveClass : undefined}
+                >
+                  <TableCell
+                    className={
+                      isInactive
+                        ? 'font-medium text-zinc-400'
+                        : 'font-medium text-zinc-100'
+                    }
+                  >
+                    {s.name}
+                  </TableCell>
+                  <TableCell className={isInactive ? 'text-zinc-500' : 'text-zinc-300'}>
+                    {s.phone ?? '-'}
+                  </TableCell>
+                  <TableCell className={isInactive ? 'text-zinc-500' : undefined}>
                     <select
                       value={s.role || ''}
                       onChange={(e) => handleRoleChange(s.id, e.target.value)}
@@ -339,7 +391,7 @@ export function StaffList({
                       ))}
                     </select>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className={isInactive ? 'text-zinc-500' : undefined}>
                     <select
                       value={currentPermissionLevel}
                       onChange={(e) =>
@@ -359,9 +411,9 @@ export function StaffList({
                       ))}
                     </select>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className={isInactive ? 'text-zinc-500' : undefined}>
                     {isInactive ? (
-                      <span className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-zinc-700/80 text-zinc-300 border border-zinc-600">
+                      <span className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-zinc-800/90 text-zinc-400 border border-zinc-600/80">
                         Dado de baja
                       </span>
                     ) : (
@@ -376,7 +428,7 @@ export function StaffList({
                       </span>
                     )}
                   </TableCell>
-                <TableCell className="text-right">
+                <TableCell className="text-right relative z-10">
                   <div className="flex items-center justify-end gap-2">
                     {s.email && !isInactive && (
                       <Button
@@ -446,6 +498,32 @@ export function StaffList({
                           <>
                             <UserMinus className="w-3 h-3 mr-1" />
                             Desactivar
+                          </>
+                        )}
+                      </Button>
+                    )}
+                    {canPermanentDelete && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setStaffToDelete(s)}
+                        disabled={
+                          deletingPermanently === s.id ||
+                          deletingId === s.id ||
+                          isUpdating ||
+                          reactivatingId === s.id
+                        }
+                        className="cursor-pointer text-red-400 hover:text-red-300 hover:bg-red-900/30 border-red-800/70"
+                      >
+                        {deletingPermanently === s.id ? (
+                          <>
+                            <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                            Eliminando...
+                          </>
+                        ) : (
+                          <>
+                            <Trash2 className="w-3 h-3 mr-1" />
+                            Eliminar
                           </>
                         )}
                       </Button>
@@ -533,6 +611,53 @@ export function StaffList({
                 </>
               ) : (
                 'Reactivar empleado'
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!staffToDelete}
+        onOpenChange={(open) => !open && setStaffToDelete(null)}
+      >
+        <DialogContent className="max-w-md" showClose={true}>
+          <DialogHeader>
+            <DialogTitle className="text-zinc-100">
+              ¿Eliminar definitivamente a {staffToDelete?.name}?
+            </DialogTitle>
+            <DialogDescription className="text-left mt-2 text-zinc-400">
+              Esta acción es <strong className="text-red-400">permanente e irreversible</strong>.
+              El empleado y su invitación se eliminarán de la base de datos.
+              <br /><br />
+              Solo es posible si el empleado no tiene citas ni turnos asignados.
+              Si los tiene, desactívalo en su lugar para conservar el historial.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col-reverse sm:flex-row gap-2 justify-end mt-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setStaffToDelete(null)}
+              disabled={!!deletingPermanently}
+              className="cursor-pointer"
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={handlePermanentDeleteConfirm}
+              disabled={!!deletingPermanently}
+              className="cursor-pointer bg-red-700 hover:bg-red-600 text-white"
+            >
+              {deletingPermanently ? (
+                <>
+                  <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                  Eliminando...
+                </>
+              ) : (
+                'Sí, eliminar empleado'
               )}
             </Button>
           </div>

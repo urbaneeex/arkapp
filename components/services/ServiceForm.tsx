@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import type { Database } from '@/types/database.types'
+import { useToastFeedback } from '@/hooks/use-toast-feedback'
+import { notifySuccess } from '@/lib/notify'
 
 type Service = Database['public']['Tables']['services']['Row']
 
@@ -27,6 +29,7 @@ export function ServiceForm({
     price: service?.price ?? 0,
     description: service?.description ?? '',
   })
+  useToastFeedback({ error })
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -50,6 +53,7 @@ export function ServiceForm({
         return
       }
       router.push('/dashboard/services')
+      notifySuccess('Servicio actualizado correctamente')
     } else {
       const { error: err } = await supabase.from('services').insert(payload)
       if (err) {
@@ -58,6 +62,7 @@ export function ServiceForm({
         return
       }
       router.push('/dashboard/services')
+      notifySuccess('Servicio creado correctamente')
     }
     router.refresh()
     setLoading(false)

@@ -152,9 +152,8 @@ export async function POST(req: Request) {
       ? (apt as { services: { name?: string }[] }).services[0]
       : (apt as { services?: { name?: string } }).services
 
-    if (business?.wa_status !== 'connected' || !business?.wa_instance_name) {
-      return NextResponse.json({ ok: true, msg: 'No conectado' })
-    }
+    const waConnected = business?.wa_status === 'connected' && !!business?.wa_instance_name
+
     if (!process.env.N8N_WEBHOOK_URL && !process.env.RESEND_API_KEY) {
       return NextResponse.json({ ok: true, msg: 'Sin webhook ni Resend' })
     }
@@ -166,7 +165,7 @@ export async function POST(req: Request) {
 
     const metadataUpdates: Record<string, string> = {}
 
-    if (process.env.N8N_WEBHOOK_URL) {
+    if (process.env.N8N_WEBHOOK_URL && waConnected) {
       if (!phoneValidForSend) {
         if (hasPhone) metadataUpdates.phone_status = 'invalid'
       } else {
@@ -205,6 +204,8 @@ export async function POST(req: Request) {
           }
         }
       }
+    } else if (process.env.N8N_WEBHOOK_URL && !waConnected) {
+      metadataUpdates.phone_status = 'wa-not-connected'
     }
 
     const clientEmail = (client?.email ?? '').toString().trim()

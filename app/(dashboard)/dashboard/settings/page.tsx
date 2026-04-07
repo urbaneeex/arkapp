@@ -18,7 +18,7 @@ export default async function SettingsPage() {
   const { data: business } = await supabase
     .from('businesses')
     .select(
-      'id, name, owner_name, owner_phone, address, whatsapp_number, slug, industry, booking_settings, notification_settings, plan, logo_url, wa_instance_name, wa_status, wa_connected_phone, country'
+      'id, name, owner_name, owner_phone, address, whatsapp_number, slug, industry, booking_settings, notification_settings, plan, logo_url, wa_instance_name, wa_status, wa_connected_phone, country, clock_in_method, geofence_lat, geofence_lng, geofence_radius_meters'
     )
     .eq('id', businessId)
     .single()
@@ -79,6 +79,10 @@ export default async function SettingsPage() {
           wa_status: (business.wa_status as 'disconnected' | 'pending_qr' | 'connected') ?? 'disconnected',
           wa_connected_phone: business.wa_connected_phone ?? null,
           country: (business as { country?: string | null }).country ?? 'ES',
+          clock_in_method: (business as { clock_in_method?: string | null }).clock_in_method ?? 'manual',
+          geofence_lat: (business as { geofence_lat?: number | null }).geofence_lat ?? null,
+          geofence_lng: (business as { geofence_lng?: number | null }).geofence_lng ?? null,
+          geofence_radius_meters: (business as { geofence_radius_meters?: number | null }).geofence_radius_meters ?? 200,
         }}
         ownerEmail={user.email ?? ''}
         daysWithShifts={daysWithShifts}

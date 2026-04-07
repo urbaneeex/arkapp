@@ -7,14 +7,15 @@ import { Badge } from '@/components/ui/badge'
 import {
   Calendar,
   Users,
-  Briefcase,
   DollarSign,
-  Settings,
   TrendingUp,
   UserX,
   Clock,
 } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
+import { LiveClockPanel } from '@/components/dashboard/LiveClockPanel'
+import { PendingActionsCard, type ActionIconKey } from '@/components/dashboard/PendingActionsCard'
+import { DEFAULT_MATRIX, PERMISSION_LEVEL_IDS, type LevelId } from '@/lib/permissions'
 import {
   startOfToday,
   endOfToday,
@@ -25,6 +26,22 @@ import {
   format,
 } from 'date-fns'
 import { es } from 'date-fns/locale'
+
+/** Sector label used in "N documento(s) de [sector]" */
+const SIGNATURE_TYPE_SECTORS: Record<string, string> = {
+  document:    'empresa',
+  vacation:    'vacaciones',
+  schedule:    'horario',
+  time_report: 'informe',
+}
+
+/** Subtitle action for each document type */
+const SIGNATURE_TYPE_ACTIONS: Record<string, string> = {
+  document:    'Pendiente de firmar',
+  vacation:    'Pendiente de firmar',
+  schedule:    'Pendiente de firmar',
+  time_report: 'Pendiente de firmar',
+}
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -46,6 +63,35 @@ export default async function DashboardPage() {
   }
 
   const business = businessResult.business
+  const isOwner = business.owner_uid === user.id
+
+  const { data: currentStaff } = await supabase
+    .from('staff')
+    .select('access_level')
+    .eq('business_id', business.id)
+    .or(`id.eq.${user.id},email.eq.${user.email ?? ''}`)
+    .is('deleted_at', null)
+    .maybeSingle()
+
+  const accessLevel = currentStaff?.access_level
+  const normalizedLevel: LevelId =
+    typeof accessLevel === 'string' && (PERMISSION_LEVEL_IDS as readonly string[]).includes(accessLevel)
+      ? (accessLevel as LevelId)
+      : 'basico'
+  const canSeeLiveClockPanel =
+    isOwner ||
+    DEFAULT_MATRIX[normalizedLevel].time_tracking_view ||
+    DEFAULT_MATRIX[normalizedLevel].time_tracking_manage
+
+  // Resolve staff row id (may differ from user.id if matched by email)
+  const { data: staffRow } = await supabase
+    .from('staff')
+    .select('id')
+    .eq('business_id', business.id)
+    .or(`id.eq.${user.id},email.eq.${user.email ?? ''}`)
+    .is('deleted_at', null)
+    .maybeSingle()
+  const myStaffId = staffRow?.id ?? user.id
 
   const todayStart = startOfToday().toISOString()
   const todayEnd = endOfToday().toISOString()
@@ -63,6 +109,13 @@ export default async function DashboardPage() {
     { data: monthAppointments },
     { count: noShowCount },
     { data: nextAppointments },
+    // Pending actions — owner
+    { count: pendingAbsencesCount },
+    { count: pendingSignaturesOwnerCount },
+    // Pending actions — employee
+    { data: myPendingSignatures },
+    { data: myPendingAbsences },
+    { data: myOpenEntry },
   ] = await Promise.all([
     supabase
       .from('appointments')
@@ -116,10 +169,139 @@ export default async function DashboardPage() {
       .in('status', ['pending', 'confirmed', 'in_progress'])
       .order('start_time', { ascending: true })
       .limit(5),
+    // Owner: absence requests pending approval
+    supabase
+      .from('staff_absence_requests')
+      .select('*', { count: 'exact', head: true })
+      .eq('business_id', business.id)
+      .eq('status', 'pending'),
+    // Owner: only uploaded documents pending employee signature (not vacation/schedule/time_report)
+    supabase
+      .from('staff_signatures')
+      .select('*', { count: 'exact', head: true })
+      .eq('business_id', business.id)
+      .eq('status', 'pending')
+      .eq('document_type', 'document'),
+    // Employee: my signatures pending
+    supabase
+      .from('staff_signatures')
+      .select('id, document_type, reference_period')
+      .eq('staff_id', myStaffId)
+      .eq('status', 'pending'),
+    // Employee: my absence requests pending approval
+    supabase
+      .from('staff_absence_requests')
+      .select('id, type, start_date')
+      .eq('staff_id', myStaffId)
+      .eq('status', 'pending'),
+    // Employee: open clock-in entry today
+    supabase
+      .from('time_entries')
+      .select('id, clock_in')
+      .eq('staff_id', myStaffId)
+      .gte('clock_in', todayStart)
+      .is('clock_out', null)
+      .maybeSingle(),
   ])
 
   const revenue =
     revenueData?.reduce((acc, row) => acc + (row.price_total ?? 0), 0) ?? 0
+
+  const signatureTypeCounts = (myPendingSignatures ?? []).reduce<Record<string, number>>((acc, sig) => {
+    const key = sig.document_type ?? 'document'
+    acc[key] = (acc[key] ?? 0) + 1
+    return acc
+  }, {})
+  const topSignatureTypeEntry =
+    Object.entries(signatureTypeCounts).sort((a, b) => b[1] - a[1])[0] ?? null
+  const topSignatureTypeKey = topSignatureTypeEntry?.[0] ?? 'document'
+  const topSector = SIGNATURE_TYPE_SECTORS[topSignatureTypeKey] ?? 'empresa'
+  const topAction = SIGNATURE_TYPE_ACTIONS[topSignatureTypeKey] ?? 'Firmar'
+
+  const mySignatureIcon: ActionIconKey =
+    topSignatureTypeKey === 'vacation'
+      ? 'vacation'
+      : topSignatureTypeKey === 'schedule'
+        ? 'schedule'
+        : topSignatureTypeKey === 'time_report'
+          ? 'time_report'
+          : 'document'
+
+  // Build pending actions list depending on role
+  type ActionItem = Parameters<typeof PendingActionsCard>[0]['actions'][number]
+  const pendingActions: ActionItem[] = []
+
+  // Clock-in reminder ALWAYS FIRST — only for users with time tracking access
+  const hasClock =
+    isOwner ||
+    DEFAULT_MATRIX[normalizedLevel].time_tracking_view ||
+    DEFAULT_MATRIX[normalizedLevel].time_tracking_manage
+  if (hasClock && !myOpenEntry) {
+    pendingActions.push({
+      id: 'clock',
+      label: 'No has fichado entrada hoy',
+      sublabel: 'Recuerda registrar tu jornada',
+      href: '/dashboard/fichar?tab=fichar',
+      icon: 'clock' as ActionIconKey,
+      variant: 'warning',
+    })
+  }
+
+  if (isOwner || DEFAULT_MATRIX[normalizedLevel].absences_manage) {
+    // Manager/owner sees team-level actions
+    const absences = pendingAbsencesCount ?? 0
+    pendingActions.push({
+      id: 'absences',
+      label: absences > 0
+        ? `${absences} solicitud${absences !== 1 ? 'es' : ''} de ausencia pendiente${absences !== 1 ? 's' : ''}`
+        : 'Sin solicitudes de ausencia pendientes',
+      sublabel: absences > 0 ? 'Requiere tu aprobación' : undefined,
+      href: '/dashboard/fichar?tab=aprobaciones',
+      icon: 'absences' as ActionIconKey,
+      variant: absences > 0 ? 'warning' : 'success',
+      count: absences > 0 ? absences : undefined,
+    })
+
+    const sigs = pendingSignaturesOwnerCount ?? 0
+    pendingActions.push({
+      id: 'sigs-owner',
+      label: sigs > 0
+        ? `${sigs} archivo${sigs !== 1 ? 's' : ''} pendiente${sigs !== 1 ? 's' : ''} de firma`
+        : 'Sin archivos pendientes de firma',
+      sublabel: sigs > 0 ? 'Empleados aún no han firmado' : undefined,
+      href: '/dashboard/staff?tab=documentos',
+      icon: 'signature' as ActionIconKey,
+      variant: sigs > 0 ? 'default' : 'success',
+      count: sigs > 0 ? sigs : undefined,
+    })
+  }
+
+  // Every logged-in user sees their own pending items
+  const mySigs = myPendingSignatures?.length ?? 0
+  if (mySigs > 0) {
+    pendingActions.push({
+      id: 'my-sigs',
+      label: `${mySigs} documento${mySigs !== 1 ? 's' : ''} de ${topSector}`,
+      sublabel: topAction,
+      href: '/dashboard/fichar?tab=documentos',
+      icon: mySignatureIcon,
+      variant: 'warning',
+      count: mySigs,
+    })
+  }
+
+  const myAbsences = myPendingAbsences?.length ?? 0
+  if (myAbsences > 0) {
+    pendingActions.push({
+      id: 'my-absences',
+      label: `${myAbsences} solicitud${myAbsences !== 1 ? 'es' : ''} de ausencia en espera`,
+      sublabel: 'Pendiente de aprobación',
+      href: '/dashboard/fichar?tab=solicitudes',
+      icon: 'absence_own' as ActionIconKey,
+      variant: 'default',
+      count: myAbsences,
+    })
+  }
   const totalMonth = monthAppointments?.length ?? 0
   const completedMonth =
     monthAppointments?.filter((a) => a.status === 'completed').length ?? 0
@@ -256,52 +438,14 @@ export default async function DashboardPage() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Accesos rápidos</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 gap-3">
-              <Link
-                href="/dashboard/appointments/new"
-                className="cursor-pointer rounded-lg border border-zinc-800 p-4 text-center hover:bg-zinc-950"
-              >
-                <Calendar className="mx-auto h-6 w-6 text-[#3B82F6]" />
-                <p className="mt-2 text-sm font-medium text-zinc-100">
-                  Nueva cita
-                </p>
-              </Link>
-              <Link
-                href="/dashboard/clients/new"
-                className="cursor-pointer rounded-lg border border-zinc-800 p-4 text-center hover:bg-zinc-950"
-              >
-                <Users className="mx-auto h-6 w-6 text-emerald-600" />
-                <p className="mt-2 text-sm font-medium text-zinc-100">
-                  Nuevo cliente
-                </p>
-              </Link>
-              <Link
-                href="/dashboard/services"
-                className="cursor-pointer rounded-lg border border-zinc-800 p-4 text-center hover:bg-zinc-950"
-              >
-                <Briefcase className="mx-auto h-6 w-6 text-violet-600" />
-                <p className="mt-2 text-sm font-medium text-zinc-100">
-                  Servicios
-                </p>
-              </Link>
-              <Link
-                href="/dashboard/settings"
-                className="cursor-pointer rounded-lg border border-zinc-800 p-4 text-center hover:bg-zinc-950"
-              >
-                <Settings className="mx-auto h-6 w-6 text-amber-600" />
-                <p className="mt-2 text-sm font-medium text-zinc-100">
-                  Configuración
-                </p>
-              </Link>
-            </div>
-          </CardContent>
-        </Card>
+        <PendingActionsCard actions={pendingActions} hasClock={hasClock} />
       </div>
+
+      {canSeeLiveClockPanel && (
+        <div className="mt-6">
+          <LiveClockPanel businessId={business.id} />
+        </div>
+      )}
     </div>
   )
 }

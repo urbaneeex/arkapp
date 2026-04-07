@@ -33,6 +33,10 @@ export type PermissionKey =
   | 'finances_manage'
   | 'settings_manage'
   | 'permissions_manage'
+  | 'time_tracking_view'
+  | 'time_tracking_manage'
+  | 'absences_view'
+  | 'absences_manage'
 
 export type Permissions = Record<PermissionKey, boolean>
 
@@ -58,6 +62,10 @@ const baseKeys: PermissionKey[] = [
   'finances_manage',
   'settings_manage',
   'permissions_manage',
+  'time_tracking_view',
+  'time_tracking_manage',
+  'absences_view',
+  'absences_manage',
 ]
 
 function makePermissions(overrides: Partial<Permissions>): Permissions {
@@ -90,6 +98,8 @@ export const DEFAULT_MATRIX: PermissionMatrix = {
     staff_view: true,
     reports_view: true,
     finances_view: true,
+    time_tracking_view: true,
+    absences_view: true,
   }),
   alto: makePermissions({
     calendar_view: true,
@@ -110,6 +120,10 @@ export const DEFAULT_MATRIX: PermissionMatrix = {
     finances_view: true,
     finances_manage: true,
     settings_manage: true,
+    time_tracking_view: true,
+    time_tracking_manage: true,
+    absences_view: true,
+    absences_manage: true,
   }),
   propietario: makePermissions({
     calendar_view: true,
@@ -131,6 +145,10 @@ export const DEFAULT_MATRIX: PermissionMatrix = {
     finances_manage: true,
     settings_manage: true,
     permissions_manage: true,
+    time_tracking_view: true,
+    time_tracking_manage: true,
+    absences_view: true,
+    absences_manage: true,
   }),
 }
 
@@ -174,6 +192,10 @@ export const PERMISSION_ROWS: { category: string; permission: string; key: Permi
   { category: 'Finanzas', permission: 'Gestionar ingresos y gastos', key: 'finances_manage' },
   { category: 'Configuración', permission: 'Ver y editar configuración del negocio', key: 'settings_manage' },
   { category: 'Permisos', permission: 'Gestionar roles y permisos', key: 'permissions_manage' },
+  { category: 'Fichajes', permission: 'Ver fichajes del equipo', key: 'time_tracking_view' },
+  { category: 'Fichajes', permission: 'Gestionar fichajes (crear/editar)', key: 'time_tracking_manage' },
+  { category: 'Vacaciones', permission: 'Ver solicitudes de ausencia', key: 'absences_view' },
+  { category: 'Vacaciones', permission: 'Aprobar/rechazar ausencias', key: 'absences_manage' },
 ]
 
 export const PERMISSION_LEVELS_UI = [

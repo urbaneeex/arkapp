@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
 
     const { data: invite, error: inviteError } = await supabaseAdmin
       .from('staff_invites')
-      .select('id, staff_id, email')
+      .select('id, staff_id, email, used')
       .eq('invite_token', token)
       .single()
 

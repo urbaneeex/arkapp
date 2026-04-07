@@ -9,6 +9,8 @@ import { Label } from '@/components/ui/label'
 import { EmailInput } from '@/components/ui/email-input'
 import { normalizeEmail } from '@/lib/email'
 import { addMinutes, format, parseISO } from 'date-fns'
+import { useToastFeedback } from '@/hooks/use-toast-feedback'
+import { notifySuccess } from '@/lib/notify'
 
 type Client = { id: string; name: string; phone?: string; email?: string }
 type Service = { id: string; name: string; duration: number; price: number }
@@ -55,6 +57,7 @@ export function AppointmentForm({
   const supabase = createClient()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  useToastFeedback({ error })
 
   const defaultStart = appointment
     ? format(parseISO(appointment.start_time), "yyyy-MM-dd'T'HH:mm")
@@ -125,6 +128,7 @@ export function AppointmentForm({
       }
       if (redirectOnSuccess) router.push('/dashboard/calendar')
       else onSuccess?.()
+      notifySuccess('Cita actualizada correctamente')
     } else {
       if (form.client_id) {
         const phoneInForm = form.client_phone.trim()
@@ -171,6 +175,7 @@ export function AppointmentForm({
       }
       if (redirectOnSuccess) router.push('/dashboard/calendar')
       else onSuccess?.()
+      notifySuccess('Cita creada correctamente')
     }
     router.refresh()
     setLoading(false)

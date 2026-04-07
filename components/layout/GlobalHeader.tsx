@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { getBusinessForUserClient } from '@/lib/supabase/business-client'
 import { UserMenu } from '@/components/layout/UserMenu'
+import { ClockStatusButton } from '@/components/layout/ClockStatusButton'
 import { cn } from '@/lib/utils'
 
 export function GlobalHeader() {
@@ -55,8 +56,9 @@ export function GlobalHeader() {
         </span>
       </Link>
 
-      {/* Derecha: avatar → menú usuario */}
-      <div className="flex items-center gap-2">
+      {/* Derecha: botón fichaje + avatar → menú usuario */}
+      <div className="flex items-center gap-3">
+        {user && <ClockStatusButton />}
         {user ? (
           <UserMenu user={user} />
         ) : (

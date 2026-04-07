@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Space_Grotesk } from "next/font/google";
 import { SessionGuard } from "@/components/auth/SessionGuard";
 import { ThemeProvider } from "@/contexts/ThemeContext";
+import { SonnerToaster } from "@/components/ui/sonner-toaster";
 import "./globals.css";
 
 const spaceGrotesk = Space_Grotesk({
@@ -33,7 +34,10 @@ export default function RootLayout({
         className={`${spaceGrotesk.variable} font-sans antialiased bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100`}
       >
         <ThemeProvider>
-          <SessionGuard>{children}</SessionGuard>
+          <SessionGuard>
+            {children}
+            <SonnerToaster />
+          </SessionGuard>
         </ThemeProvider>
       </body>
     </html>

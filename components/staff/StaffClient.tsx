@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -13,11 +14,14 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Users, Clock, Shield, Plus, Check, Lock, UserCircle } from 'lucide-react'
+import { Users, Clock, Shield, Plus, Check, Lock, UserCircle, Umbrella, FileText } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { StaffList } from '@/components/staff/StaffList'
 import { RolesTab } from '@/components/staff/RolesTab'
 import { ShiftsTab } from '@/components/staff/ShiftsTab'
+import { TimeTrackingTab } from '@/components/staff/TimeTrackingTab'
+import { VacationsTab } from '@/components/staff/VacationsTab'
+import { DocumentsTab } from '@/components/staff/DocumentsTab'
 import {
   DEFAULT_MATRIX,
   PERMISSION_LEVELS_UI,
@@ -28,6 +32,7 @@ import {
 import { usePermissions } from '@/hooks/usePermissions'
 import { createClient } from '@/lib/supabase/client'
 import type { Database } from '@/types/database.types'
+import { notifyError, notifySuccess } from '@/lib/notify'
 
 type StaffRow = Database['public']['Tables']['staff']['Row']
 
@@ -48,12 +53,19 @@ export function StaffClient({
   businessId: string
   roles: Role[]
 }) {
+  const router = useRouter()
+  const searchParams = useSearchParams()
   const { hasPermission } = usePermissions()
-  const [activeTab, setActiveTab] = useState('empleados')
+  const [activeTab, setActiveTab] = useState(() => searchParams.get('tab') ?? 'empleados')
+
+  // Jump to tab when ?tab= searchParam changes (e.g. navigating from dashboard)
+  useEffect(() => {
+    const tab = searchParams.get('tab')
+    if (tab) setActiveTab(tab)
+  }, [searchParams])
   const [matrix, setMatrix] = useState<PermissionMatrix>(DEFAULT_MATRIX)
   const [matrixLoading, setMatrixLoading] = useState(true)
   const [matrixSaving, setMatrixSaving] = useState(false)
-  const [matrixSaveError, setMatrixSaveError] = useState<string | null>(null)
 
   useEffect(() => {
     const load = async () => {
@@ -87,12 +99,10 @@ export function StaffClient({
         [key]: value,
       },
     }))
-    setMatrixSaveError(null)
   }
 
   const handleSaveMatrix = async () => {
     setMatrixSaving(true)
-    setMatrixSaveError(null)
     const supabase = createClient()
     const { error } = await supabase
       .from('businesses')
@@ -100,17 +110,25 @@ export function StaffClient({
       .eq('id', businessId)
     setMatrixSaving(false)
     if (error) {
-      setMatrixSaveError(error.message)
+      notifyError(error.message)
       return
     }
+    notifySuccess('Cambios de permisos guardados')
+    router.refresh()
   }
 
   const canManagePermissions = hasPermission('permissions_manage')
   const canInviteStaff = hasPermission('staff_invite')
+  const canViewTimeTracking = hasPermission('time_tracking_view')
+  const canViewAbsences = hasPermission('absences_view')
+  const canEditStaff = hasPermission('staff_edit')
 
   const tabs = [
     { value: 'empleados', icon: Users, label: 'Empleados' },
     { value: 'turnos', icon: Clock, label: 'Turnos' },
+    ...(canViewTimeTracking ? [{ value: 'fichajes', icon: Clock, label: 'Fichajes' }] : []),
+    ...(canViewAbsences ? [{ value: 'vacaciones', icon: Umbrella, label: 'Vacaciones' }] : []),
+    ...(canEditStaff ? [{ value: 'documentos', icon: FileText, label: 'Documentos' }] : []),
     { value: 'roles', icon: UserCircle, label: 'Roles' },
     ...(canManagePermissions ? [{ value: 'permisos', icon: Shield, label: 'Permisos' }] : []),
   ]
@@ -130,7 +148,7 @@ export function StaffClient({
           )}
         </div>
         <p className="text-sm text-zinc-400 mt-1">
-          Gestiona empleados, turnos, roles y permisos
+          Gestiona empleados, turnos, fichajes, vacaciones, roles y permisos
         </p>
       </header>
       <TabsList className="flex w-full flex-row flex-wrap justify-start gap-2 h-auto p-1 bg-zinc-800 cursor-default">
@@ -149,6 +167,24 @@ export function StaffClient({
       <TabsContent value="turnos" className="mt-6">
         <ShiftsTab businessId={businessId} staff={staff} />
       </TabsContent>
+
+      {canViewTimeTracking && (
+        <TabsContent value="fichajes" className="mt-6">
+          <TimeTrackingTab businessId={businessId} staff={staff} />
+        </TabsContent>
+      )}
+
+      {canViewAbsences && (
+        <TabsContent value="vacaciones" className="mt-6">
+          <VacationsTab businessId={businessId} staff={staff} />
+        </TabsContent>
+      )}
+
+      {canEditStaff && (
+        <TabsContent value="documentos" className="mt-6">
+          <DocumentsTab businessId={businessId} staff={staff} />
+        </TabsContent>
+      )}
 
       <TabsContent value="roles" className="mt-6">
         <RolesTab businessId={businessId} initialRoles={roles} />
@@ -226,11 +262,8 @@ export function StaffClient({
                       onClick={handleSaveMatrix}
                       disabled={matrixSaving}
                     >
-                      {matrixSaving ? 'Guardando...' : 'Guardar matriz de permisos'}
+                      {matrixSaving ? 'Guardando...' : 'Guardar cambios'}
                     </Button>
-                    {matrixSaveError && (
-                      <p className="text-sm text-red-600">{matrixSaveError}</p>
-                    )}
                   </div>
                   <p className="text-xs text-zinc-400 mt-2">
                     Los empleados verán los nuevos permisos al recargar o en la próxima sesión.

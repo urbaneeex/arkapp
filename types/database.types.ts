@@ -12,31 +12,6 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.1"
   }
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
-  }
   public: {
     Tables: {
       appointments: {
@@ -165,82 +140,94 @@ export type Database = {
       }
       businesses: {
         Row: {
-          config_json: Json | null
-          created_at: string | null
-          currency: string | null
-          id: string
-          name: string
-          owner_name: string | null
-          owner_phone: string | null
-          business_name: string | null
-          onboarding_completed: boolean | null
-          owner_uid: string
-          slug: string
-          timezone: string | null
-          whatsapp_number: string | null
-          logo_url: string | null
-          industry: string | null
           address: string | null
           booking_settings: Json | null
-          notification_settings: Json | null
-          plan: string | null
-          permission_matrix: Json | null
-          wa_instance_name: string | null
-          wa_status: string | null
-          wa_connected_phone: string | null
+          business_name: string | null
+          clock_in_method: string | null
+          config_json: Json | null
           country: string | null
+          created_at: string | null
+          currency: string | null
+          geofence_lat: number | null
+          geofence_lng: number | null
+          geofence_radius_meters: number | null
+          id: string
+          industry: string | null
+          logo_url: string | null
+          name: string | null
+          notification_settings: Json | null
+          onboarding_completed: boolean | null
+          owner_name: string | null
+          owner_phone: string | null
+          owner_uid: string
+          permission_matrix: Json | null
+          plan: string | null
+          slug: string | null
+          timezone: string | null
+          wa_connected_phone: string | null
+          wa_instance_name: string | null
+          wa_status: string
+          whatsapp_number: string | null
         }
         Insert: {
-          config_json?: Json | null
-          created_at?: string | null
-          currency?: string | null
-          id?: string
-          name: string
-          owner_name?: string | null
-          owner_phone?: string | null
-          business_name?: string | null
-          onboarding_completed?: boolean | null
-          owner_uid: string
-          slug: string
-          timezone?: string | null
-          whatsapp_number?: string | null
-          logo_url?: string | null
-          industry?: string | null
           address?: string | null
           booking_settings?: Json | null
-          notification_settings?: Json | null
-          plan?: string | null
-          permission_matrix?: Json | null
-          wa_instance_name?: string | null
-          wa_status?: string | null
-          wa_connected_phone?: string | null
+          business_name?: string | null
+          clock_in_method?: string | null
+          config_json?: Json | null
           country?: string | null
+          created_at?: string | null
+          currency?: string | null
+          geofence_lat?: number | null
+          geofence_lng?: number | null
+          geofence_radius_meters?: number | null
+          id?: string
+          industry?: string | null
+          logo_url?: string | null
+          name?: string | null
+          notification_settings?: Json | null
+          onboarding_completed?: boolean | null
+          owner_name?: string | null
+          owner_phone?: string | null
+          owner_uid: string
+          permission_matrix?: Json | null
+          plan?: string | null
+          slug?: string | null
+          timezone?: string | null
+          wa_connected_phone?: string | null
+          wa_instance_name?: string | null
+          wa_status?: string
+          whatsapp_number?: string | null
         }
         Update: {
-          config_json?: Json | null
-          created_at?: string | null
-          currency?: string | null
-          id?: string
-          name?: string
-          owner_name?: string | null
-          owner_phone?: string | null
-          business_name?: string | null
-          onboarding_completed?: boolean | null
-          owner_uid?: string
-          slug?: string
-          timezone?: string | null
-          whatsapp_number?: string | null
-          logo_url?: string | null
-          industry?: string | null
           address?: string | null
           booking_settings?: Json | null
-          notification_settings?: Json | null
-          plan?: string | null
-          permission_matrix?: Json | null
-          wa_instance_name?: string | null
-          wa_status?: string | null
-          wa_connected_phone?: string | null
+          business_name?: string | null
+          clock_in_method?: string | null
+          config_json?: Json | null
           country?: string | null
+          created_at?: string | null
+          currency?: string | null
+          geofence_lat?: number | null
+          geofence_lng?: number | null
+          geofence_radius_meters?: number | null
+          id?: string
+          industry?: string | null
+          logo_url?: string | null
+          name?: string | null
+          notification_settings?: Json | null
+          onboarding_completed?: boolean | null
+          owner_name?: string | null
+          owner_phone?: string | null
+          owner_uid?: string
+          permission_matrix?: Json | null
+          plan?: string | null
+          slug?: string | null
+          timezone?: string | null
+          wa_connected_phone?: string | null
+          wa_instance_name?: string | null
+          wa_status?: string
+          whatsapp_number?: string | null
         }
         Relationships: []
       }
@@ -251,13 +238,13 @@ export type Database = {
           created_at: string | null
           email: string | null
           id: string
+          last_visit: string | null
           metadata: Json | null
           name: string
           notes: string | null
           phone: string
           tags: string[] | null
           total_spent: number | null
-          last_visit: string | null
         }
         Insert: {
           address?: string | null
@@ -265,13 +252,13 @@ export type Database = {
           created_at?: string | null
           email?: string | null
           id?: string
+          last_visit?: string | null
           metadata?: Json | null
           name: string
           notes?: string | null
           phone: string
           tags?: string[] | null
           total_spent?: number | null
-          last_visit?: string | null
         }
         Update: {
           address?: string | null
@@ -279,13 +266,13 @@ export type Database = {
           created_at?: string | null
           email?: string | null
           id?: string
+          last_visit?: string | null
           metadata?: Json | null
           name?: string
           notes?: string | null
           phone?: string
           tags?: string[] | null
           total_spent?: number | null
-          last_visit?: string | null
         }
         Relationships: [
           {
@@ -297,9 +284,134 @@ export type Database = {
           },
         ]
       }
+      expenses: {
+        Row: {
+          amount: number
+          business_id: string
+          category: string
+          created_at: string | null
+          date: string
+          description: string | null
+          id: string
+          notes: string | null
+          receipt_url: string | null
+        }
+        Insert: {
+          amount: number
+          business_id: string
+          category: string
+          created_at?: string | null
+          date: string
+          description?: string | null
+          id?: string
+          notes?: string | null
+          receipt_url?: string | null
+        }
+        Update: {
+          amount?: number
+          business_id?: string
+          category?: string
+          created_at?: string | null
+          date?: string
+          description?: string | null
+          id?: string
+          notes?: string | null
+          receipt_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expenses_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notifications: {
+        Row: {
+          business_id: string
+          created_at: string | null
+          id: string
+          message: string | null
+          metadata: Json | null
+          read: boolean | null
+          title: string
+          type: string
+        }
+        Insert: {
+          business_id: string
+          created_at?: string | null
+          id?: string
+          message?: string | null
+          metadata?: Json | null
+          read?: boolean | null
+          title: string
+          type: string
+        }
+        Update: {
+          business_id?: string
+          created_at?: string | null
+          id?: string
+          message?: string | null
+          metadata?: Json | null
+          read?: boolean | null
+          title?: string
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      roles: {
+        Row: {
+          business_id: string
+          created_at: string | null
+          description: string | null
+          id: string
+          name: string
+          permissions: Json | null
+          updated_at: string | null
+        }
+        Insert: {
+          business_id: string
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          name: string
+          permissions?: Json | null
+          updated_at?: string | null
+        }
+        Update: {
+          business_id?: string
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          name?: string
+          permissions?: Json | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "roles_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       services: {
         Row: {
           business_id: string
+          category: string | null
+          color: string | null
           created_at: string | null
           deposit_amount: number | null
           description: string | null
@@ -308,11 +420,11 @@ export type Database = {
           name: string
           price: number
           requires_deposit: boolean | null
-          color: string | null
-          category: string | null
         }
         Insert: {
           business_id: string
+          category?: string | null
+          color?: string | null
           created_at?: string | null
           deposit_amount?: number | null
           description?: string | null
@@ -321,11 +433,11 @@ export type Database = {
           name: string
           price: number
           requires_deposit?: boolean | null
-          color?: string | null
-          category?: string | null
         }
         Update: {
           business_id?: string
+          category?: string | null
+          color?: string | null
           created_at?: string | null
           deposit_amount?: number | null
           description?: string | null
@@ -334,8 +446,6 @@ export type Database = {
           name?: string
           price?: number
           requires_deposit?: boolean | null
-          color?: string | null
-          category?: string | null
         }
         Relationships: [
           {
@@ -349,49 +459,79 @@ export type Database = {
       }
       staff: {
         Row: {
+          access_level: string | null
+          address: string | null
+          avatar_url: string | null
           business_id: string
+          color: string | null
+          contract_hours_per_week: number | null
+          contract_type: string | null
           created_at: string | null
           deleted_at: string | null
+          dni: string | null
+          email: string | null
+          end_date: string | null
+          hire_date: string | null
           id: string
+          invitation_status: string | null
           is_active: boolean | null
           metadata: Json | null
           name: string
+          nif: string | null
           phone: string | null
           role: string | null
-          color: string | null
-          avatar_url: string | null
-          email: string | null
           schedule: Json | null
+          vacation_days_per_year: number | null
         }
         Insert: {
+          access_level?: string | null
+          address?: string | null
+          avatar_url?: string | null
           business_id: string
+          color?: string | null
+          contract_hours_per_week?: number | null
+          contract_type?: string | null
           created_at?: string | null
           deleted_at?: string | null
+          dni?: string | null
+          email?: string | null
+          end_date?: string | null
+          hire_date?: string | null
           id?: string
+          invitation_status?: string | null
           is_active?: boolean | null
           metadata?: Json | null
           name: string
+          nif?: string | null
           phone?: string | null
           role?: string | null
-          color?: string | null
-          avatar_url?: string | null
-          email?: string | null
           schedule?: Json | null
+          vacation_days_per_year?: number | null
         }
         Update: {
+          access_level?: string | null
+          address?: string | null
+          avatar_url?: string | null
           business_id?: string
+          color?: string | null
+          contract_hours_per_week?: number | null
+          contract_type?: string | null
           created_at?: string | null
           deleted_at?: string | null
+          dni?: string | null
+          email?: string | null
+          end_date?: string | null
+          hire_date?: string | null
           id?: string
+          invitation_status?: string | null
           is_active?: boolean | null
           metadata?: Json | null
           name?: string
+          nif?: string | null
           phone?: string | null
           role?: string | null
-          color?: string | null
-          avatar_url?: string | null
-          email?: string | null
           schedule?: Json | null
+          vacation_days_per_year?: number | null
         }
         Relationships: [
           {
@@ -403,87 +543,448 @@ export type Database = {
           },
         ]
       }
-      notifications: {
+      staff_absence_requests: {
         Row: {
-          id: string
+          approved_at: string | null
+          approved_by: string | null
           business_id: string
-          type: string
-          title: string
-          message: string | null
-          read: boolean | null
-          metadata: Json | null
           created_at: string | null
+          end_date: string
+          id: string
+          notes: string | null
+          rejection_reason: string | null
+          staff_id: string
+          start_date: string
+          status: string
+          type: string
         }
         Insert: {
-          id?: string
+          approved_at?: string | null
+          approved_by?: string | null
           business_id: string
-          type: string
-          title: string
-          message?: string | null
-          read?: boolean | null
-          metadata?: Json | null
           created_at?: string | null
+          end_date: string
+          id?: string
+          notes?: string | null
+          rejection_reason?: string | null
+          staff_id: string
+          start_date: string
+          status?: string
+          type?: string
         }
         Update: {
-          id?: string
+          approved_at?: string | null
+          approved_by?: string | null
           business_id?: string
-          type?: string
-          title?: string
-          message?: string | null
-          read?: boolean | null
-          metadata?: Json | null
           created_at?: string | null
+          end_date?: string
+          id?: string
+          notes?: string | null
+          rejection_reason?: string | null
+          staff_id?: string
+          start_date?: string
+          status?: string
+          type?: string
         }
         Relationships: [
           {
-            foreignKeyName: "notifications_business_id_fkey"
+            foreignKeyName: "staff_absence_requests_business_id_fkey"
             columns: ["business_id"]
             isOneToOne: false
             referencedRelation: "businesses"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "staff_absence_requests_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
         ]
       }
-      expenses: {
+      staff_documents: {
+        Row: {
+          business_id: string
+          category: string
+          created_at: string | null
+          file_name: string
+          file_size: number | null
+          file_url: string
+          id: string
+          requires_signature: boolean
+          staff_id: string
+          title: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          business_id: string
+          category?: string
+          created_at?: string | null
+          file_name: string
+          file_size?: number | null
+          file_url: string
+          id?: string
+          requires_signature?: boolean
+          staff_id: string
+          title: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          business_id?: string
+          category?: string
+          created_at?: string | null
+          file_name?: string
+          file_size?: number | null
+          file_url?: string
+          id?: string
+          requires_signature?: boolean
+          staff_id?: string
+          title?: string
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_documents_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_documents_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      staff_invites: {
+        Row: {
+          created_at: string | null
+          email: string
+          expires_at: string
+          id: string
+          invite_token: string
+          staff_id: string
+          used: boolean | null
+        }
+        Insert: {
+          created_at?: string | null
+          email: string
+          expires_at: string
+          id?: string
+          invite_token: string
+          staff_id: string
+          used?: boolean | null
+        }
+        Update: {
+          created_at?: string | null
+          email?: string
+          expires_at?: string
+          id?: string
+          invite_token?: string
+          staff_id?: string
+          used?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_invites_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      staff_shifts: {
+        Row: {
+          business_id: string
+          created_at: string | null
+          date: string
+          duration_hours: number | null
+          end_time: string
+          id: string
+          is_recurring: boolean | null
+          notes: string | null
+          recurrence_parent_id: string | null
+          recurrence_pattern: Json | null
+          shift_type: string | null
+          staff_id: string
+          start_time: string
+          updated_at: string | null
+        }
+        Insert: {
+          business_id: string
+          created_at?: string | null
+          date: string
+          duration_hours?: number | null
+          end_time: string
+          id?: string
+          is_recurring?: boolean | null
+          notes?: string | null
+          recurrence_parent_id?: string | null
+          recurrence_pattern?: Json | null
+          shift_type?: string | null
+          staff_id: string
+          start_time: string
+          updated_at?: string | null
+        }
+        Update: {
+          business_id?: string
+          created_at?: string | null
+          date?: string
+          duration_hours?: number | null
+          end_time?: string
+          id?: string
+          is_recurring?: boolean | null
+          notes?: string | null
+          recurrence_parent_id?: string | null
+          recurrence_pattern?: Json | null
+          shift_type?: string | null
+          staff_id?: string
+          start_time?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_shifts_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_shifts_recurrence_parent_id_fkey"
+            columns: ["recurrence_parent_id"]
+            isOneToOne: false
+            referencedRelation: "staff_shifts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_shifts_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      staff_signatures: {
+        Row: {
+          business_id: string
+          content_hash: string | null
+          created_at: string | null
+          document_type: string
+          id: string
+          notes: string | null
+          reference_id: string | null
+          reference_period: string | null
+          requested_at: string | null
+          signed_at: string | null
+          signed_ip: string | null
+          signature_asset_url: string | null
+          signed_device: string | null
+          staff_id: string
+          status: string
+        }
+        Insert: {
+          business_id: string
+          content_hash?: string | null
+          created_at?: string | null
+          document_type: string
+          id?: string
+          notes?: string | null
+          reference_id?: string | null
+          reference_period?: string | null
+          requested_at?: string | null
+          signed_at?: string | null
+          signed_ip?: string | null
+          signature_asset_url?: string | null
+          signed_device?: string | null
+          staff_id: string
+          status?: string
+        }
+        Update: {
+          business_id?: string
+          content_hash?: string | null
+          created_at?: string | null
+          document_type?: string
+          id?: string
+          notes?: string | null
+          reference_id?: string | null
+          reference_period?: string | null
+          requested_at?: string | null
+          signed_at?: string | null
+          signed_ip?: string | null
+          signature_asset_url?: string | null
+          signed_device?: string | null
+          staff_id?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_signatures_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_signatures_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sign_sessions: {
         Row: {
           id: string
-          business_id: string
-          date: string
-          category: string
-          description: string | null
-          amount: number
-          receipt_url: string | null
-          notes: string | null
+          signature_id: string
+          token: string
+          expires_at: string
+          used: boolean
           created_at: string | null
         }
         Insert: {
           id?: string
-          business_id: string
-          date: string
-          category: string
-          description?: string | null
-          amount: number
-          receipt_url?: string | null
-          notes?: string | null
+          signature_id: string
+          token: string
+          expires_at: string
+          used?: boolean
           created_at?: string | null
         }
         Update: {
           id?: string
-          business_id?: string
-          date?: string
-          category?: string
-          description?: string | null
-          amount?: number
-          receipt_url?: string | null
-          notes?: string | null
+          signature_id?: string
+          token?: string
+          expires_at?: string
+          used?: boolean
           created_at?: string | null
         }
         Relationships: [
           {
-            foreignKeyName: "expenses_business_id_fkey"
+            foreignKeyName: "sign_sessions_signature_id_fkey"
+            columns: ["signature_id"]
+            isOneToOne: false
+            referencedRelation: "staff_signatures"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      staff_vacation_balance: {
+        Row: {
+          business_id: string
+          created_at: string | null
+          days_allocated: number
+          id: string
+          notes: string | null
+          staff_id: string
+          updated_at: string | null
+          year: number
+        }
+        Insert: {
+          business_id: string
+          created_at?: string | null
+          days_allocated?: number
+          id?: string
+          notes?: string | null
+          staff_id: string
+          updated_at?: string | null
+          year: number
+        }
+        Update: {
+          business_id?: string
+          created_at?: string | null
+          days_allocated?: number
+          id?: string
+          notes?: string | null
+          staff_id?: string
+          updated_at?: string | null
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_vacation_balance_business_id_fkey"
             columns: ["business_id"]
             isOneToOne: false
             referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_vacation_balance_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      time_entries: {
+        Row: {
+          break_end: string | null
+          break_start: string | null
+          business_id: string
+          clock_in: string
+          clock_out: string | null
+          created_at: string | null
+          edited_by: string | null
+          hours_worked: number | null
+          id: string
+          notes: string | null
+          source: string | null
+          staff_id: string
+          verified_lat: number | null
+          verified_lng: number | null
+        }
+        Insert: {
+          break_end?: string | null
+          break_start?: string | null
+          business_id: string
+          clock_in: string
+          clock_out?: string | null
+          created_at?: string | null
+          edited_by?: string | null
+          hours_worked?: number | null
+          id?: string
+          notes?: string | null
+          source?: string | null
+          staff_id: string
+          verified_lat?: number | null
+          verified_lng?: number | null
+        }
+        Update: {
+          break_end?: string | null
+          break_start?: string | null
+          business_id?: string
+          clock_in?: string
+          clock_out?: string | null
+          created_at?: string | null
+          edited_by?: string | null
+          hours_worked?: number | null
+          id?: string
+          notes?: string | null
+          source?: string | null
+          staff_id?: string
+          verified_lat?: number | null
+          verified_lng?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "time_entries_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "time_entries_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
             referencedColumns: ["id"]
           },
         ]
@@ -493,7 +994,11 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      check_business_access: {
+        Args: { business_id_param: string }
+        Returns: boolean
+      }
+      get_my_staff_business_id: { Args: never; Returns: string }
     }
     Enums: {
       appointment_status:
@@ -630,9 +1135,6 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {
       appointment_status: [

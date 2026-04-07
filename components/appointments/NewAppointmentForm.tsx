@@ -34,6 +34,7 @@ import {
   type Shift,
 } from '@/lib/availability'
 import { cn } from '@/lib/utils'
+import { notifyByType } from '@/lib/notify'
 
 function formatSlotLabel(dateStr: string, timeStr: string): string {
   const formatted = new Intl.DateTimeFormat('es-ES', {
@@ -77,7 +78,7 @@ export function NewAppointmentForm({
   const router = useRouter()
   const supabase = createClient()
   const contextToast = useAppointmentToast()
-  const onToastFn = onToast ?? contextToast
+  const onToastFn = onToast ?? contextToast ?? ((message: string, type: 'success' | 'error') => notifyByType(message, type))
 
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -645,8 +646,6 @@ export function NewAppointmentForm({
                 </div>
               </div>
             )}
-          </div>
-
           {isNewClient && (
             <NewClientFields
               name={newClientName}

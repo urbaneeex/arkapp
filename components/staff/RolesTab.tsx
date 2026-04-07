@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/table'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Plus, Trash2, Loader2, Edit2, X, Check } from 'lucide-react'
+import { notifyError, notifySuccess } from '@/lib/notify'
 
 type Role = {
   id: string
@@ -136,11 +137,14 @@ export function RolesTab({
 
     setLoading(true)
 
+    const previousName = roles.find((r) => r.id === editingId)?.name ?? ''
+    const newName = form.name.trim()
+
     try {
       const { data, error: updateError } = await supabase
         .from('roles')
         .update({
-          name: form.name.trim(),
+          name: newName,
           description: form.description.trim() || null,
         })
         .eq('id', editingId)
@@ -149,21 +153,46 @@ export function RolesTab({
         .single()
 
       if (updateError) {
-        if (updateError.code === '23505') {
-          setError('Ya existe un rol con ese nombre')
-        } else {
-          setError(updateError.message)
-        }
-        setLoading(false)
+        const msg =
+          updateError.code === '23505'
+            ? 'Ya existe un rol con ese nombre'
+            : updateError.message
+        setError(msg)
+        notifyError(msg)
         return
+      }
+
+      let staffCascadeFailed = false
+      if (previousName && newName !== previousName) {
+        const { error: staffRoleError } = await supabase
+          .from('staff')
+          .update({ role: newName })
+          .eq('business_id', businessId)
+          .eq('role', previousName)
+
+        if (staffRoleError) {
+          staffCascadeFailed = true
+          notifyError(
+            `El rol se guardó, pero no se pudieron actualizar las fichas de empleados: ${staffRoleError.message}`
+          )
+        }
       }
 
       setRoles(roles.map((r) => (r.id === editingId ? data : r)))
       resetForm()
-      showFeedback('success', 'Rol actualizado correctamente')
+      if (!staffCascadeFailed) {
+        notifySuccess(
+          previousName && newName !== previousName
+            ? `Rol renombrado a «${newName}»`
+            : 'Rol actualizado correctamente'
+        )
+      }
       router.refresh()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al actualizar el rol')
+      const msg = err instanceof Error ? err.message : 'Error al actualizar el rol'
+      setError(msg)
+      notifyError(msg)
+    } finally {
       setLoading(false)
     }
   }

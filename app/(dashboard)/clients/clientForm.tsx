@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button'
 import { EmailInput } from '@/components/ui/email-input'
 import { normalizeEmail } from '@/lib/email'
 import type { Database } from '@/types/database.types'
+import { useToastFeedback } from '@/hooks/use-toast-feedback'
+import { notifySuccess } from '@/lib/notify'
 
 type ClientRow = Database['public']['Tables']['clients']['Row']
 
@@ -28,6 +30,7 @@ export default function ClientForm({ client }: ClientFormProps) {
   
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  useToastFeedback({ error })
 
   // Manejar cambios en inputs
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -85,6 +88,7 @@ export default function ClientForm({ client }: ClientFormProps) {
       // Redirigir a lista de clientes
       router.push('/dashboard/clients')
       router.refresh() // Refresca los datos
+      notifySuccess(client?.id ? 'Cliente actualizado correctamente' : 'Cliente creado correctamente')
       
     } catch (err: any) {
       setError(err.message)

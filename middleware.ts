@@ -13,7 +13,7 @@ export async function middleware(request: NextRequest) {
     '/auth/callback',
   ])
 
-  const isPublicRoute = publicRoutes.has(pathname)
+  const isPublicRoute = publicRoutes.has(pathname) || pathname.startsWith('/sign/')
   const isAuthEntry = pathname === '/login' || pathname === '/register'
 
   if (user && isAuthEntry) {

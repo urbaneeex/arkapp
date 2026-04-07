@@ -8,6 +8,8 @@ import { PhoneInput } from '@/components/ui/phone-input'
 import { EmailInput } from '@/components/ui/email-input'
 import { normalizeEmail } from '@/lib/email'
 import type { Database } from '@/types/database.types'
+import { useToastFeedback } from '@/hooks/use-toast-feedback'
+import { notifySuccess } from '@/lib/notify'
 
 type ClientRow = Database['public']['Tables']['clients']['Row']
 
@@ -30,6 +32,7 @@ export default function ClientForm({ client, defaultCountry }: ClientFormProps) 
   
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  useToastFeedback({ error })
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setFormData({
@@ -82,6 +85,7 @@ export default function ClientForm({ client, defaultCountry }: ClientFormProps) 
 
       router.push('/dashboard/clients')
       router.refresh()
+      notifySuccess(client?.id ? 'Cliente actualizado correctamente' : 'Cliente creado correctamente')
       
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Error al guardar')

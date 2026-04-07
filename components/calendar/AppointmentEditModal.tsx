@@ -38,6 +38,7 @@ export function AppointmentEditModal({
   staff,
   onDeleted,
   onToast,
+  canDelete,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void

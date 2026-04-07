@@ -21,7 +21,12 @@ import {
   Upload,
   Plus,
   Trash2,
+  ScanLine,
+  MapPin,
+  ExternalLink,
+  Navigation,
 } from 'lucide-react'
+import { toast } from 'sonner'
 import { useBusinessStore } from '@/stores/business'
 import { CountryCombobox } from '@/components/ui/country-combobox'
 const INDUSTRIES = ['Belleza', 'Salud', 'Consultoría', 'Fitness', 'Educación', 'Legal', 'Otro']
@@ -57,6 +62,10 @@ interface BusinessData {
   wa_status?: WaStatus
   wa_connected_phone?: string | null
   country?: string | null
+  clock_in_method?: string | null
+  geofence_lat?: number | null
+  geofence_lng?: number | null
+  geofence_radius_meters?: number | null
 }
 
 interface ShiftRow {
@@ -127,6 +136,21 @@ export function SettingsClient({
   const [waConnecting, setWaConnecting] = useState(false)
   const [qrBase64, setQrBase64] = useState<string | null>(null)
   const [waPhone, setWaPhone] = useState<string | null>(business.wa_connected_phone ?? null)
+
+  // Clock-in settings
+  const [clockInMethod, setClockInMethod] = useState<'manual' | 'qr' | 'gps'>(
+    (business.clock_in_method as 'manual' | 'qr' | 'gps') ?? 'manual'
+  )
+  const [geofenceLat, setGeofenceLat] = useState(
+    business.geofence_lat != null ? String(business.geofence_lat) : ''
+  )
+  const [geofenceLng, setGeofenceLng] = useState(
+    business.geofence_lng != null ? String(business.geofence_lng) : ''
+  )
+  const [geofenceRadius, setGeofenceRadius] = useState(
+    business.geofence_radius_meters ?? 200
+  )
+  const [gpsLocating, setGpsLocating] = useState(false)
 
   // Sincronizar estado inicial desde props cuando cambian
   useEffect(() => {
@@ -487,6 +511,48 @@ export function SettingsClient({
     showFeedback('success', 'Notificaciones guardadas.')
   }
 
+  const saveClockSettings = async () => {
+    setSaving('clock')
+    setError(null)
+    const { error: e } = await supabase
+      .from('businesses')
+      .update({
+        clock_in_method: clockInMethod,
+        geofence_lat: clockInMethod === 'gps' && geofenceLat ? Number(geofenceLat) : null,
+        geofence_lng: clockInMethod === 'gps' && geofenceLng ? Number(geofenceLng) : null,
+        geofence_radius_meters: clockInMethod === 'gps' ? geofenceRadius : null,
+      })
+      .eq('id', business.id)
+    setSaving(null)
+    if (e) {
+      toast.error(e.message)
+      return
+    }
+    toast.success('Configuración de fichaje guardada.')
+    router.refresh()
+  }
+
+  const useMyLocation = () => {
+    if (!navigator.geolocation) {
+      toast.error('Tu navegador no soporta geolocalización.')
+      return
+    }
+    setGpsLocating(true)
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setGeofenceLat(String(pos.coords.latitude.toFixed(6)))
+        setGeofenceLng(String(pos.coords.longitude.toFixed(6)))
+        setGpsLocating(false)
+        toast.success('Coordenadas obtenidas. Revisa los campos y guarda si todo es correcto.')
+      },
+      () => {
+        toast.error('No se pudo obtener la ubicación. Comprueba los permisos.')
+        setGpsLocating(false)
+      },
+      { enableHighAccuracy: true }
+    )
+  }
+
   const slugPath = `/book/${slug || business.slug}`
 
   return (
@@ -512,6 +578,7 @@ export function SettingsClient({
             { value: 'notifications', icon: Bell, label: 'Notificaciones' },
             { value: 'billing', icon: CreditCard, label: 'Facturación' },
             { value: 'integrations', icon: Plug, label: 'Integraciones' },
+            { value: 'clock', icon: ScanLine, label: 'Fichaje' },
           ].map(({ value, icon: Icon, label }) => (
             <TabsTrigger
               key={value}
@@ -1134,6 +1201,131 @@ export function SettingsClient({
               </CardContent>
             </Card>
           </TabsContent>
+        <TabsContent value="clock" className="mt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Control de fichaje</CardTitle>
+              <p className="text-sm text-zinc-400">
+                Configura cómo los empleados deben verificar su presencia al fichar
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div>
+                <Label htmlFor="clock_method">Método de verificación</Label>
+                <select
+                  id="clock_method"
+                  value={clockInMethod}
+                  onChange={(e) => setClockInMethod(e.target.value as 'manual' | 'qr' | 'gps')}
+                  className="mt-1 flex h-10 w-full max-w-xs rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]"
+                >
+                  <option value="manual">Solo botón (sin verificación extra)</option>
+                  <option value="qr">Código QR rotativo</option>
+                  <option value="gps">GPS / Geofencing</option>
+                </select>
+                <p className="text-xs text-zinc-500 mt-1.5">
+                  {clockInMethod === 'manual' && 'El empleado ficha con un solo toque. La sesión iniciada es la verificación de identidad.'}
+                  {clockInMethod === 'qr' && 'Los empleados escanean un código QR que cambia cada 2 minutos. Muéstralo en una pantalla en el local.'}
+                  {clockInMethod === 'gps' && 'Los empleados deben estar dentro del radio configurado para poder fichar.'}
+                </p>
+              </div>
+
+              {clockInMethod === 'qr' && (
+                <div className="rounded-lg border border-blue-700/30 bg-blue-950/20 p-4 flex items-start gap-3">
+                  <ScanLine className="h-5 w-5 text-blue-400 mt-0.5 shrink-0" />
+                  <div className="space-y-1">
+                    <p className="text-sm text-blue-300 font-medium">Pantalla QR del local</p>
+                    <p className="text-xs text-zinc-400">
+                      Abre esta pantalla en una tableta o monitor del local para que los empleados puedan escanear el código.
+                    </p>
+                    <a
+                      href="/dashboard/clock"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 mt-1"
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                      Abrir pantalla QR
+                    </a>
+                  </div>
+                </div>
+              )}
+
+              {clockInMethod === 'gps' && (
+                <div className="space-y-4 pt-2 border-t border-zinc-800">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <h4 className="text-sm font-medium text-zinc-200 flex items-center gap-2">
+                      <MapPin className="h-4 w-4 text-blue-400" />
+                      Ubicación del negocio
+                    </h4>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={useMyLocation}
+                      disabled={gpsLocating}
+                      className="cursor-pointer text-xs"
+                    >
+                      <Navigation className="h-3.5 w-3.5 mr-1.5" />
+                      {gpsLocating ? 'Obteniendo...' : 'Usar mi ubicación actual'}
+                    </Button>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <Label htmlFor="geo_lat">Latitud</Label>
+                      <Input
+                        id="geo_lat"
+                        value={geofenceLat}
+                        onChange={(e) => setGeofenceLat(e.target.value)}
+                        placeholder="40.416775"
+                        className="mt-1 font-mono text-sm"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="geo_lng">Longitud</Label>
+                      <Input
+                        id="geo_lng"
+                        value={geofenceLng}
+                        onChange={(e) => setGeofenceLng(e.target.value)}
+                        placeholder="-3.703790"
+                        className="mt-1 font-mono text-sm"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <Label htmlFor="geo_radius">
+                      Radio de fichaje: <span className="text-blue-400">{geofenceRadius} metros</span>
+                    </Label>
+                    <input
+                      id="geo_radius"
+                      type="range"
+                      min={50}
+                      max={500}
+                      step={10}
+                      value={geofenceRadius}
+                      onChange={(e) => setGeofenceRadius(Number(e.target.value))}
+                      className="mt-2 w-full max-w-xs accent-blue-500 cursor-pointer"
+                    />
+                    <div className="flex justify-between text-xs text-zinc-600 max-w-xs mt-0.5">
+                      <span>50 m</span>
+                      <span>500 m</span>
+                    </div>
+                    <p className="text-xs text-zinc-500 mt-1">
+                      Los empleados deben estar a menos de {geofenceRadius} m del negocio para poder fichar.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              <Button
+                onClick={saveClockSettings}
+                disabled={saving === 'clock'}
+                className="cursor-pointer"
+              >
+                {saving === 'clock' ? 'Guardando…' : 'Guardar configuración de fichaje'}
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
     </div>
   )
