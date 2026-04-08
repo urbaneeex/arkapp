@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/client'
 import { useToastFeedback } from '@/hooks/use-toast-feedback'
 
 function Spinner() {
@@ -15,7 +14,6 @@ function Spinner() {
 }
 
 export default function ForgotPasswordPage() {
-  const supabase = createClient()
   const [email, setEmail] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -32,17 +30,29 @@ export default function ForgotPasswordPage() {
     setError('')
     setSuccess('')
 
-    const redirectTo = `${window.location.origin}/reset-password`
-    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo })
-    setLoading(false)
-
-    if (resetError) {
+    try {
+      const res = await fetch('/api/auth/request-password-reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim().toLowerCase() }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setError('Ha ocurrido un error. Inténtalo de nuevo.')
+        setCooldownUntil(Date.now() + 3000)
+        return
+      }
+      if (data?.message) {
+        setSuccess(data.message)
+      } else {
+        setSuccess('Si ese email está registrado, recibirás un enlace en breve')
+      }
+    } catch {
       setError('Ha ocurrido un error. Inténtalo de nuevo.')
       setCooldownUntil(Date.now() + 3000)
-      return
+    } finally {
+      setLoading(false)
     }
-
-    setSuccess('Si ese email está registrado, recibirás un enlace en breve')
   }
 
   return (

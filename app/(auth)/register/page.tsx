@@ -4,6 +4,10 @@ import { useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
 import { useToastFeedback } from '@/hooks/use-toast-feedback'
+import { GoogleBrandIcon } from '@/components/auth/GoogleBrandIcon'
+import { PasswordRequirementsList } from '@/components/auth/PasswordRequirementsList'
+import { PasswordVisibilityToggle } from '@/components/auth/PasswordVisibilityToggle'
+import { isValidPassword } from '@/lib/auth-password'
 const ERROR_MAP: Record<string, string> = {
   invalid_credentials: 'Email o contraseña incorrectos',
   email_not_confirmed: 'Confirma tu email antes de entrar. Revisa tu bandeja de entrada.',
@@ -31,23 +35,11 @@ function mapAuthError(error: { code?: string; message?: string } | null): string
   return 'Ha ocurrido un error. Inténtalo de nuevo.'
 }
 
-function isValidPassword(password: string) {
-  return password.length >= 8 && /[A-Z]/.test(password) && /\d/.test(password)
-}
-
 function Spinner() {
   return (
     <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" aria-hidden>
       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-    </svg>
-  )
-}
-
-function GoogleIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden>
-      <path fill="#EA4335" d="M12 10.2v3.9h5.5c-.2 1.3-1.6 3.9-5.5 3.9-3.3 0-6-2.8-6-6.2s2.7-6.2 6-6.2c1.9 0 3.1.8 3.8 1.5l2.6-2.5C16.8 3 14.6 2 12 2 6.9 2 2.8 6.5 2.8 12S6.9 22 12 22c6.9 0 9.2-5 9.2-7.6 0-.5 0-.8-.1-1.2H12z" />
     </svg>
   )
 }
@@ -69,12 +61,6 @@ export default function RegisterPage() {
   const inCooldown = Date.now() < cooldownUntil
   const disabled = loading || inCooldown
   useToastFeedback({ error, success })
-
-  const requirements = [
-    { id: 'len', label: 'Mínimo 8 caracteres', ok: password.length >= 8 },
-    { id: 'upper', label: 'Al menos 1 mayúscula', ok: /[A-Z]/.test(password) },
-    { id: 'num', label: 'Al menos 1 número', ok: /\d/.test(password) },
-  ]
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -157,7 +143,7 @@ export default function RegisterPage() {
           disabled={disabled}
           className="flex h-11 w-full items-center justify-center gap-2 rounded-full border border-[#3a3a3c] bg-[#2c2c2e] text-sm font-medium text-white transition-colors hover:bg-[#3a3a3c] disabled:cursor-not-allowed disabled:opacity-60"
         >
-          <GoogleIcon />
+          <GoogleBrandIcon />
           Continuar con Google
         </button>
       </div>
@@ -213,44 +199,9 @@ export default function RegisterPage() {
               required
               className="h-11 w-full rounded-[10px] border border-[#3a3a3c] bg-[#2c2c2e] px-3 pr-10 text-white placeholder:text-[#6b6b6d] outline-none focus:border-[#3b82f6]"
             />
-            <button
-              type="button"
-              tabIndex={-1}
-              aria-label={showPassword ? 'Ocultar' : 'Ver'}
-              onClick={() => setShowPassword((v) => !v)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-[#6b6b6d] hover:text-[#aeaeb2] transition-colors"
-            >
-              {!showPassword ? (
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
-                  fill="none" stroke="currentColor" strokeWidth="2"
-                  strokeLinecap="round" strokeLinejoin="round"
-                  className="h-4 w-4" aria-hidden>
-                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                  <circle cx="12" cy="12" r="3"/>
-                </svg>
-              ) : (
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
-                  fill="none" stroke="currentColor" strokeWidth="2"
-                  strokeLinecap="round" strokeLinejoin="round"
-                  className="h-4 w-4" aria-hidden>
-                  <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8
-                    a18.45 18.45 0 015.06-5.94"/>
-                  <path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8
-                    a18.5 18.5 0 01-2.16 3.19"/>
-                  <line x1="1" y1="1" x2="23" y2="23"/>
-                </svg>
-              )}
-            </button>
+            <PasswordVisibilityToggle show={showPassword} onToggle={() => setShowPassword((v) => !v)} />
           </div>
-          {password.length > 0 && (
-            <ul className="mt-2 space-y-1 text-xs">
-              {requirements.map((req) => (
-                <li key={req.id} className={req.ok ? 'text-emerald-400' : 'text-[#8e8e93]'}>
-                  {req.ok ? '✓' : '•'} {req.label}
-                </li>
-              ))}
-            </ul>
-          )}
+          <PasswordRequirementsList password={password} />
         </div>
 
         <button

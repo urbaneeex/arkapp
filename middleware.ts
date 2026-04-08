@@ -2,8 +2,16 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { updateSession } from '@/lib/supabase/middleware'
 
 export async function middleware(request: NextRequest) {
-  const { response, user } = await updateSession(request)
   const { pathname } = request.nextUrl
+  if (
+    pathname === '/api/auth/request-password-reset' ||
+    pathname === '/api/auth/complete-password-reset' ||
+    pathname === '/api/auth/password-reset-token-status'
+  ) {
+    return NextResponse.next()
+  }
+
+  const { response, user } = await updateSession(request)
 
   const publicRoutes = new Set([
     '/login',

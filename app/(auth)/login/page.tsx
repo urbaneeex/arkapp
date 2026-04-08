@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import { useToastFeedback } from '@/hooks/use-toast-feedback'
+import { GoogleBrandIcon } from '@/components/auth/GoogleBrandIcon'
 
 const ERROR_MAP: Record<string, string> = {
   invalid_credentials: 'Email o contraseña incorrectos',
@@ -31,17 +32,6 @@ function Spinner() {
     <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" aria-hidden>
       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-    </svg>
-  )
-}
-
-function GoogleIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden>
-      <path fill="#EA4335" d="M12 10.2v3.9h5.5c-.2 1.3-1.6 3.9-5.5 3.9-3.3 0-6-2.8-6-6.2s2.7-6.2 6-6.2c1.9 0 3.1.8 3.8 1.5l2.6-2.5C16.8 3 14.6 2 12 2 6.9 2 2.8 6.5 2.8 12S6.9 22 12 22c6.9 0 9.2-5 9.2-7.6 0-.5 0-.8-.1-1.2H12z" />
-      <path fill="#FBBC05" d="M3.8 7.3l3.2 2.4C7.8 7.8 9.8 6.4 12 6.4c1.9 0 3.1.8 3.8 1.5l2.6-2.5C16.8 3 14.6 2 12 2 8.3 2 5.1 4.2 3.8 7.3z" />
-      <path fill="#34A853" d="M12 22c2.5 0 4.7-.8 6.3-2.3l-2.9-2.4c-.8.6-1.8 1-3.4 1-3.8 0-5.2-2.6-5.5-3.9l-3.2 2.5C4.7 19.7 8 22 12 22z" />
-      <path fill="#4285F4" d="M21.2 14.4c.1-.4.1-.7.1-1.2H12v3.9h5.5c-.3 1-1 2-2 2.7l2.9 2.4c1.7-1.6 2.8-4 2.8-7.8z" />
     </svg>
   )
 }
@@ -131,7 +121,7 @@ function LoginPageInner() {
           disabled={disabled}
           className="flex h-11 w-full items-center justify-center gap-2 rounded-full border border-[#3a3a3c] bg-[#2c2c2e] text-sm font-medium text-white transition-colors hover:bg-[#3a3a3c] disabled:cursor-not-allowed disabled:opacity-60"
         >
-          <GoogleIcon />
+          <GoogleBrandIcon />
           Continuar con Google
         </button>
       </div>
