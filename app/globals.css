@@ -24,6 +24,16 @@ body {
   font-family: var(--font-sans);
 }
 
+/* Controles tipo botón: mano (pointer); disabled:cursor-not-allowed en utilidades sigue ganando */
+@layer base {
+  button:where(:not(:disabled)),
+  input[type='button']:where(:not(:disabled)),
+  input[type='submit']:where(:not(:disabled)),
+  input[type='reset']:where(:not(:disabled)) {
+    cursor: pointer;
+  }
+}
+
 /* Light theme: override when html has class .light */
 html.light body {
   background: #fafafa;

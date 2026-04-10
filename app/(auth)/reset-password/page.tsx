@@ -4,7 +4,6 @@ import { Suspense, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { useToastFeedback } from '@/hooks/use-toast-feedback'
 import { PasswordRequirementsList } from '@/components/auth/PasswordRequirementsList'
 import { PasswordVisibilityToggle } from '@/components/auth/PasswordVisibilityToggle'
 import { isValidPassword } from '@/lib/auth-password'
@@ -68,10 +67,7 @@ function ResetPasswordInner() {
   const [success, setSuccess] = useState('')
   const [legacyRecoveryReady, setLegacyRecoveryReady] = useState(false)
   const [legacyTimedOut, setLegacyTimedOut] = useState(false)
-  const [cooldownUntil, setCooldownUntil] = useState(0)
-  const inCooldown = Date.now() < cooldownUntil
-  const disabled = loading || inCooldown
-  useToastFeedback({ error, success })
+  const disabled = loading
 
   const readyToSubmit = Boolean(customToken) || legacyRecoveryReady
 
@@ -179,7 +175,6 @@ function ResetPasswordInner() {
               : 'Enlace inválido o caducado'
           setError(msg)
           setPassword('')
-          setCooldownUntil(Date.now() + 3000)
           return
         }
         setSuccess('Contraseña actualizada correctamente. Redirigiendo...')
@@ -189,7 +184,6 @@ function ResetPasswordInner() {
       } catch {
         setLoading(false)
         setError('Ha ocurrido un error. Inténtalo de nuevo.')
-        setCooldownUntil(Date.now() + 3000)
       }
       return
     }
@@ -200,7 +194,6 @@ function ResetPasswordInner() {
     if (updateError) {
       setError(mapAuthError(updateError))
       setPassword('')
-      setCooldownUntil(Date.now() + 3000)
       return
     }
 
@@ -313,10 +306,10 @@ function ResetPasswordInner() {
           <button
             type="submit"
             disabled={disabled || !readyToSubmit || malformedTokenParam}
-            className="flex h-11 w-full items-center justify-center gap-2 rounded-full bg-[#3b82f6] text-sm font-medium text-white transition-colors hover:bg-[#2563eb] disabled:cursor-not-allowed disabled:opacity-60"
+            className="flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-[#3b82f6] text-sm font-medium text-white transition-colors hover:bg-[#2563eb] disabled:cursor-not-allowed disabled:opacity-60"
           >
             {loading && <Spinner />}
-            {loading ? 'Actualizando...' : inCooldown ? 'Espera 3 segundos...' : 'Guardar contraseña'}
+            {loading ? 'Actualizando...' : 'Guardar contraseña'}
           </button>
         </form>
       )}

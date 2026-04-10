@@ -6,7 +6,11 @@ export async function middleware(request: NextRequest) {
   if (
     pathname === '/api/auth/request-password-reset' ||
     pathname === '/api/auth/complete-password-reset' ||
-    pathname === '/api/auth/password-reset-token-status'
+    pathname === '/api/auth/password-reset-token-status' ||
+    pathname === '/api/auth/lookup-email' ||
+    pathname === '/api/auth/register' ||
+    pathname === '/api/auth/resend-signup' ||
+    pathname === '/api/auth/post-auth-welcome'
   ) {
     return NextResponse.next()
   }
@@ -19,13 +23,15 @@ export async function middleware(request: NextRequest) {
     '/forgot-password',
     '/reset-password',
     '/auth/callback',
+    '/auth/confirm',
+    '/auth/verify-email',
   ])
 
   const isPublicRoute = publicRoutes.has(pathname) || pathname.startsWith('/sign/')
   const isAuthEntry = pathname === '/login' || pathname === '/register'
 
   if (user && isAuthEntry) {
-    return NextResponse.redirect(new URL('/dashboard/calendar', request.url))
+    return NextResponse.redirect(new URL('/onboarding', request.url))
   }
 
   if (!user && !isPublicRoute) {

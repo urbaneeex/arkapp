@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { useToastFeedback } from '@/hooks/use-toast-feedback'
+import { PhoneInput } from '@/components/ui/phone-input'
 
 function Spinner() {
   return (
@@ -34,10 +34,10 @@ export default function OnboardingPage() {
   const [businessName, setBusinessName] = useState('')
   const [ownerName, setOwnerName] = useState('')
   const [ownerPhone, setOwnerPhone] = useState('')
+  const [phoneValid, setPhoneValid] = useState(true)
   const [loading, setLoading] = useState(false)
   const [checking, setChecking] = useState(true)
   const [error, setError] = useState('')
-  useToastFeedback({ error })
 
   useEffect(() => {
     const load = async () => {
@@ -60,7 +60,19 @@ export default function OnboardingPage() {
         .maybeSingle()
 
       if (existingBusiness?.id) {
-        router.replace('/dashboard/calendar')
+        router.replace('/dashboard')
+        return
+      }
+
+      const { data: staffRow } = await supabase
+        .from('staff')
+        .select('business_id')
+        .eq('id', user.id)
+        .is('deleted_at', null)
+        .maybeSingle()
+
+      if (staffRow?.business_id) {
+        router.replace('/dashboard')
         return
       }
 
@@ -84,6 +96,11 @@ export default function OnboardingPage() {
       return
     }
 
+    if (!phoneValid) {
+      setError('Revisa el formato del teléfono o déjalo vacío.')
+      return
+    }
+
     if (!userId) {
       setError('No se pudo validar tu sesión. Vuelve a iniciar sesión.')
       return
@@ -97,7 +114,7 @@ export default function OnboardingPage() {
       owner_uid: userId,
       slug,
       owner_name: ownerName.trim(),
-      owner_phone: ownerPhone.trim() || null,
+      owner_phone: ownerPhone.replace(/\s/g, '').trim() || null,
       onboarding_completed: true,
     })
 
@@ -107,7 +124,8 @@ export default function OnboardingPage() {
       return
     }
 
-    router.push('/dashboard/calendar')
+    router.refresh()
+    router.push('/dashboard')
   }
 
   if (checking) {
@@ -156,24 +174,20 @@ export default function OnboardingPage() {
           />
         </div>
 
-        <div>
-          <label htmlFor="ownerPhone" className="text-sm text-[#aeaeb2]">
-            Teléfono de contacto
-          </label>
-          <input
-            id="ownerPhone"
-            type="tel"
-            value={ownerPhone}
-            onChange={(e) => setOwnerPhone(e.target.value)}
-            placeholder="+34 600 000 000"
-            className="mt-1 h-11 w-full rounded-[10px] border border-[#3a3a3c] bg-[#2c2c2e] px-3 text-white outline-none focus:border-[#3b82f6]"
-          />
-        </div>
+        <PhoneInput
+          id="ownerPhone"
+          label="Teléfono de contacto (opcional)"
+          value={ownerPhone}
+          defaultCountry="ES"
+          onChange={setOwnerPhone}
+          onValidationChange={setPhoneValid}
+          className="mt-1"
+        />
 
         <button
           type="submit"
           disabled={loading}
-          className="flex h-11 w-full items-center justify-center gap-2 rounded-full bg-[#3b82f6] text-sm font-medium text-white transition-colors hover:bg-[#2563eb] disabled:cursor-not-allowed disabled:opacity-60"
+          className="flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-[#3b82f6] text-sm font-medium text-white transition-colors hover:bg-[#2563eb] disabled:cursor-not-allowed disabled:opacity-60"
         >
           {loading && <Spinner />}
           {loading ? 'Creando...' : 'Entrar a mi panel →'}
