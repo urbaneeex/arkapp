@@ -14,7 +14,7 @@ El alta **no** usa el correo de confirmación de Supabase. Flujo:
 
 1. **`POST /api/auth/register`**: crea el usuario con la **Admin API** (`email_confirm: false`), guarda un token en **`email_verification_tokens`** y envía el correo con [`email-verification-request.ts`](email-verification-request.ts). El enlace es `{NEXT_PUBLIC_SITE_URL}/auth/verify-email?token=...` (mismo dominio que el remitente en Resend, mejor entregabilidad).
 
-2. **`GET /auth/verify-email`**: valida el token, marca el email confirmado en Supabase y redirige al login.
+2. **`GET /auth/verify-email`**: valida el token, marca el email confirmado y genera un **magic link** con la Admin API (`generateLink`); el navegador sigue el `action_link` de Supabase y vuelve a **`/auth/confirm`**, donde se abre sesión en servidor y se redirige a **onboarding** o **dashboard** sin volver a escribir la contraseña. El correo de bienvenida se envía solo desde **`/auth/confirm`** (no duplicado aquí). Si `generateLink` falla, se redirige al login con `success=email_verified` (la cuenta ya está activa).
 
 3. **`POST /api/auth/resend-signup`**: reenvía ese mismo correo (tokens + Resend).
 
@@ -28,7 +28,7 @@ Requiere **`RESEND_API_KEY`**, **`SUPABASE_SERVICE_ROLE_KEY`** y **`NEXT_PUBLIC_
 
 - Si apareciera **un segundo correo** de confirmación: revisa si tienes **SMTP personalizado en Supabase** además de Resend en la app (duplicidad). Ajusta para que solo un canal envíe la confirmación.
 
-- **Redirect URLs**: incluye **`{SITE_URL}/auth/confirm`** (Google OAuth y confirmación en servidor). Mantén **`{SITE_URL}/auth/callback`** para el fallback con **hash** que envía `/auth/confirm` al cliente. El registro con email usa **`/auth/verify-email`**.
+- **Redirect URLs**: incluye **`{SITE_URL}/auth/confirm`** (Google OAuth, magic link tras `/auth/verify-email`, confirmación en servidor). Mantén **`{SITE_URL}/auth/callback`** para el fallback con **hash**. El enlace del correo de Resend sigue siendo **`/auth/verify-email`**.
 
 ## Otros correos de Supabase Auth
 

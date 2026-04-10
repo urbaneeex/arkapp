@@ -1,6 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
-import { sendSignupWelcomeEmailIfNeededForUser } from '@/lib/auth/send-signup-welcome-email.server'
 import { hashEmailVerificationToken } from '@/lib/email-verification.server'
 
 function loginRedirect(request: NextRequest, params: Record<string, string>) {
@@ -65,9 +64,24 @@ export async function GET(request: NextRequest) {
   }
 
   const { data: userData, error: userErr } = await admin.auth.admin.getUserById(claimed.user_id)
-  if (!userErr && userData.user) {
-    await sendSignupWelcomeEmailIfNeededForUser(admin, userData.user, request.nextUrl.origin)
+  const email = userData?.user?.email
+  if (userErr || !email) {
+    console.error('[verify-email] getUserById', userErr)
+    return loginRedirect(request, { success: 'email_verified' })
   }
 
-  return loginRedirect(request, { success: 'email_verified' })
+  const redirectTo = `${request.nextUrl.origin}/auth/confirm`
+  const { data: linkData, error: linkErr } = await admin.auth.admin.generateLink({
+    type: 'magiclink',
+    email,
+    options: { redirectTo },
+  })
+
+  const actionLink = linkData?.properties?.action_link
+  if (linkErr || !actionLink || typeof actionLink !== 'string') {
+    console.error('[verify-email] generateLink', linkErr)
+    return loginRedirect(request, { success: 'email_verified' })
+  }
+
+  return NextResponse.redirect(actionLink)
 }

@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { CountryCombobox } from '@/components/ui/country-combobox'
 import { cn } from '@/lib/utils'
 import {
@@ -28,6 +27,7 @@ export function PhoneInput({
   className,
   label,
   error,
+  required: requiredProp,
 }: {
   id?: string
   value: string
@@ -39,6 +39,8 @@ export function PhoneInput({
   className?: string
   label?: string
   error?: string
+  /** Si es true, vacío cuenta como inválido (además del formato). */
+  required?: boolean
 }) {
   const countryFromValue = useMemo(() => {
     const parsed = parsePhoneFull(value, (defaultCountry as CountryCode) ?? DEFAULT_COUNTRY)
@@ -69,11 +71,18 @@ export function PhoneInput({
     setLocal(localFromValue)
   }, [localFromValue])
 
-  const fullValue = formatPhoneFull(country, local)
   const localDigits = local.replace(/\D/g, '')
-  const isValid = !localDigits.length || validatePhoneForCountry(country, local)
   const hasContent = localDigits.length > 0
-  const showWarning = (error !== undefined && error !== '') || (hasContent && !isValid)
+  const isValid =
+    !hasContent
+      ? !requiredProp
+      : validatePhoneForCountry(country, local)
+  const formatInvalid = hasContent && !validatePhoneForCountry(country, local)
+  const emptyRequiredShow = Boolean(requiredProp && !hasContent && touched)
+  const showWarning =
+    (error !== undefined && error !== '') ||
+    emptyRequiredShow ||
+    formatInvalid
   const config = COUNTRY_PHONE_CONFIG[country]
 
   const handleCountryChange = (newCountry: CountryCode) => {
@@ -94,22 +103,25 @@ export function PhoneInput({
   }, [isValid, onValidationChange])
 
   return (
-    <div className={cn('space-y-1', className)}>
+    <div className={cn(className)}>
       {label && (
-        <Label htmlFor={id} className="text-zinc-100 font-medium">
+        <label htmlFor={id} className="text-sm text-[#aeaeb2]">
           {label}
-        </Label>
+        </label>
       )}
-      <div className={cn(
-        'flex rounded-md border bg-zinc-900 overflow-hidden focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-offset-zinc-950',
-        showWarning ? 'border-amber-500/80 focus-within:ring-amber-500/50' : 'border-zinc-700 focus-within:ring-[#3B82F6]'
-      )}>
+      <div
+        className={cn(
+          'mt-1 flex min-h-11 items-stretch overflow-hidden rounded-[10px] border border-[#3a3a3c] bg-[#2c2c2e] focus-within:border-[#3b82f6] focus-within:ring-2 focus-within:ring-[#3b82f6]/30 focus-within:ring-offset-0',
+          showWarning &&
+            'border-amber-500/80 focus-within:border-amber-500/80 focus-within:ring-amber-500/40'
+        )}
+      >
         <CountryCombobox
           value={country}
           onValueChange={handleCountryChange}
           compact
           disabled={disabled}
-          className="rounded-r-none border-0 border-r border-zinc-700 h-full shrink-0 shadow-none"
+          className="h-11 min-h-11 shrink-0 self-stretch rounded-none border-0 border-r border-[#3a3a3c] bg-[#2c2c2e] px-3 py-0 shadow-none hover:bg-[#2c2c2e] focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
         />
         <Input
           id={id}
@@ -120,12 +132,17 @@ export function PhoneInput({
           onBlur={() => setTouched(true)}
           disabled={disabled}
           placeholder={placeholder ?? (config ? `Ej: ${'X'.repeat(config.minDigits)} dígitos` : 'Número')}
-          className="border-0 rounded-none bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0"
+          className="h-11 min-h-11 flex-1 rounded-none border-0 bg-transparent px-3 text-white placeholder:text-zinc-500 focus-visible:ring-0 focus-visible:ring-offset-0"
         />
       </div>
       {showWarning && (
         <p className="text-sm font-semibold text-amber-600 dark:text-amber-400 mt-1.5 bg-amber-500/10 border border-amber-500/40 rounded px-2 py-1.5">
-          ⚠️ {error && error.trim() !== '' ? error : PHONE_WARNING_MESSAGE}
+          ⚠️{' '}
+          {error && error.trim() !== ''
+            ? error
+            : emptyRequiredShow
+              ? 'El teléfono es obligatorio.'
+              : PHONE_WARNING_MESSAGE}
         </p>
       )}
     </div>

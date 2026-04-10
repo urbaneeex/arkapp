@@ -96,8 +96,14 @@ export default function OnboardingPage() {
       return
     }
 
+    const phoneDigits = ownerPhone.replace(/\D/g, '')
+    if (!phoneDigits.length) {
+      setError('El teléfono es obligatorio')
+      return
+    }
+
     if (!phoneValid) {
-      setError('Revisa el formato del teléfono o déjalo vacío.')
+      setError('Revisa el formato del teléfono.')
       return
     }
 
@@ -114,7 +120,7 @@ export default function OnboardingPage() {
       owner_uid: userId,
       slug,
       owner_name: ownerName.trim(),
-      owner_phone: ownerPhone.replace(/\s/g, '').trim() || null,
+      owner_phone: ownerPhone.replace(/\s/g, '').trim(),
       onboarding_completed: true,
     })
 
@@ -176,22 +182,24 @@ export default function OnboardingPage() {
 
         <PhoneInput
           id="ownerPhone"
-          label="Teléfono de contacto (opcional)"
+          label="Teléfono de contacto"
+          required
           value={ownerPhone}
           defaultCountry="ES"
           onChange={setOwnerPhone}
           onValidationChange={setPhoneValid}
-          className="mt-1"
         />
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-[#3b82f6] text-sm font-medium text-white transition-colors hover:bg-[#2563eb] disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {loading && <Spinner />}
-          {loading ? 'Creando...' : 'Entrar a mi panel →'}
-        </button>
+        <div className="pt-2">
+          <button
+            type="submit"
+            disabled={loading}
+            className="flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-[#3b82f6] text-sm font-medium text-white transition-colors hover:bg-[#2563eb] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {loading && <Spinner />}
+            {loading ? 'Creando...' : 'Entrar a mi panel'}
+          </button>
+        </div>
       </form>
     </div>
   )
