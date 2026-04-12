@@ -274,7 +274,7 @@ export function ShiftsTab({
                     onChange={(e) =>
                       setStaffStatusFilter(e.target.value as StaffStatusFilter)
                     }
-                    className="w-full h-10 rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#3B82F6] focus:ring-offset-2"
+                    className="w-full h-10 rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2"
                   >
                     <option value="activos">Activos</option>
                     <option value="inactivos">Inactivos</option>
@@ -291,7 +291,7 @@ export function ShiftsTab({
                       <span className="ml-2 text-zinc-500">· {totalWeekDaysOff} días libres</span>
                     )}
                     {totalWeekVacationDays > 0 && (
-                      <span className="ml-2 text-blue-400">· {totalWeekVacationDays} días vacaciones</span>
+                      <span className="ml-2 text-brand">· {totalWeekVacationDays} días vacaciones</span>
                     )}
                   </span>
                 </div>
@@ -353,7 +353,7 @@ export function ShiftsTab({
                       key={day.toISOString()}
                       className={cn(
                         'text-center p-2 rounded-lg border',
-                        isCurrentDay ? 'bg-[#3B82F6]/15 border-[#3B82F6]/45' : 'bg-zinc-950 border-zinc-800'
+                        isCurrentDay ? 'bg-brand/15 border-brand/45' : 'bg-zinc-950 border-zinc-800'
                       )}
                     >
                       <div className="text-xs font-medium text-zinc-400 uppercase">
@@ -417,7 +417,7 @@ export function ShiftsTab({
                               <span className="ml-1 text-zinc-500">· {memberDaysOff}d libre</span>
                             )}
                             {memberVacationDays > 0 && (
-                              <span className="ml-1 text-blue-400">· {memberVacationDays}d vac.</span>
+                              <span className="ml-1 text-brand">· {memberVacationDays}d vac.</span>
                             )}
                           </p>
                         </div>
@@ -434,10 +434,10 @@ export function ShiftsTab({
                             key={`${member.id}-${day.toISOString()}`}
                             className={cn(
                               'min-h-[80px] p-2 rounded-lg border cursor-pointer transition-colors',
-                              isCurrentDay ? 'border-[#3B82F6]/55' : 'border-zinc-800',
+                              isCurrentDay ? 'border-brand/55' : 'border-zinc-800',
                               dayShifts.length === 0
                                 ? 'bg-zinc-950 hover:bg-zinc-800'
-                                : 'bg-[#3B82F6]/20 hover:bg-[#3B82F6]/35'
+                                : 'bg-brand/20 hover:bg-brand/35'
                             )}
                             onClick={() =>
                               handleCellClick(member, day, dayShifts[0] || undefined)
@@ -454,7 +454,7 @@ export function ShiftsTab({
                                         ? 'bg-zinc-700 text-zinc-300'
                                         : shift.shift_type === 'overtime'
                                           ? 'bg-orange-100 text-orange-800'
-                                          : 'bg-[#3B82F6]/40 text-white'
+                                          : 'bg-brand/40 text-white'
                                     )}
                                   >
                                     <div className="font-medium">
@@ -930,7 +930,7 @@ function ShiftModal({
                       className={cn(
                         'h-9 min-w-[2.25rem] flex-1 cursor-pointer rounded-lg border text-sm font-semibold transition-colors',
                         selected
-                          ? 'bg-[#3B82F6] text-white border-[#3B82F6] shadow-sm'
+                          ? 'bg-brand text-white border-brand shadow-sm'
                           : 'bg-zinc-900 text-zinc-400 border-zinc-700 hover:bg-zinc-800 hover:text-zinc-200'
                       )}
                     >
@@ -1278,7 +1278,7 @@ function RecurringShiftsModal({
                   className={cn(
                     'flex-1 h-10 cursor-pointer rounded-md border text-sm font-medium transition-colors',
                     form.daysOfWeek.includes(day)
-                      ? 'bg-[#3B82F6] text-white border-[#3B82F6]'
+                      ? 'bg-brand text-white border-brand'
                       : 'bg-zinc-900 text-zinc-300 border-zinc-700 hover:bg-zinc-950'
                   )}
                 >

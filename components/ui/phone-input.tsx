@@ -111,7 +111,7 @@ export function PhoneInput({
       )}
       <div
         className={cn(
-          'mt-1 flex min-h-11 items-stretch overflow-hidden rounded-[10px] border border-[#3a3a3c] bg-[#2c2c2e] focus-within:border-[#3b82f6] focus-within:ring-2 focus-within:ring-[#3b82f6]/30 focus-within:ring-offset-0',
+          'mt-1 flex min-h-11 items-stretch overflow-hidden rounded-[10px] border border-[#3a3a3c] bg-[#2c2c2e] focus-within:border-brand focus-within:ring-2 focus-within:ring-brand/30 focus-within:ring-offset-0',
           showWarning &&
             'border-amber-500/80 focus-within:border-amber-500/80 focus-within:ring-amber-500/40'
         )}

@@ -321,7 +321,7 @@ function LoginPageInner() {
 
       {showHero && (
         <>
-          <h1 className="mb-2 text-center text-[26px] font-bold leading-tight text-white sm:text-[28px]">
+          <h1 className="font-display mb-2 text-center text-[26px] font-bold leading-tight text-white sm:text-[28px]">
             Te damos la bienvenida a Arkapp
           </h1>
           <p className="mb-6 text-center text-[15px] text-[#8e8e93]">Inicia sesión o crea cuenta</p>
@@ -412,7 +412,7 @@ function LoginPageInner() {
                 placeholder="Correo electrónico"
                 autoComplete="email"
                 autoFocus={mailUi === 'email_entry'}
-                className="h-12 w-full rounded-xl border border-[#3a3a3c] bg-[#2c2c2e] px-4 text-sm text-white placeholder:text-[#6b6b6d] outline-none focus:border-[#3b82f6]"
+                className="h-12 w-full rounded-xl border border-[#3a3a3c] bg-[#2c2c2e] px-4 text-sm text-white placeholder:text-[#6b6b6d] outline-none focus:border-brand"
               />
               {mailUi === 'google_only' && (
                 <div className="mt-3 text-sm leading-relaxed text-[#aeaeb2]">
@@ -427,7 +427,7 @@ function LoginPageInner() {
                 type="button"
                 onClick={() => void runEmailLookup()}
                 disabled={lookupLoading || !emailDraft.trim().includes('@')}
-                className="mt-8 flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-[#3b82f6] text-sm font-medium text-white transition-colors hover:bg-[#2563eb] disabled:cursor-not-allowed disabled:opacity-50"
+                className="mt-8 flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-brand text-sm font-medium text-white transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {lookupLoading && <Spinner />}
                 {lookupLoading ? 'Comprobando...' : 'Continuar'}
@@ -439,7 +439,7 @@ function LoginPageInner() {
 
       {mailUi === 'password_login' && (
         <form onSubmit={handleLoginSubmit} className="mt-4 space-y-4">
-          <h1 className="mb-6 text-center text-[26px] font-bold leading-tight text-white sm:text-[28px]">
+          <h1 className="font-display mb-6 text-center text-[26px] font-bold leading-tight text-white sm:text-[28px]">
             Indica tu contraseña
           </h1>
           <div>
@@ -468,7 +468,7 @@ function LoginPageInner() {
                 required
                 autoComplete="current-password"
                 placeholder="Contraseña"
-                className="h-11 w-full rounded-[10px] border border-[#3a3a3c] bg-[#2c2c2e] px-3 pr-10 text-white placeholder:text-[#6b6b6d] outline-none focus:border-[#3b82f6]"
+                className="h-11 w-full rounded-[10px] border border-[#3a3a3c] bg-[#2c2c2e] px-3 pr-10 text-white placeholder:text-[#6b6b6d] outline-none focus:border-brand"
               />
               <PasswordVisibilityToggle show={showPassword} onToggle={() => setShowPassword((v) => !v)} />
             </div>
@@ -480,7 +480,7 @@ function LoginPageInner() {
                   ? `/forgot-password?autosend=1&email=${encodeURIComponent(emailLocked)}`
                   : '/forgot-password'
               }
-              className="text-sm text-[#3b82f6] hover:underline"
+              className="text-sm text-brand hover:underline"
             >
               ¿Olvidaste tu contraseña?
             </Link>
@@ -488,7 +488,7 @@ function LoginPageInner() {
           <button
             type="submit"
             disabled={disabled}
-            className="flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-[#3b82f6] text-sm font-medium text-white transition-colors hover:bg-[#2563eb] disabled:cursor-not-allowed disabled:opacity-60"
+            className="flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-brand text-sm font-medium text-white transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-60"
           >
             {loading && <Spinner />}
             {loading ? 'Entrando...' : 'Entrar'}
@@ -498,7 +498,7 @@ function LoginPageInner() {
 
       {mailUi === 'password_signup' && (
         <form onSubmit={handleSignupSubmit} className="mt-4 space-y-4">
-          <h1 className="mb-6 text-center text-[26px] font-bold leading-tight text-white sm:text-[28px]">
+          <h1 className="font-display mb-6 text-center text-[26px] font-bold leading-tight text-white sm:text-[28px]">
             Define la contraseña para tu cuenta
           </h1>
           <div>
@@ -527,7 +527,7 @@ function LoginPageInner() {
                 required
                 autoComplete="new-password"
                 placeholder="Contraseña"
-                className="h-11 w-full rounded-[10px] border border-[#3a3a3c] bg-[#2c2c2e] px-3 pr-10 text-white placeholder:text-[#6b6b6d] outline-none focus:border-[#3b82f6]"
+                className="h-11 w-full rounded-[10px] border border-[#3a3a3c] bg-[#2c2c2e] px-3 pr-10 text-white placeholder:text-[#6b6b6d] outline-none focus:border-brand"
               />
               <PasswordVisibilityToggle show={showPassword} onToggle={() => setShowPassword((v) => !v)} />
             </div>
@@ -539,19 +539,19 @@ function LoginPageInner() {
               type="checkbox"
               checked={acceptedLegal}
               onChange={(e) => setAcceptedLegal(e.target.checked)}
-              className="mt-0.5 h-4 w-4 shrink-0 rounded border-[#5c5c5e] bg-[#2c2c2e] text-[#3b82f6] focus:ring-2 focus:ring-[#3b82f6] focus:ring-offset-0"
+              className="mt-0.5 h-4 w-4 shrink-0 rounded border-[#5c5c5e] bg-[#2c2c2e] text-brand focus:ring-2 focus:ring-brand focus:ring-offset-0"
             />
             <label htmlFor="acceptLegalSignup" className="text-[13px] leading-snug text-[#aeaeb2]">
               He leído y acepto la{' '}
               <Link
                 href="/privacidad"
-                className="text-[#3b82f6] hover:underline"
+                className="text-brand hover:underline"
                 onClick={(e) => e.stopPropagation()}
               >
                 Política de protección de datos
               </Link>{' '}
               y los{' '}
-              <Link href="/terminos" className="text-[#3b82f6] hover:underline" onClick={(e) => e.stopPropagation()}>
+              <Link href="/terminos" className="text-brand hover:underline" onClick={(e) => e.stopPropagation()}>
                 Términos y condiciones
               </Link>
               .
@@ -560,7 +560,7 @@ function LoginPageInner() {
           <button
             type="submit"
             disabled={disabled || !signupFormValid}
-            className="flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-[#3b82f6] text-sm font-medium text-white transition-colors hover:bg-[#2563eb] disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-brand text-sm font-medium text-white transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-50"
           >
             {loading && <Spinner />}
             {loading ? 'Creando cuenta...' : 'Continuar'}

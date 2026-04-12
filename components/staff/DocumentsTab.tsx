@@ -185,7 +185,7 @@ export function DocumentsTab({
         <select
           value={filterStaff}
           onChange={e => setFilterStaff(e.target.value)}
-          className="h-9 rounded-md border border-zinc-700 bg-zinc-900 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#3B82F6]"
+          className="h-9 rounded-md border border-zinc-700 bg-zinc-900 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
         >
           <option value="all">Todos los empleados</option>
           {activeStaff.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -270,7 +270,7 @@ export function DocumentsTab({
               <select
                 value={form.staff_id}
                 onChange={e => setForm(f => ({ ...f, staff_id: e.target.value }))}
-                className="mt-1 flex h-10 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#3B82F6]"
+                className="mt-1 flex h-10 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
               >
                 <option value="">Selecciona un empleado</option>
                 {activeStaff.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -290,7 +290,7 @@ export function DocumentsTab({
               <select
                 value={form.category}
                 onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
-                className="mt-1 flex h-10 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#3B82F6]"
+                className="mt-1 flex h-10 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
               >
                 {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
               </select>

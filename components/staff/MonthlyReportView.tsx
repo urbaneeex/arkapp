@@ -228,7 +228,7 @@ export function MonthlyReportView({
       <div className="print-page max-w-3xl mx-auto p-6 space-y-6">
         {/* Action buttons */}
         <div className="no-print flex items-center justify-between flex-wrap gap-3">
-          <h1 className="text-xl font-bold text-zinc-100">Resumen mensual de fichajes</h1>
+          <h1 className="font-display text-2xl font-bold text-zinc-100">Resumen mensual de fichajes</h1>
           <div className="flex gap-2">
             {(!signature || signature.status !== 'signed') && (
               <button
@@ -246,7 +246,7 @@ export function MonthlyReportView({
             )}
             <button
               onClick={() => window.print()}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors bg-[#3B82F6] hover:bg-blue-500 text-white"
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors bg-brand hover:bg-brand-hover text-white"
             >
               <Printer className="h-4 w-4" />
               Imprimir / PDF

@@ -1,0 +1,42 @@
+---
+description: Diseño Arkapp (SAAS) — tipografía Clash Display en titulares, color de marca, layout del dashboard y pestañas al estilo Equipo.
+globs:
+  - app/**/*.tsx
+  - components/**/*.tsx
+  - app/globals.css
+alwaysApply: false
+---
+
+# Arkapp — sistema visual y layout
+
+## Tipografía
+
+- **Tipografía base**: `font-sans` = **Space Grotesk** (cuerpo/UI). `font-display` = **Clash Display** (marca “Arkapp” en header, tooltips del sidebar, titulares de sección con `font-display`).
+- **Títulos de página o sección**: `font-display text-2xl font-bold text-zinc-100` (Clash en titular; párrafos siguen en `font-sans` por herencia del body).
+- **Subtítulo bajo el título**: `text-sm text-zinc-400 mt-1` (ajustar zinc para claro si la vista lo requiere).
+- **Bloque de cabecera de sección**: `mb-6` antes de tabs o contenido principal.
+
+Referencia de composición: `components/staff/StaffClient.tsx` (bloque `<header className="mb-6">` + `Tabs`).
+
+## Color de marca
+
+- Tokens en tema Tailwind v4 (`app/globals.css` `@theme inline`): **`brand`**, **`brand-hover`**.
+- **Acentos primarios** (CTA, foco de tab activo destacado, anillos de drag, enlaces de acción fuertes): usar `text-brand`, `bg-brand`, `border-brand`, `ring-brand`, `hover:bg-brand-hover`, etc., en lugar de nuevos hex azules sueltos o `blue-600` genéricos **en archivos que toques**.
+- Migración gradual: no hace falta re-pintar todo el repo en un solo cambio; al editar un componente, alinear acentos visibles a estos tokens.
+
+## Layout del dashboard
+
+- El área de contenido ya aplica padding en `components/layout/DashboardMain.tsx` (`pt-4 px-4 lg:pt-6 lg:px-8`).
+- **No duplicar** `px-4 lg:px-8` / `py-*` en páginas hijas salvo excepción documentada (formularios muy estrechos, modales, etc.).
+- Contenedores típicos de página: `flex flex-col flex-1 min-h-0` cuando haya scroll interno (tablero, listas largas).
+
+## Subsecciones (tabs)
+
+- Patrón recomendado alineado con Equipo:
+  - `TabsList`: `flex w-full flex-row flex-wrap justify-start gap-2 h-auto p-1 bg-zinc-800 cursor-default` (+ `rounded-lg` si no viene del primitivo).
+  - `TabsTrigger`: `cursor-pointer gap-1.5` con icono `h-4 w-4` + etiqueta en línea cuando quepa; en móvil se puede usar `flex-wrap` o abreviaturas si hace falta.
+- `TabsContent`: `className="mt-6"` para separar del listado de pestañas.
+
+## Componentes compartidos
+
+- `PageHeader`: el `h1` debe incluir `font-display` para mantener coherencia con el resto de secciones.

@@ -434,7 +434,7 @@ export function MyDocuments({
                 value={notes}
                 onChange={e => setNotes(e.target.value)}
                 placeholder="Añade observaciones si lo deseas..."
-                className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-[#3B82F6] resize-none"
+                className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-brand resize-none"
               />
             </div>
             <div className="flex gap-3">

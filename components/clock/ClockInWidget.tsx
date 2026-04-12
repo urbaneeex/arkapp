@@ -236,7 +236,7 @@ export function ClockInWidget({
       {/* Header */}
       <div className="text-center">
         <p className="text-zinc-400 text-sm">{businessName}</p>
-        <h1 className="text-2xl font-bold text-zinc-100 mt-1">{userName}</h1>
+        <h1 className="font-display text-2xl font-bold text-zinc-100 mt-1">{userName}</h1>
         <p className="text-zinc-500 text-xs mt-1">
           {format(new Date(), "EEEE d 'de' MMMM", { locale: es })}
         </p>
@@ -297,7 +297,7 @@ export function ClockInWidget({
         <div className="rounded-xl overflow-hidden border border-zinc-700 relative bg-black">
           <div ref={scannerRef as React.RefObject<HTMLDivElement>} className="w-full aspect-square" />
           <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-            <ScanLine className="h-48 w-48 text-blue-400/60" />
+            <ScanLine className="h-48 w-48 text-brand/60" />
           </div>
           <p className="absolute bottom-3 left-0 right-0 text-center text-xs text-white/70">
             Apunta la cámara al código QR del local
@@ -361,7 +361,7 @@ export function ClockInWidget({
             ? 'bg-zinc-700 text-zinc-200 hover:bg-zinc-600'
             : isClockedIn
             ? 'bg-red-600 hover:bg-red-500 text-white'
-            : 'bg-[#3B82F6] hover:bg-blue-500 text-white',
+            : 'bg-brand hover:bg-brand-hover text-white',
           (isLoading || status === 'success') && 'opacity-60 cursor-not-allowed'
         )}
       >

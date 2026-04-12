@@ -88,7 +88,7 @@ export function SessionGuard({ children }: { children: React.ReactNode }) {
               ⚠️
             </div>
           </div>
-          <h1 className="mb-3 text-center text-xl font-semibold text-white">
+          <h1 className="font-display mb-3 text-center text-xl font-semibold text-white">
             Sesión modificada
           </h1>
           <p className="mb-8 text-center text-zinc-300">
@@ -99,7 +99,7 @@ export function SessionGuard({ children }: { children: React.ReactNode }) {
             <button
               type="button"
               onClick={handleReload}
-              className="rounded-lg bg-[#3B82F6] px-6 py-3 font-medium text-white transition hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-[#3B82F6] focus:ring-offset-2 focus:ring-offset-gray-800"
+              className="rounded-lg bg-brand px-6 py-3 font-medium text-white transition hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 focus:ring-offset-gray-800"
             >
               Recargar la página
             </button>

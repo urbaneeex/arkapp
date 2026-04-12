@@ -77,7 +77,7 @@ export function Tooltip({
         {/* Bubble único: caret como ::before (misma animación, punta redondeada) */}
         <span
           className={cn(
-            'relative inline-flex items-center rounded-xl bg-white text-zinc-950 font-medium text-sm whitespace-nowrap',
+            'font-display relative inline-flex items-center rounded-xl bg-white text-zinc-950 font-medium text-sm whitespace-nowrap',
             'shadow-lg px-4 py-2',
             'transition-all duration-200 ease-out',
             'before:content-[""] before:block before:absolute before:top-1/2 before:right-full before:-translate-y-1/2',

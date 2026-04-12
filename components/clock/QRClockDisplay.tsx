@@ -79,7 +79,7 @@ export function QRClockDisplay({
         </p>
         <Link
           href="/dashboard/settings"
-          className="flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300"
+          className="flex items-center gap-2 text-sm text-brand hover:text-brand"
         >
           <Settings className="h-4 w-4" />
           Ir a Ajustes
@@ -94,7 +94,7 @@ export function QRClockDisplay({
   return (
     <div className="flex flex-col items-center justify-center min-h-[70vh] gap-8 px-4">
       <div className="text-center">
-        <h1 className="text-2xl font-bold text-zinc-100">{businessName}</h1>
+        <h1 className="font-display text-2xl font-bold text-zinc-100">{businessName}</h1>
         <p className="text-zinc-400 mt-1">Escanea el código para fichar</p>
       </div>
 

@@ -35,7 +35,7 @@ export default async function ClientsPage() {
       <div>
         <div className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-zinc-100">Clientes</h1>
+            <h1 className="font-display text-2xl font-bold text-zinc-100">Clientes</h1>
             <p className="text-sm text-zinc-400 mt-1">
               Gestiona tu base de clientes ({clients?.length ?? 0})
             </p>

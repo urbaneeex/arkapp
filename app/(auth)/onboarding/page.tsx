@@ -144,7 +144,7 @@ export default function OnboardingPage() {
 
   return (
     <div className="w-full max-w-md rounded-2xl bg-[#1c1c1e] p-8 shadow-lg">
-      <h1 className="mb-2 text-[28px] font-bold text-white">Configura tu negocio</h1>
+      <h1 className="font-display mb-2 text-[28px] font-bold text-white">Configura tu negocio</h1>
       <p className="mb-6 text-[15px] text-[#8e8e93]">Un último paso antes de entrar a tu panel</p>
 
       <form onSubmit={handleSubmit} className="space-y-4">
@@ -161,7 +161,7 @@ export default function OnboardingPage() {
             value={businessName}
             onChange={(e) => setBusinessName(e.target.value)}
             placeholder="Ej. Peluquería Carmen"
-            className="mt-1 h-11 w-full rounded-[10px] border border-[#3a3a3c] bg-[#2c2c2e] px-3 text-white outline-none focus:border-[#3b82f6]"
+            className="mt-1 h-11 w-full rounded-[10px] border border-[#3a3a3c] bg-[#2c2c2e] px-3 text-white outline-none focus:border-brand"
           />
         </div>
 
@@ -176,7 +176,7 @@ export default function OnboardingPage() {
             value={ownerName}
             onChange={(e) => setOwnerName(e.target.value)}
             placeholder="Tu nombre completo"
-            className="mt-1 h-11 w-full rounded-[10px] border border-[#3a3a3c] bg-[#2c2c2e] px-3 text-white outline-none focus:border-[#3b82f6]"
+            className="mt-1 h-11 w-full rounded-[10px] border border-[#3a3a3c] bg-[#2c2c2e] px-3 text-white outline-none focus:border-brand"
           />
         </div>
 
@@ -194,7 +194,7 @@ export default function OnboardingPage() {
           <button
             type="submit"
             disabled={loading}
-            className="flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-[#3b82f6] text-sm font-medium text-white transition-colors hover:bg-[#2563eb] disabled:cursor-not-allowed disabled:opacity-60"
+            className="flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-brand text-sm font-medium text-white transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-60"
           >
             {loading && <Spinner />}
             {loading ? 'Creando...' : 'Entrar a mi panel'}

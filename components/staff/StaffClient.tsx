@@ -137,7 +137,7 @@ export function StaffClient({
     <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
       <header className="mb-6">
         <div className="flex justify-between items-center">
-          <h1 className="text-2xl font-bold text-zinc-100">Equipo</h1>
+          <h1 className="font-display text-2xl font-bold text-zinc-100">Equipo</h1>
           {canInviteStaff && (
             <Link href="/dashboard/staff/new" className="cursor-pointer">
               <Button>
@@ -242,7 +242,7 @@ export function StaffClient({
                                     className={cn(
                                       'inline-flex items-center justify-center w-8 h-8 rounded border transition-colors',
                                       checked
-                                        ? 'bg-blue-600 border-blue-600 text-white hover:bg-blue-700'
+                                        ? 'bg-brand border-brand text-white hover:bg-brand-hover'
                                         : 'border-zinc-600 bg-zinc-800 text-zinc-400 hover:border-zinc-500'
                                     )}
                                     aria-label={`${level.label}: ${row.permission} ${checked ? 'activado' : 'desactivado'}`}

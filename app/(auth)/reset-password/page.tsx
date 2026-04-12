@@ -39,10 +39,10 @@ function Spinner() {
 function ResetInfoLinks() {
   return (
     <div className="mt-6 flex flex-col gap-2 text-sm">
-      <Link href="/login" className="text-[#3b82f6] hover:underline">
+      <Link href="/login" className="text-brand hover:underline">
         Ir al inicio de sesión
       </Link>
-      <Link href="/forgot-password" className="text-[#3b82f6] hover:underline">
+      <Link href="/forgot-password" className="text-brand hover:underline">
         Solicitar un nuevo enlace
       </Link>
     </div>
@@ -206,7 +206,7 @@ function ResetPasswordInner() {
   if (showCustomLoading) {
     return (
       <div className="w-full max-w-md rounded-2xl bg-[#1c1c1e] p-8 shadow-lg">
-        <h1 className="mb-2 text-[28px] font-bold text-white">Comprobando enlace</h1>
+        <h1 className="font-display mb-2 text-[28px] font-bold text-white">Comprobando enlace</h1>
         <p className="mb-6 flex items-center gap-2 text-[15px] text-[#8e8e93]">
           <Spinner />
           Un momento…
@@ -218,7 +218,7 @@ function ResetPasswordInner() {
   if (showCustomUsed) {
     return (
       <div className="w-full max-w-md rounded-2xl bg-[#1c1c1e] p-8 shadow-lg">
-        <h1 className="mb-2 text-[28px] font-bold text-white">Enlace ya utilizado</h1>
+        <h1 className="font-display mb-2 text-[28px] font-bold text-white">Enlace ya utilizado</h1>
         <p className="text-[15px] text-[#aeaeb2] leading-relaxed">
           Ya restableciste la contraseña con este enlace. Por seguridad, cada enlace solo sirve una vez.
         </p>
@@ -233,7 +233,7 @@ function ResetPasswordInner() {
   if (showCustomExpired) {
     return (
       <div className="w-full max-w-md rounded-2xl bg-[#1c1c1e] p-8 shadow-lg">
-        <h1 className="mb-2 text-[28px] font-bold text-white">Enlace caducado</h1>
+        <h1 className="font-display mb-2 text-[28px] font-bold text-white">Enlace caducado</h1>
         <p className="text-[15px] text-[#aeaeb2] leading-relaxed">
           Este enlace ha superado el tiempo permitido (una hora). Los enlaces de recuperación caducan por seguridad.
         </p>
@@ -245,7 +245,7 @@ function ResetPasswordInner() {
   if (showCustomInvalid) {
     return (
       <div className="w-full max-w-md rounded-2xl bg-[#1c1c1e] p-8 shadow-lg">
-        <h1 className="mb-2 text-[28px] font-bold text-white">Enlace no válido</h1>
+        <h1 className="font-display mb-2 text-[28px] font-bold text-white">Enlace no válido</h1>
         <p className="text-[15px] text-[#aeaeb2] leading-relaxed">
           No podemos validar este enlace. Puede ser incorrecto o haber sido sustituido por uno más reciente.
         </p>
@@ -256,7 +256,7 @@ function ResetPasswordInner() {
 
   return (
     <div className="w-full max-w-md rounded-2xl bg-[#1c1c1e] p-8 shadow-lg">
-      <h1 className="mb-2 text-[28px] font-bold text-white">Nueva contraseña</h1>
+      <h1 className="font-display mb-2 text-[28px] font-bold text-white">Nueva contraseña</h1>
       <p className="mb-6 text-[15px] text-[#8e8e93]">Introduce tu nueva contraseña para continuar</p>
 
       {malformedTokenParam && (
@@ -293,7 +293,7 @@ function ResetPasswordInner() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className="h-11 w-full rounded-[10px] border border-[#3a3a3c] bg-[#2c2c2e] px-3 pr-10 text-white placeholder:text-[#6b6b6d] outline-none focus:border-[#3b82f6]"
+                className="h-11 w-full rounded-[10px] border border-[#3a3a3c] bg-[#2c2c2e] px-3 pr-10 text-white placeholder:text-[#6b6b6d] outline-none focus:border-brand"
               />
               <PasswordVisibilityToggle
                 show={showPassword}
@@ -306,7 +306,7 @@ function ResetPasswordInner() {
           <button
             type="submit"
             disabled={disabled || !readyToSubmit || malformedTokenParam}
-            className="flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-[#3b82f6] text-sm font-medium text-white transition-colors hover:bg-[#2563eb] disabled:cursor-not-allowed disabled:opacity-60"
+            className="flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-brand text-sm font-medium text-white transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-60"
           >
             {loading && <Spinner />}
             {loading ? 'Actualizando...' : 'Guardar contraseña'}

@@ -22,6 +22,8 @@ type AppointmentRow = {
   start_time: string
   end_time: string
   status: string | null
+  title?: string | null
+  pipeline_stage_id?: string | null
   price_total: number | null
   client_id: string | null
   service_id: string | null
@@ -101,6 +103,8 @@ export function AppointmentEditModal({
             start_time: appointment.start_time,
             end_time: appointment.end_time,
             status: appointment.status,
+            title: appointment.title,
+            pipeline_stage_id: appointment.pipeline_stage_id,
             client_id: appointment.client_id,
             service_id: appointment.service_id,
             staff_id: appointment.staff_id,

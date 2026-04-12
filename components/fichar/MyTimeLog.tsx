@@ -124,7 +124,7 @@ export function MyTimeLog({
         </div>
         {/* Total */}
         <div className="flex items-center gap-2 bg-zinc-800/60 rounded-lg px-3 py-1.5">
-          <Clock className="h-3.5 w-3.5 text-blue-400" />
+          <Clock className="h-3.5 w-3.5 text-brand" />
           <span className="text-xs text-zinc-300">
             Total: <strong className="text-zinc-100">{formatDuration(totalMinutes)}</strong>
           </span>

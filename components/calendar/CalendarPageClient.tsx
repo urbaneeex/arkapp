@@ -9,6 +9,8 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 
 type AppointmentRow = {
   id: string
+  business_id: string
+  title?: string | null
   start_time: string
   end_time: string
   status: string | null
@@ -16,9 +18,14 @@ type AppointmentRow = {
   client_id: string | null
   service_id: string | null
   staff_id: string | null
+  pipeline_stage_id: string
   clients: { name: string; phone?: string } | { name: string; phone?: string }[] | null
   services: { name: string; duration: number; price: number } | { name: string; duration: number; price: number }[] | null
   staff: { name: string } | { name: string }[] | null
+  pipeline_stages?:
+    | { id: string; slug: string; label: string; sort_order: number }
+    | { id: string; slug: string; label: string; sort_order: number }[]
+    | null
 }
 
 type Client = { id: string; name: string; phone?: string | null; email?: string | null }
@@ -81,7 +88,7 @@ export function CalendarPageClient({
           <>
             <div className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center">
               <div>
-                <h1 className="text-2xl font-bold text-zinc-100">Calendario</h1>
+                <h1 className="font-display text-2xl font-bold text-zinc-100">Calendario</h1>
                 <p className="text-sm text-zinc-400 mt-1">
                   Vista día, semana, mes o año
                 </p>

@@ -25,12 +25,14 @@ export type Database = {
           location_type: Database["public"]["Enums"]["location_type"] | null
           metadata: Json | null
           payment_status: Database["public"]["Enums"]["payment_status"] | null
+          pipeline_stage_id: string
           price_total: number | null
           service_id: string | null
           staff_id: string | null
           start_time: string
           status: Database["public"]["Enums"]["appointment_status"] | null
           target_address: string | null
+          title: string | null
         }
         Insert: {
           business_id: string
@@ -42,12 +44,14 @@ export type Database = {
           location_type?: Database["public"]["Enums"]["location_type"] | null
           metadata?: Json | null
           payment_status?: Database["public"]["Enums"]["payment_status"] | null
+          pipeline_stage_id?: string
           price_total?: number | null
           service_id?: string | null
           staff_id?: string | null
           start_time: string
           status?: Database["public"]["Enums"]["appointment_status"] | null
           target_address?: string | null
+          title?: string | null
         }
         Update: {
           business_id?: string
@@ -59,12 +63,14 @@ export type Database = {
           location_type?: Database["public"]["Enums"]["location_type"] | null
           metadata?: Json | null
           payment_status?: Database["public"]["Enums"]["payment_status"] | null
+          pipeline_stage_id?: string
           price_total?: number | null
           service_id?: string | null
           staff_id?: string | null
           start_time?: string
           status?: Database["public"]["Enums"]["appointment_status"] | null
           target_address?: string | null
+          title?: string | null
         }
         Relationships: [
           {
@@ -89,10 +95,52 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "appointments_pipeline_stage_id_fkey"
+            columns: ["pipeline_stage_id"]
+            isOneToOne: false
+            referencedRelation: "pipeline_stages"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "appointments_staff_id_fkey"
             columns: ["staff_id"]
             isOneToOne: false
             referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pipeline_stages: {
+        Row: {
+          business_id: string
+          created_at: string | null
+          id: string
+          label: string
+          slug: string
+          sort_order: number
+        }
+        Insert: {
+          business_id: string
+          created_at?: string | null
+          id?: string
+          label: string
+          slug: string
+          sort_order?: number
+        }
+        Update: {
+          business_id?: string
+          created_at?: string | null
+          id?: string
+          label?: string
+          slug?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pipeline_stages_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
             referencedColumns: ["id"]
           },
         ]

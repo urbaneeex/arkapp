@@ -325,7 +325,7 @@ export function StaffList({
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
-          className="h-9 rounded-md border border-zinc-600 bg-zinc-900 px-3 py-1 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-[#3B82F6] focus:ring-offset-1 focus:border-[#3B82F6] min-w-[160px]"
+          className="h-9 rounded-md border border-zinc-600 bg-zinc-900 px-3 py-1 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-1 focus:border-brand min-w-[160px]"
         >
           <option value="todos">Todos</option>
           <option value="activos">Activos</option>
@@ -381,7 +381,7 @@ export function StaffList({
                       value={s.role || ''}
                       onChange={(e) => handleRoleChange(s.id, e.target.value)}
                       disabled={isUpdating || isInactive}
-                      className="w-full min-w-[150px] h-8 rounded-md border border-zinc-600 bg-zinc-900 px-2 py-1 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-[#3B82F6] focus:ring-offset-1 focus:border-[#3B82F6] disabled:opacity-50 disabled:cursor-not-allowed disabled:text-zinc-500"
+                      className="w-full min-w-[150px] h-8 rounded-md border border-zinc-600 bg-zinc-900 px-2 py-1 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-1 focus:border-brand disabled:opacity-50 disabled:cursor-not-allowed disabled:text-zinc-500"
                     >
                       <option value="">Sin rol</option>
                       {roles.map((role) => (
@@ -401,7 +401,7 @@ export function StaffList({
                         )
                       }
                       disabled={isUpdating || isInactive}
-                      className="w-full min-w-[150px] h-8 rounded-md border border-zinc-600 bg-zinc-900 px-2 py-1 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-[#3B82F6] focus:ring-offset-1 focus:border-[#3B82F6] disabled:opacity-50 disabled:cursor-not-allowed disabled:text-zinc-500"
+                      className="w-full min-w-[150px] h-8 rounded-md border border-zinc-600 bg-zinc-900 px-2 py-1 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-1 focus:border-brand disabled:opacity-50 disabled:cursor-not-allowed disabled:text-zinc-500"
                     >
                       <option value="">Sin nivel</option>
                       {PERMISSION_LEVELS.map((level) => (

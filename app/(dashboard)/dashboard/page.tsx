@@ -65,15 +65,15 @@ export default async function DashboardPage() {
   const business = businessResult.business
   const isOwner = business.owner_uid === user.id
 
-  const { data: currentStaff } = await supabase
+  const { data: myStaff } = await supabase
     .from('staff')
-    .select('access_level')
+    .select('id, access_level, name')
     .eq('business_id', business.id)
     .or(`id.eq.${user.id},email.eq.${user.email ?? ''}`)
     .is('deleted_at', null)
     .maybeSingle()
 
-  const accessLevel = currentStaff?.access_level
+  const accessLevel = myStaff?.access_level
   const normalizedLevel: LevelId =
     typeof accessLevel === 'string' && (PERMISSION_LEVEL_IDS as readonly string[]).includes(accessLevel)
       ? (accessLevel as LevelId)
@@ -83,15 +83,13 @@ export default async function DashboardPage() {
     DEFAULT_MATRIX[normalizedLevel].time_tracking_view ||
     DEFAULT_MATRIX[normalizedLevel].time_tracking_manage
 
-  // Resolve staff row id (may differ from user.id if matched by email)
-  const { data: staffRow } = await supabase
-    .from('staff')
-    .select('id')
-    .eq('business_id', business.id)
-    .or(`id.eq.${user.id},email.eq.${user.email ?? ''}`)
-    .is('deleted_at', null)
-    .maybeSingle()
-  const myStaffId = staffRow?.id ?? user.id
+  const myStaffId = myStaff?.id ?? user.id
+  const userDisplayName =
+    myStaff?.name?.trim() ||
+    (typeof user.user_metadata?.full_name === 'string' && user.user_metadata.full_name.trim()) ||
+    (typeof user.user_metadata?.name === 'string' && user.user_metadata.name.trim()) ||
+    user.email?.split('@')[0]?.trim() ||
+    'Usuario'
 
   const todayStart = startOfToday().toISOString()
   const todayEnd = endOfToday().toISOString()
@@ -316,14 +314,14 @@ export default async function DashboardPage() {
       value: todayCount ?? 0,
       icon: Calendar,
       href: '/dashboard/calendar',
-      color: 'bg-[#3B82F6] text-white',
+      color: 'bg-brand text-white',
     },
     {
       title: 'Citas esta semana',
       value: weekCount ?? 0,
       icon: Clock,
       href: '/dashboard/calendar',
-      color: 'bg-blue-500 text-white',
+      color: 'bg-brand text-white',
     },
     {
       title: 'Clientes activos',
@@ -360,7 +358,7 @@ export default async function DashboardPage() {
 
   return (
     <div>
-      <PageHeader title={`Hola, ${business.name}`} subtitle="Resumen de tu negocio" className="mb-8" />
+      <PageHeader title={`Hola, ${userDisplayName}`} subtitle="Resumen de tu negocio" className="mb-8" />
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-8">
         {stats.map(({ title, value, icon: Icon, href, color }) => (
@@ -431,7 +429,7 @@ export default async function DashboardPage() {
             )}
             <Link
               href="/dashboard/calendar"
-              className="mt-4 inline-block text-sm font-medium text-[#3B82F6] hover:underline cursor-pointer"
+              className="mt-4 inline-block text-sm font-medium text-brand hover:underline cursor-pointer"
             >
               Ver calendario →
             </Link>

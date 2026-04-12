@@ -158,7 +158,7 @@ export function ClientSearchCombobox({
           {showCreateOption && (
             <li
               role="option"
-              className="cursor-pointer px-3 py-2 text-sm text-blue-600 hover:bg-blue-900/50 font-medium border-t border-zinc-700"
+              className="cursor-pointer px-3 py-2 text-sm text-brand hover:bg-brand/25 font-medium border-t border-zinc-700"
               onMouseDown={(e) => {
                 e.preventDefault()
                 onSelectNew(query.trim())

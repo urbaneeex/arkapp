@@ -18,7 +18,7 @@ type Shift = {
 }
 
 const SHIFT_TYPE_CONFIG: Record<string, { label: string; class: string }> = {
-  vacation: { label: 'Vacaciones', class: 'bg-blue-900/40 border-blue-700/50 text-blue-300' },
+  vacation: { label: 'Vacaciones', class: 'bg-brand/20 border-brand/50 text-brand' },
   sick: { label: 'Baja', class: 'bg-red-900/40 border-red-700/50 text-red-300' },
   day_off: { label: 'Libre', class: 'bg-zinc-800 border-zinc-700 text-zinc-400' },
   work: { label: 'Trabajo', class: 'bg-green-900/30 border-green-700/40 text-green-300' },
@@ -120,7 +120,7 @@ export function MyScheduleView({
                 key={i}
                 className={cn(
                   'rounded-xl border p-2 min-h-[80px] flex flex-col',
-                  isToday ? 'border-blue-500/50 bg-blue-950/20' : 'border-zinc-800 bg-zinc-900/50',
+                  isToday ? 'border-brand/50 bg-brand/10' : 'border-zinc-800 bg-zinc-900/50',
                   isWeekend && !isToday && 'opacity-70'
                 )}
               >
@@ -128,7 +128,7 @@ export function MyScheduleView({
                   <p className="text-[10px] text-zinc-500">{WEEK_DAYS[i]}</p>
                   <p className={cn(
                     'text-sm font-semibold',
-                    isToday ? 'text-blue-400' : 'text-zinc-300'
+                    isToday ? 'text-brand' : 'text-zinc-300'
                   )}>
                     {format(day, 'd')}
                   </p>

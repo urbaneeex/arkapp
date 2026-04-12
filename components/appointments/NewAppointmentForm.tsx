@@ -491,6 +491,7 @@ export function NewAppointmentForm({
         .from('appointments')
         .insert({
           business_id: businessId,
+          title: selectedService?.name?.trim() || 'Cita',
           client_id: clientId,
           service_id: service_id || null,
           staff_id: staff_id || null,
@@ -616,7 +617,7 @@ export function NewAppointmentForm({
                     setClientSearchText('')
                   }
                 }}
-                className="rounded border-zinc-600 bg-zinc-800 text-blue-500 focus:ring-blue-500"
+                className="rounded border-zinc-600 bg-zinc-800 text-brand focus:ring-brand"
               />
               <span className="text-sm text-zinc-400">Continuar sin ficha de cliente</span>
             </label>
@@ -667,7 +668,7 @@ export function NewAppointmentForm({
               id="service_id"
               value={service_id}
               onChange={(e) => setService_id(e.target.value)}
-              className="mt-1 flex h-10 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6] focus-visible:ring-offset-2"
+              className="mt-1 flex h-10 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
             >
               <option value="">Seleccionar servicio</option>
               {services.map((s) => (
@@ -700,7 +701,7 @@ export function NewAppointmentForm({
                       className={cn(
                         'rounded-lg border p-3 transition-colors',
                         !isAvailable && 'opacity-50',
-                        isSelected && 'ring-2 ring-blue-500'
+                        isSelected && 'ring-2 ring-brand'
                       )}
                     >
                       <div className="flex items-center justify-between gap-2">
@@ -826,7 +827,7 @@ export function NewAppointmentForm({
                 type="checkbox"
                 checked={depositPaid}
                 onChange={(e) => setDepositPaid(e.target.checked)}
-                className="rounded border-zinc-700 text-[#3B82F6] focus:ring-[#3B82F6]"
+                className="rounded border-zinc-700 text-brand focus:ring-brand"
               />
               <span className="text-sm text-zinc-300">Depósito pagado{selectedService.deposit_amount ? ` (${selectedService.deposit_amount}€)` : ''}</span>
             </label>
@@ -876,7 +877,7 @@ export function NewAppointmentForm({
                                 setDateStr(alt.date)
                                 setStartTimeStr(alt.time)
                               }}
-                              className="w-full text-left px-3 py-2 rounded text-sm bg-blue-900/50 text-blue-200 hover:bg-blue-800 border border-blue-800"
+                              className="w-full text-left px-3 py-2 rounded text-sm bg-brand/25 text-zinc-100 hover:bg-brand-hover border border-brand"
                             >
                               <span className="font-medium">{alt.label}</span>
                             </button>
@@ -899,7 +900,7 @@ export function NewAppointmentForm({
                           className={cn(
                             'w-full text-left px-3 py-2 rounded text-sm',
                             slot.occupied && 'bg-red-950/50 text-red-300 cursor-not-allowed',
-                            !slot.occupied && isSelected && 'bg-blue-100 text-blue-800 ring-1 ring-blue-300',
+                            !slot.occupied && isSelected && 'bg-brand/15 text-brand ring-1 ring-brand',
                             !slot.occupied && !isSelected && 'hover:bg-zinc-800 text-zinc-200'
                           )}
                         >

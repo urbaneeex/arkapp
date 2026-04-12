@@ -85,7 +85,7 @@ export function TimeNavigator({
           onClick={openNativePicker}
           disabled={disabled}
           className={cn(
-            'flex-1 h-10 px-4 rounded-md border border-zinc-700 bg-zinc-900 text-sm font-medium text-zinc-100 hover:bg-zinc-950 focus:outline-none focus:ring-2 focus:ring-[#3B82F6] focus:ring-offset-2 transition-colors',
+            'flex-1 h-10 px-4 rounded-md border border-zinc-700 bg-zinc-900 text-sm font-medium text-zinc-100 hover:bg-zinc-950 focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 transition-colors',
             disabled && 'opacity-50 cursor-not-allowed'
           )}
         >

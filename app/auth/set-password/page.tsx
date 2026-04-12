@@ -66,7 +66,7 @@ export default function SetPasswordPage() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-zinc-950">
         <div className="bg-zinc-900 rounded-xl shadow-lg p-8 w-full max-w-md text-center">
-          <Loader2 className="w-8 h-8 text-blue-600 animate-spin mx-auto mb-4" />
+          <Loader2 className="w-8 h-8 text-brand animate-spin mx-auto mb-4" />
           <p className="text-zinc-400">Comprobando sesión...</p>
         </div>
       </div>
@@ -77,7 +77,7 @@ export default function SetPasswordPage() {
     <div className="min-h-screen flex items-center justify-center bg-zinc-950 px-4">
       <div className="bg-zinc-900 rounded-xl shadow-lg p-8 w-full max-w-md">
         <div className="flex items-center gap-2 text-zinc-100 font-semibold mb-1">
-          <Lock className="h-5 w-5 text-blue-600" />
+          <Lock className="h-5 w-5 text-brand" />
           Cambiar contraseña
         </div>
         <p className="text-zinc-400 text-sm mb-6">
@@ -132,7 +132,7 @@ export default function SetPasswordPage() {
         </form>
 
         <p className="text-center text-sm text-zinc-400 mt-4">
-          <Link href="/dashboard" className="text-blue-600 hover:underline">
+          <Link href="/dashboard" className="text-brand hover:underline">
             Volver al panel
           </Link>
         </p>

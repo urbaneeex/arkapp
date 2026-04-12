@@ -135,7 +135,7 @@ function AcceptInvitePageInner() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-zinc-950 p-4">
         <div className="bg-zinc-900 rounded-xl shadow-lg p-8 w-full max-w-md text-center">
-          <Loader2 className="w-10 h-10 text-blue-600 animate-spin mx-auto mb-4" />
+          <Loader2 className="w-10 h-10 text-brand animate-spin mx-auto mb-4" />
           <p className="text-zinc-400">Verificando invitación...</p>
         </div>
       </div>
@@ -154,7 +154,7 @@ function AcceptInvitePageInner() {
           )}
           <Link
             href="/login"
-            className="inline-flex items-center justify-center rounded-md text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 h-10 px-4 py-2"
+            className="inline-flex items-center justify-center rounded-md text-sm font-medium bg-brand text-white hover:bg-brand-hover h-10 px-4 py-2"
           >
             Ir al inicio de sesión
           </Link>
@@ -167,7 +167,7 @@ function AcceptInvitePageInner() {
     <div className="min-h-screen flex items-center justify-center bg-zinc-950 p-4">
       <div className="bg-zinc-900 rounded-xl shadow-lg p-8 w-full max-w-md">
         <div className="flex items-center gap-2 text-zinc-100 font-semibold mb-1">
-          <Lock className="h-5 w-5 text-blue-600" />
+          <Lock className="h-5 w-5 text-brand" />
           Establece tu contraseña
         </div>
         <p className="text-zinc-400 text-sm mb-6">
@@ -233,7 +233,7 @@ function AcceptInvitePageInner() {
         </form>
 
         <p className="text-center text-sm text-zinc-400 mt-4">
-          <Link href="/login" className="text-blue-600 hover:underline">
+          <Link href="/login" className="text-brand hover:underline">
             ¿Ya tienes cuenta? Inicia sesión
           </Link>
         </p>

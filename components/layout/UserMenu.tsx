@@ -43,7 +43,7 @@ export function UserMenu({ user }: UserMenuProps) {
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="cursor-pointer rounded-full ring-2 ring-transparent ring-offset-2 ring-offset-white dark:ring-offset-zinc-950 focus:outline-none focus:ring-2 focus:ring-[#3B82F6] focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-zinc-950 hover:ring-zinc-600 transition-shadow"
+          className="cursor-pointer rounded-full ring-2 ring-transparent ring-offset-2 ring-offset-white dark:ring-offset-zinc-950 focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-zinc-950 hover:ring-zinc-600 transition-shadow"
           aria-label="Abrir menú de usuario"
         >
           <Avatar

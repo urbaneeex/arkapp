@@ -109,13 +109,13 @@ export function AuthCheckEmailPanel({
 
       <div className="flex flex-col items-center text-center">
         <div
-          className="mb-6 flex h-20 w-20 items-center justify-center rounded-2xl bg-[#3b82f6]/15 ring-1 ring-[#3b82f6]/25"
+          className="mb-6 flex h-20 w-20 items-center justify-center rounded-2xl bg-brand/15 ring-1 ring-brand/25"
           aria-hidden
         >
           <Mail className="h-10 w-10 text-[#60a5fa]" strokeWidth={1.5} />
         </div>
 
-        <h1 className="text-[26px] font-bold leading-tight text-white sm:text-[28px]">Revisa tu correo</h1>
+        <h1 className="font-display text-[26px] font-bold leading-tight text-white sm:text-[28px]">Revisa tu correo</h1>
         <p className="mt-2 text-[15px] font-semibold text-[#aeaeb2]">{email}</p>
         <p className="mt-4 max-w-sm text-[15px] leading-relaxed text-[#8e8e93]">{description}</p>
 
@@ -128,7 +128,7 @@ export function AuthCheckEmailPanel({
         {continueHref ? (
           <Link
             href={continueHref}
-            className="mt-10 flex h-11 w-full max-w-sm cursor-pointer items-center justify-center rounded-full bg-[#3b82f6] text-sm font-medium text-white transition-colors hover:bg-[#2563eb]"
+            className="mt-10 flex h-11 w-full max-w-sm cursor-pointer items-center justify-center rounded-full bg-brand text-sm font-medium text-white transition-colors hover:bg-brand-hover"
           >
             {continueLabel}
           </Link>

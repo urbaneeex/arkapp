@@ -15,6 +15,8 @@ import {
 import { Button } from '@/components/ui/button'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { compactStageCardClassForSlug } from '@/lib/work-items/stageColors'
+import { canMoveWorkItemByStageSlug } from '@/lib/work-items/canMoveWorkItem'
 
 type AppointmentRow = {
   id: string
@@ -28,15 +30,13 @@ type AppointmentRow = {
   clients: { name: string; phone?: string } | { name: string; phone?: string }[] | null
   services: { name: string; duration: number; price: number } | { name: string; duration: number; price: number }[] | null
   staff: { name: string } | { name: string }[] | null
+  pipeline_stages?: { slug: string } | { slug: string }[] | null
 }
 
-const STATUS_COLORS: Record<string, string> = {
-  pending: 'bg-amber-800 border-amber-500 text-amber-100',
-  confirmed: 'bg-blue-800 border-blue-500 text-blue-100',
-  in_progress: 'bg-violet-800 border-violet-500 text-violet-100',
-  completed: 'bg-emerald-800 border-emerald-500 text-emerald-100',
-  cancelled: 'bg-zinc-700 border-zinc-600 text-zinc-300',
-  no_show: 'bg-zinc-700 border-zinc-600 text-zinc-400',
+function stageSlugForAppointment(a: AppointmentRow): string {
+  const ps = a.pipeline_stages
+  const fromStage = Array.isArray(ps) ? ps[0]?.slug : ps?.slug
+  return fromStage ?? a.status ?? 'pending'
 }
 
 export function AppointmentsCalendar({
@@ -138,7 +138,7 @@ export function AppointmentsCalendar({
             key={day.toISOString()}
             className={`p-2 text-center text-sm font-medium border-r border-zinc-800 last:border-r-0 ${
               isSameMonth(day, current) ? 'text-zinc-100' : 'text-zinc-400'
-            } ${isSameDay(day, new Date()) ? 'bg-[#3B82F6]/10' : ''}`}
+            } ${isSameDay(day, new Date()) ? 'bg-brand/10' : ''}`}
           >
             {format(day, 'EEE', { locale: es })}
             <div className="text-xs text-zinc-400 mt-0.5">
@@ -158,7 +158,6 @@ export function AppointmentsCalendar({
                   key={a.id}
                   appointment={a}
                   onAppointmentClick={onAppointmentClick}
-                  statusColors={STATUS_COLORS}
                 />
               ))}
             </WeekDayCell>
@@ -185,9 +184,9 @@ function WeekDayCell({
       ref={setNodeRef}
       className={cn(
         'border-r border-zinc-800 last:border-r-0 p-2 min-h-[120px]',
-        isToday && 'bg-[#3B82F6]/5',
+        isToday && 'bg-brand/5',
         !isToday && 'bg-zinc-900/50',
-        isOver && 'ring-2 ring-blue-400 ring-inset'
+        isOver && 'ring-2 ring-brand ring-inset'
       )}
     >
       {children}
@@ -198,16 +197,15 @@ function WeekDayCell({
 function DraggableAppointmentCard({
   appointment,
   onAppointmentClick,
-  statusColors,
 }: {
   appointment: AppointmentRow
   onAppointmentClick?: (apt: AppointmentRow, e: React.MouseEvent) => void
-  statusColors: Record<string, string>
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: appointment.id,
   })
-  const canDrag = appointment.status !== 'completed' && appointment.status !== 'cancelled'
+  const stageSlug = stageSlugForAppointment(appointment)
+  const canDrag = canMoveWorkItemByStageSlug(stageSlug)
   const clientName = Array.isArray(appointment.clients) ? appointment.clients[0]?.name : appointment.clients?.name
   const serviceName = Array.isArray(appointment.services) ? appointment.services[0]?.name : appointment.services?.name
   const startTime = format(parseISO(appointment.start_time), 'HH:mm')
@@ -223,7 +221,7 @@ function DraggableAppointmentCard({
         'cursor-pointer w-full text-left flex flex-col items-start justify-start border-l-4 p-1.5 mb-1.5 text-xs overflow-hidden transition-opacity hover:opacity-90',
         canDrag && 'cursor-grab active:cursor-grabbing',
         isDragging && 'opacity-50 shadow-lg',
-        statusColors[appointment.status ?? 'pending'] ?? 'bg-zinc-800'
+        compactStageCardClassForSlug(stageSlug)
       )}
     >
       <span className="font-semibold leading-tight truncate w-full">

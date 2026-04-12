@@ -320,7 +320,7 @@ export function StaffForm({
       <div>
         <div className="flex items-center justify-between mb-1">
           <Label htmlFor="role">Rol (opcional)</Label>
-          <Link href="/dashboard/staff" className="text-xs text-blue-600 hover:text-blue-700">
+          <Link href="/dashboard/staff" className="text-xs text-brand hover:text-brand">
             Gestionar roles
           </Link>
         </div>
@@ -405,7 +405,7 @@ export function StaffForm({
             id="role"
             value={form.role}
             onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}
-            className="mt-1 flex h-10 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm ring-offset-zinc-950 focus:outline-none focus:ring-2 focus:ring-[#3B82F6] focus:ring-offset-2"
+            className="mt-1 flex h-10 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm ring-offset-zinc-950 focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2"
           >
             <option value="">Sin rol asignado</option>
             {roles.map((role) => (
@@ -427,7 +427,7 @@ export function StaffForm({
               access_level: e.target.value as PermissionLevel | '',
             }))
           }
-          className="mt-1 flex h-10 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm ring-offset-zinc-950 focus:outline-none focus:ring-2 focus:ring-[#3B82F6] focus:ring-offset-2"
+          className="mt-1 flex h-10 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm ring-offset-zinc-950 focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2"
         >
           <option value="">Sin nivel asignado</option>
           {PERMISSION_LEVELS.map((level) => (
@@ -524,7 +524,7 @@ export function StaffForm({
                   vacation_days_per_year: daysMap[ct] ?? f.vacation_days_per_year,
                 }))
               }}
-              className="mt-1 flex h-10 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#3B82F6] focus:ring-offset-2"
+              className="mt-1 flex h-10 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2"
             >
               <option value="full_time">Jornada completa</option>
               <option value="part_time">Media jornada</option>

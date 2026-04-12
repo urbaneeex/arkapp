@@ -13,7 +13,7 @@ export default function InviteExpiredPage() {
             <Clock className="w-8 h-8 text-amber-600" />
           </div>
         </div>
-        <h1 className="text-2xl font-bold text-zinc-100 mb-2">
+        <h1 className="font-display text-2xl font-bold text-zinc-100 mb-2">
           El enlace ha expirado
         </h1>
         <p className="text-zinc-400 mb-4">
@@ -25,7 +25,7 @@ export default function InviteExpiredPage() {
         <div className="space-y-3">
           <Link 
             href="/login" 
-            className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 h-10 px-4 py-2 w-full"
+            className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium bg-brand text-white hover:bg-brand-hover h-10 px-4 py-2 w-full"
           >
             Volver al inicio
           </Link>

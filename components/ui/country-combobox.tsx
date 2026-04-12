@@ -70,7 +70,7 @@ export function CountryCombobox({
           aria-label="Seleccionar país"
           className={cn(
             'inline-flex items-center gap-2 rounded-md border border-zinc-700 bg-zinc-800/80 px-3 py-2 text-sm text-zinc-100',
-            'focus:outline-none focus:ring-2 focus:ring-[#3B82F6] focus:ring-offset-2 focus:ring-offset-zinc-950',
+            'focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 focus:ring-offset-zinc-950',
             'hover:bg-zinc-800 disabled:opacity-50 disabled:pointer-events-none',
             compact ? 'min-w-[88px]' : 'min-w-[180px]',
             className
@@ -162,7 +162,7 @@ function CountryOption({
       className={cn(
         'w-full flex items-center gap-3 rounded-md px-2 py-2 text-left text-sm transition-colors',
         isSelected
-          ? 'bg-[#3B82F6]/20 text-zinc-100'
+          ? 'bg-brand/20 text-zinc-100'
           : 'text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100'
       )}
     >

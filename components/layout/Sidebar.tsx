@@ -8,6 +8,7 @@ import {
   Briefcase,
   UserCircle,
   Calendar,
+  LayoutGrid,
   Settings,
   BarChart3,
   DollarSign,
@@ -26,6 +27,7 @@ const mainNavItems: { href: string; label: string; icon: typeof Home; permission
   { href: '/dashboard', label: 'Dashboard', icon: Home },
   { href: '/dashboard/fichar', label: 'Fichar', icon: Clock },
   { href: '/dashboard/calendar', label: 'Calendario', icon: Calendar, permission: 'calendar_view' },
+  { href: '/dashboard/work-board', label: 'Tablero', icon: LayoutGrid, permission: 'work_board_view' },
   { href: '/dashboard/clients', label: 'Clientes', icon: Users, permission: 'clients_view' },
   { href: '/dashboard/services', label: 'Servicios', icon: Briefcase, permission: 'services_view' },
   { href: '/dashboard/staff', label: 'Equipo', icon: UserCircle, permission: 'staff_view' },
@@ -80,11 +82,11 @@ export function Sidebar() {
                 >
                   {isActive && (
                     <span
-                      className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-r bg-[#3B82F6]"
+                      className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-r bg-brand"
                       aria-hidden
                     />
                   )}
-                  <Icon className={cn('shrink-0', iconSize, isActive && 'text-[#3B82F6] dark:text-[#3B82F6]')} />
+                  <Icon className={cn('shrink-0', iconSize, isActive && 'text-brand dark:text-brand')} />
                 </Link>
               </Tooltip>
             )
@@ -105,9 +107,9 @@ export function Sidebar() {
                 )}
               >
                 {pathname.startsWith('/dashboard/settings') && (
-                  <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-r bg-[#3B82F6]" aria-hidden />
+                  <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-r bg-brand" aria-hidden />
                 )}
-                <Settings className={cn('shrink-0', iconSize, pathname.startsWith('/dashboard/settings') && 'text-[#3B82F6]')} />
+                <Settings className={cn('shrink-0', iconSize, pathname.startsWith('/dashboard/settings') && 'text-brand')} />
               </Link>
             </Tooltip>
           )}

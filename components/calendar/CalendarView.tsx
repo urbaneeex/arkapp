@@ -58,15 +58,9 @@ import { normalizeEmail } from '@/lib/email'
 import { createClient } from '@/lib/supabase/client'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { usePermissions } from '@/hooks/usePermissions'
-
-const STATUS_COLORS: Record<string, string> = {
-  pending: 'bg-amber-800 border-amber-500 text-amber-100',
-  confirmed: 'bg-blue-800 border-blue-500 text-blue-100',
-  in_progress: 'bg-violet-800 border-violet-500 text-violet-100',
-  completed: 'bg-emerald-800 border-emerald-500 text-emerald-100',
-  cancelled: 'bg-zinc-700 border-zinc-600 text-zinc-300',
-  no_show: 'bg-zinc-700 border-zinc-600 text-zinc-400',
-}
+import { mapAppointmentRowToWorkItem, type AppointmentRowInput } from '@/lib/work-items/mapAppointmentRow'
+import { stageColorClassForSlug } from '@/lib/work-items/stageColors'
+import { canMoveWorkItemByStageSlug } from '@/lib/work-items/canMoveWorkItem'
 
 function formatSlotLabel(dateStr: string, timeStr: string): string {
   const formatted = new Intl.DateTimeFormat('es-ES', {
@@ -82,6 +76,8 @@ type ViewType = 'day' | 'week' | 'month'
 
 type AppointmentRow = {
   id: string
+  business_id: string
+  title?: string | null
   start_time: string
   end_time: string
   status: string | null
@@ -89,9 +85,14 @@ type AppointmentRow = {
   client_id: string | null
   service_id: string | null
   staff_id: string | null
+  pipeline_stage_id: string
   clients: { name: string; phone?: string } | { name: string; phone?: string }[] | null
   services: { name: string; duration: number; price: number } | { name: string; duration: number; price: number }[] | null
   staff: { name: string } | { name: string }[] | null
+  pipeline_stages?:
+    | { id: string; slug: string; label: string; sort_order: number }
+    | { id: string; slug: string; label: string; sort_order: number }[]
+    | null
 }
 
 interface AppointmentNormalized {
@@ -99,6 +100,8 @@ interface AppointmentNormalized {
   start_time: string
   end_time: string
   status: string
+  stage_slug: string
+  display_title: string
   staff_id: string | null
   client_name: string | null
   service_name: string | null
@@ -106,11 +109,14 @@ interface AppointmentNormalized {
 }
 
 function normalizeAppointment(a: AppointmentRow): AppointmentNormalized {
+  const w = mapAppointmentRowToWorkItem(a as unknown as AppointmentRowInput)
   return {
     id: a.id,
     start_time: a.start_time,
     end_time: a.end_time,
     status: a.status ?? 'pending',
+    stage_slug: w.stage_slug,
+    display_title: w.displayTitle,
     staff_id: a.staff_id,
     client_name: Array.isArray(a.clients) ? a.clients[0]?.name ?? null : a.clients?.name ?? null,
     service_name: Array.isArray(a.services) ? a.services[0]?.name ?? null : a.services?.name ?? null,
@@ -241,14 +247,18 @@ export function CalendarView({
   }, [toPopoverAppointment])
 
   const handleStatusChange = useCallback(async (id: string, status: string) => {
-    const { error } = await supabase
-      .from('appointments')
-      .update({ status })
-      .eq('id', id)
-    if (error) throw new Error(error.message)
-    setPopoverAppointment((prev) => prev ? { ...prev, status } : null)
+    const res = await fetch(`/api/work-items/${id}/stage`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status }),
+    })
+    if (!res.ok) {
+      const t = await res.text()
+      throw new Error(t || 'Error al actualizar etapa')
+    }
+    setPopoverAppointment((prev) => (prev ? { ...prev, status } : null))
     router.refresh()
-  }, [supabase, router])
+  }, [router])
 
   const handleEdit = useCallback((id: string) => {
     setPopoverAppointment(null)
@@ -344,7 +354,7 @@ export function CalendarView({
             <select
               value={staffFilter}
               onChange={(e) => setStaffFilter(e.target.value)}
-              className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6] focus-visible:ring-offset-2"
+              className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
             >
               <option value="">Todos los empleados</option>
               {staff.map((s) => (
@@ -731,7 +741,7 @@ function WeekView({
               className={cn(
                 'sticky top-0 z-30 w-full flex flex-row items-center justify-center gap-1.5 py-1.5 px-2 text-center text-sm font-medium transition-colors border-r border-b border-zinc-700 cursor-pointer',
                 isToday
-                  ? 'bg-blue-600 text-white hover:bg-blue-500'
+                  ? 'bg-brand text-white hover:bg-brand-hover'
                   : 'bg-zinc-950 text-zinc-400 hover:bg-zinc-800'
               )}
               style={{ gridColumn: dayIndex + 2, gridRow: 1, height: headerRowHeightPx, minHeight: headerRowHeightPx }}
@@ -741,7 +751,7 @@ function WeekView({
               <span className={cn('font-semibold tabular-nums', isToday && 'text-white')}>
                 {format(day, 'd', { locale: es })}
               </span>
-              <span className={cn('text-xs capitalize truncate', isToday ? 'text-blue-100' : 'text-zinc-500')}>
+              <span className={cn('text-xs capitalize truncate', isToday ? 'text-white' : 'text-zinc-500')}>
                 {format(day, 'EEEE', { locale: es })}
               </span>
             </button>
@@ -834,7 +844,7 @@ function WeekView({
               leftPct={leftPct}
               colWidth={colWidth}
               onAppointmentClick={onAppointmentClick}
-              canDrag={!!onDropInDay && apt.status !== 'completed' && apt.status !== 'cancelled'}
+              canDrag={!!onDropInDay && canMoveWorkItemByStageSlug(normalizeAppointment(apt).stage_slug)}
             />
           )
         })}
@@ -905,11 +915,13 @@ function WeekViewDndContent({
     <>
       {children}
       <DragOverlay dropAnimation={null}>
-        {activeApt ? (
+        {activeApt ? (() => {
+          const n = normalizeAppointment(activeApt)
+          return (
           <div
             className={cn(
               'rounded border-l-4 p-1.5 text-xs text-left cursor-grabbing shadow-lg opacity-95 flex flex-col items-start min-w-[120px]',
-              STATUS_COLORS[activeApt.status ?? 'pending'] ?? 'bg-zinc-800'
+              stageColorClassForSlug(n.stage_slug)
             )}
           >
             <span className="font-semibold leading-tight">
@@ -924,7 +936,8 @@ function WeekViewDndContent({
               </span>
             )}
           </div>
-        ) : null}
+          )
+        })() : null}
       </DragOverlay>
     </>
   )
@@ -955,7 +968,7 @@ function WeekDraggableAppointment({
     disabled: !canDrag,
   })
   const clientName = Array.isArray(apt.clients) ? apt.clients[0]?.name : apt.clients?.name
-  const serviceName = Array.isArray(apt.services) ? apt.services[0]?.name : apt.services?.name
+  const w = mapAppointmentRowToWorkItem(apt as unknown as AppointmentRowInput)
 
   return (
     <button
@@ -968,7 +981,7 @@ function WeekDraggableAppointment({
         'absolute rounded border-l-4 p-1.5 text-xs text-left transition-shadow cursor-pointer pointer-events-auto overflow-hidden flex flex-col items-start justify-start',
         canDrag ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer opacity-90',
         isDragging && 'opacity-70 shadow-lg z-20',
-        STATUS_COLORS[apt.status ?? 'pending'] ?? 'bg-zinc-800'
+        stageColorClassForSlug(w.stage_slug)
       )}
       style={{
         left: `calc(${leftPct}% + 4px)`,
@@ -981,9 +994,7 @@ function WeekDraggableAppointment({
         {format(parseISO(apt.start_time), 'HH:mm')} – {format(parseISO(apt.end_time), 'HH:mm')}
         {clientName ? ` ${clientName}` : ''}
       </span>
-      {serviceName && (
-        <span className="leading-tight truncate w-full opacity-75">{serviceName}</span>
-      )}
+      <span className="leading-tight truncate w-full opacity-75">{w.displayTitle}</span>
     </button>
   )
 }
@@ -1023,9 +1034,9 @@ function WeekSlot({
         'relative border-r border-t transition-colors cursor-pointer shrink-0',
         isHourStart ? 'border-t-2 border-zinc-700' : 'border-t border-zinc-700/80',
         isClosed && 'bg-zinc-700/50',
-        isSameDay(day, new Date()) && !isClosed && 'bg-[#3B82F6]/5',
-        isHovered && 'bg-blue-800/60',
-        isOver && 'ring-1 ring-inset ring-blue-400 bg-blue-900/30',
+        isSameDay(day, new Date()) && !isClosed && 'bg-brand/5',
+        isHovered && 'bg-brand/35',
+        isOver && 'ring-1 ring-inset ring-brand bg-brand/20',
         dayIndex === 6 && 'border-r-zinc-800'
       )}
       style={{ gridColumn: dayIndex + 2, gridRow: slotIndex + 2, height: SLOT_HEIGHT_PX }}
@@ -1465,7 +1476,7 @@ function DayViewContent({
           <div
             className={cn(
               'rounded border-l-4 p-1.5 text-xs cursor-grabbing shadow-lg opacity-95 flex flex-col items-start',
-              STATUS_COLORS[activeApt.status] ?? 'bg-zinc-800'
+              stageColorClassForSlug(activeApt.stage_slug)
             )}
           >
             <span className="font-semibold leading-tight">
@@ -1537,8 +1548,8 @@ function DaySlot({
       className={cn(
         'transition-colors shrink-0 relative cursor-pointer',
         isHourStart ? 'border-t-2 border-zinc-700' : 'border-t border-zinc-700',
-        showOver && 'ring-1 ring-inset ring-blue-400 bg-blue-900/30',
-        isHovered && 'bg-blue-800/60',
+        showOver && 'ring-1 ring-inset ring-brand bg-brand/20',
+        isHovered && 'bg-brand/35',
         isClosed && onSlotClick && 'cursor-pointer'
       )}
       style={{ height: slotHeightPx }}
@@ -1573,7 +1584,7 @@ function DayDraggableAppointment({
   leftPct: number
   widthPct: number
 }) {
-  const canDrag = apt.status !== 'completed' && apt.status !== 'cancelled'
+  const canDrag = canMoveWorkItemByStageSlug(apt.stage_slug)
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: apt.id,
     disabled: !canDrag,
@@ -1593,7 +1604,7 @@ function DayDraggableAppointment({
         'absolute rounded border-l-4 p-1.5 text-xs text-left transition-shadow cursor-pointer pointer-events-auto overflow-hidden flex flex-col items-start justify-start',
         canDrag ? 'cursor-grab active:cursor-grabbing' : 'cursor-not-allowed opacity-90',
         isDragging && 'opacity-70 shadow-lg z-20',
-        STATUS_COLORS[apt.status] ?? 'bg-zinc-800'
+        stageColorClassForSlug(apt.stage_slug)
       )}
       style={{
         top: topPx,
@@ -1605,9 +1616,7 @@ function DayDraggableAppointment({
       <span className="font-semibold leading-tight truncate w-full">
         {timeRange}{apt.client_name ? ` ${apt.client_name}` : ''}
       </span>
-      {apt.service_name && (
-        <span className="leading-tight truncate w-full opacity-75">{apt.service_name}</span>
-      )}
+      <span className="leading-tight truncate w-full opacity-75">{apt.display_title}</span>
     </button>
   )
 }
@@ -2170,9 +2179,9 @@ function NewAppointmentSidePanel({
                               'h-8 rounded text-sm transition-colors',
                               !isCurrentMonth && 'text-zinc-400',
                               isPast && 'cursor-not-allowed opacity-50',
-                              isSelected && 'bg-blue-600 text-white font-semibold',
+                              isSelected && 'bg-brand text-white font-semibold',
                               !isSelected && !isPast && isCurrentMonth && 'hover:bg-zinc-800 text-zinc-100',
-                              isToday && !isSelected && 'ring-2 ring-blue-400'
+                              isToday && !isSelected && 'ring-2 ring-brand'
                             )}
                           >
                             {format(date, 'd')}
@@ -2209,7 +2218,7 @@ function NewAppointmentSidePanel({
                         onClick={() => handleTimeSelect(slot.timeMin)}
                         className={cn(
                           'w-full text-left px-4 py-2 hover:bg-zinc-950 transition-colors',
-                          slot.timeMin === currentTimeMin && 'bg-blue-900/50 text-blue-200 font-semibold'
+                          slot.timeMin === currentTimeMin && 'bg-brand/25 text-zinc-100 font-semibold'
                         )}
                       >
                         {slot.label}
@@ -2387,7 +2396,7 @@ function NewAppointmentSidePanel({
                         className={cn(
                           'w-full text-left p-3 rounded-lg border transition-colors',
                           selectedServices.some((s) => s.id === service.id)
-                            ? 'border-blue-500 bg-blue-900/50'
+                            ? 'border-brand bg-brand/25'
                             : 'border-zinc-800 hover:border-zinc-700 hover:bg-zinc-950'
                         )}
                       >
@@ -2444,7 +2453,7 @@ function NewAppointmentSidePanel({
                                 className={cn(
                                   'w-full text-left p-3 rounded-lg border transition-colors flex items-center justify-between',
                                   isSelected
-                                    ? 'border-blue-500 bg-blue-900/50'
+                                    ? 'border-brand bg-brand/25'
                                     : isAvailable
                                       ? 'border-zinc-800 hover:border-zinc-700 hover:bg-zinc-950'
                                       : 'border-zinc-800 bg-zinc-900/50 opacity-75'
@@ -2497,7 +2506,7 @@ function NewAppointmentSidePanel({
                         className={cn(
                           'w-full text-left p-3 rounded-lg border transition-colors flex items-center justify-between',
                           useAnyAvailableStaff
-                            ? 'border-blue-500 bg-blue-900/50'
+                            ? 'border-brand bg-brand/25'
                             : 'border-zinc-800 hover:border-zinc-700 hover:bg-zinc-950'
                         )}
                       >
@@ -2762,8 +2771,8 @@ function MonthDayCell({
         'hover:bg-zinc-800/70',
         isSameMonth(day, month) ? 'bg-zinc-900' : 'bg-zinc-900/50',
         isClosed && 'bg-gray-50 dark:bg-zinc-700/50',
-        isSameDay(day, new Date()) && 'ring-1 ring-[#3B82F6] ring-inset',
-        isOver && 'ring-2 ring-blue-400 ring-inset'
+        isSameDay(day, new Date()) && 'ring-1 ring-brand ring-inset',
+        isOver && 'ring-2 ring-brand ring-inset'
       )}
       aria-label={format(day, "d 'de' MMMM", { locale: es })}
     >
@@ -2800,7 +2809,7 @@ function MonthDraggableAppointment({
   onDropAppointment?: (apt: AppointmentNormalized, toDate: Date) => void
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: apt.id })
-  const canDrag = apt.status !== 'completed' && apt.status !== 'cancelled' && !!onDropAppointment
+  const canDrag = canMoveWorkItemByStageSlug(apt.stage_slug) && !!onDropAppointment
   return (
     <button
       ref={setNodeRef}
@@ -2812,10 +2821,10 @@ function MonthDraggableAppointment({
         'cursor-pointer w-full text-left block rounded px-1 py-0.5 text-[10px] truncate transition-opacity hover:opacity-90 pointer-events-auto',
         canDrag && 'cursor-grab active:cursor-grabbing',
         isDragging && 'opacity-50 shadow-lg',
-        STATUS_COLORS[apt.status] ?? 'bg-zinc-800'
+        stageColorClassForSlug(apt.stage_slug)
       )}
     >
-      {apt.client_name ?? 'Cita'}
+      {apt.display_title}
     </button>
   )
 }

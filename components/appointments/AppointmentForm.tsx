@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
@@ -11,6 +11,7 @@ import { normalizeEmail } from '@/lib/email'
 import { addMinutes, format, parseISO } from 'date-fns'
 import { useToastFeedback } from '@/hooks/use-toast-feedback'
 import { notifySuccess } from '@/lib/notify'
+import type { PipelineStageRow } from '@/lib/work-items/types'
 
 type Client = { id: string; name: string; phone?: string; email?: string }
 type Service = { id: string; name: string; duration: number; price: number }
@@ -44,6 +45,8 @@ export function AppointmentForm({
     start_time: string
     end_time: string
     status: string | null
+    title?: string | null
+    pipeline_stage_id?: string | null
     client_id: string | null
     service_id: string | null
     staff_id: string | null
@@ -57,7 +60,23 @@ export function AppointmentForm({
   const supabase = createClient()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [stages, setStages] = useState<PipelineStageRow[]>([])
   useToastFeedback({ error })
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      const { data } = await supabase
+        .from('pipeline_stages')
+        .select('id, business_id, slug, label, sort_order')
+        .eq('business_id', businessId)
+        .order('sort_order', { ascending: true })
+      if (!cancelled) setStages((data ?? []) as PipelineStageRow[])
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [businessId, supabase])
 
   const defaultStart = appointment
     ? format(parseISO(appointment.start_time), "yyyy-MM-dd'T'HH:mm")
@@ -66,7 +85,9 @@ export function AppointmentForm({
     ? format(parseISO(appointment.end_time), "yyyy-MM-dd'T'HH:mm")
     : ''
 
+  const defaultStageId = appointment?.pipeline_stage_id ?? ''
   const [form, setForm] = useState({
+    title: appointment?.title?.trim() ?? '',
     start_time: defaultStart,
     end_time: defaultEnd,
     client_id: appointment?.client_id ?? '',
@@ -75,8 +96,21 @@ export function AppointmentForm({
     service_id: appointment?.service_id ?? '',
     staff_id: appointment?.staff_id ?? '',
     status: (appointment?.status ?? 'pending') as string,
+    pipeline_stage_id: defaultStageId,
     price_total: appointment?.price_total ?? '',
   })
+
+  const pendingStageId = useMemo(
+    () => stages.find((s) => s.slug === 'pending')?.id ?? '',
+    [stages]
+  )
+
+  const defaultStageAppliedRef = useRef(false)
+  useEffect(() => {
+    if (appointment || !stages.length || !pendingStageId || defaultStageAppliedRef.current) return
+    defaultStageAppliedRef.current = true
+    setForm((f) => ({ ...f, pipeline_stage_id: f.pipeline_stage_id || pendingStageId }))
+  }, [appointment, stages, pendingStageId])
 
   const selectedClient = form.client_id ? clients.find((c) => c.id === form.client_id) : null
   useEffect(() => {
@@ -106,15 +140,21 @@ export function AppointmentForm({
     setError('')
     const end = form.end_time || suggestedEnd || form.start_time
     const price = form.price_total !== '' ? Number(form.price_total) : selectedService?.price ?? null
-    const payload = {
+    const titleTrim = form.title.trim()
+    const payload: Record<string, unknown> = {
       business_id: businessId,
+      title: titleTrim || null,
       start_time: new Date(form.start_time).toISOString(),
       end_time: new Date(end).toISOString(),
       client_id: form.client_id || null,
       service_id: form.service_id || null,
       staff_id: form.staff_id || null,
-      status: form.status,
       price_total: price,
+    }
+    if (form.pipeline_stage_id) {
+      payload.pipeline_stage_id = form.pipeline_stage_id
+    } else {
+      payload.status = form.status
     }
     if (appointment) {
       const { error: err } = await supabase
@@ -189,12 +229,22 @@ export function AppointmentForm({
         </div>
       )}
       <div>
+        <Label htmlFor="appointment_title">Título</Label>
+        <Input
+          id="appointment_title"
+          value={form.title}
+          onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+          placeholder="Ej. Seguimiento, visita, pedido…"
+          className="mt-1 text-zinc-100"
+        />
+      </div>
+      <div>
         <Label htmlFor="client_id">Cliente</Label>
         <select
           id="client_id"
           value={form.client_id}
           onChange={(e) => setForm((f) => ({ ...f, client_id: e.target.value }))}
-          className="mt-1 flex h-10 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6] focus-visible:ring-offset-2"
+          className="mt-1 flex h-10 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
         >
           <option value="">Seleccionar cliente</option>
           {clients.map((c) => (
@@ -243,7 +293,7 @@ export function AppointmentForm({
               end_time: '',
             }))
           }}
-          className="mt-1 flex h-10 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6] focus-visible:ring-offset-2"
+          className="mt-1 flex h-10 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
         >
           <option value="">Seleccionar servicio</option>
           {services.map((s) => (
@@ -259,7 +309,7 @@ export function AppointmentForm({
           id="staff_id"
           value={form.staff_id}
           onChange={(e) => setForm((f) => ({ ...f, staff_id: e.target.value }))}
-          className="mt-1 flex h-10 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6] focus-visible:ring-offset-2"
+          className="mt-1 flex h-10 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
         >
           <option value="">Seleccionar empleado</option>
           {staff.map((s) => (
@@ -294,19 +344,40 @@ export function AppointmentForm({
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <Label htmlFor="status">Estado</Label>
-          <select
-            id="status"
-            value={form.status}
-            onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
-            className="mt-1 flex h-10 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6] focus-visible:ring-offset-2"
-          >
-            {STATUS_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
+          <Label htmlFor="pipeline_stage_id">Etapa</Label>
+          {stages.length > 0 ? (
+            <select
+              id="pipeline_stage_id"
+              value={form.pipeline_stage_id}
+              onChange={(e) =>
+                setForm((f) => ({
+                  ...f,
+                  pipeline_stage_id: e.target.value,
+                  status: stages.find((s) => s.id === e.target.value)?.slug ?? f.status,
+                }))
+              }
+              className="mt-1 flex h-10 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
+            >
+              {stages.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <select
+              id="status"
+              value={form.status}
+              onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
+              className="mt-1 flex h-10 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
+            >
+              {STATUS_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
         <div>
           <Label htmlFor="price_total" className="text-zinc-100 font-medium">Precio total (€)</Label>

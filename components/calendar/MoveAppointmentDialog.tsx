@@ -61,7 +61,7 @@ export function MoveAppointmentDialog({
             </div>
             <div>
               <span className="text-zinc-400">{sameDay ? 'Nueva hora: ' : 'Nueva fecha: '}</span>
-              <span className="font-medium text-blue-600">
+              <span className="font-medium text-brand">
                 {sameDay ? format(toDate, 'HH:mm') : format(toDate, "EEEE d MMMM", { locale: es })}
               </span>
             </div>

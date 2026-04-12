@@ -229,7 +229,7 @@ export function TimeTrackingTab({
               onClick={() => setViewMode('week')}
               className={cn(
                 'px-3 py-1.5 text-sm transition-colors',
-                viewMode === 'week' ? 'bg-[#3B82F6] text-white' : 'bg-zinc-800 text-zinc-400 hover:text-zinc-100'
+                viewMode === 'week' ? 'bg-brand text-white' : 'bg-zinc-800 text-zinc-400 hover:text-zinc-100'
               )}
             >
               Semana
@@ -238,7 +238,7 @@ export function TimeTrackingTab({
               onClick={() => setViewMode('month')}
               className={cn(
                 'px-3 py-1.5 text-sm transition-colors',
-                viewMode === 'month' ? 'bg-[#3B82F6] text-white' : 'bg-zinc-800 text-zinc-400 hover:text-zinc-100'
+                viewMode === 'month' ? 'bg-brand text-white' : 'bg-zinc-800 text-zinc-400 hover:text-zinc-100'
               )}
             >
               Mes
@@ -256,7 +256,7 @@ export function TimeTrackingTab({
           <select
             value={filterStaff}
             onChange={(e) => setFilterStaff(e.target.value)}
-            className="h-9 rounded-md border border-zinc-700 bg-zinc-900 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#3B82F6]"
+            className="h-9 rounded-md border border-zinc-700 bg-zinc-900 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
           >
             <option value="all">Todos los empleados</option>
             {activeStaff.map((s) => (
@@ -407,7 +407,7 @@ export function TimeTrackingTab({
                       <td className="px-4 py-2.5">
                         <span className={cn(
                           'text-xs px-1.5 py-0.5 rounded',
-                          entry.source === 'manual' ? 'bg-zinc-700 text-zinc-400' : 'bg-blue-900/50 text-blue-300'
+                          entry.source === 'manual' ? 'bg-zinc-700 text-zinc-400' : 'bg-brand/25 text-brand'
                         )}>
                           {entry.source === 'manual' ? 'Manual' : 'App'}
                         </span>
@@ -455,7 +455,7 @@ export function TimeTrackingTab({
                   id="entry-staff"
                   value={form.staff_id}
                   onChange={(e) => setForm((f) => ({ ...f, staff_id: e.target.value }))}
-                  className="mt-1 w-full h-10 rounded-md border border-zinc-700 bg-zinc-900 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#3B82F6]"
+                  className="mt-1 w-full h-10 rounded-md border border-zinc-700 bg-zinc-900 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
                 >
                   {activeStaff.map((s) => (
                     <option key={s.id} value={s.id}>{s.name}</option>

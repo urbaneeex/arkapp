@@ -38,11 +38,11 @@ export function AuthLegalFooter() {
   return (
     <p className="mt-8 text-center text-[12px] leading-relaxed text-[#8e8e93]">
       Al continuar, acepto los{' '}
-      <Link href="/terminos" className="text-[#3b82f6] hover:underline">
+      <Link href="/terminos" className="text-brand hover:underline">
         Términos y condiciones
       </Link>{' '}
       y la{' '}
-      <Link href="/privacidad" className="text-[#3b82f6] hover:underline">
+      <Link href="/privacidad" className="text-brand hover:underline">
         Política de protección de datos
       </Link>
       .

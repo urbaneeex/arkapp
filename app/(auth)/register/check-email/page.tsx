@@ -23,10 +23,10 @@ export default function CheckEmailPage() {
 
   return (
     <div className="bg-zinc-900 rounded-xl shadow-lg p-6 sm:p-8 w-full max-w-md mx-auto text-center">
-      <div className="w-14 h-14 rounded-full bg-blue-100 flex items-center justify-center mx-auto mb-6">
-        <Mail className="w-7 h-7 text-blue-600" />
+      <div className="w-14 h-14 rounded-full bg-brand/15 flex items-center justify-center mx-auto mb-6">
+        <Mail className="w-7 h-7 text-brand" />
       </div>
-      <h1 className="text-2xl font-bold text-zinc-100 mb-2">Revisa tu email</h1>
+      <h1 className="font-display text-2xl font-bold text-zinc-100 mb-2">Revisa tu email</h1>
       <p className="text-zinc-400 mb-6">
         Te hemos enviado un correo de confirmación. Haz clic en el enlace del email para activar tu cuenta.
       </p>

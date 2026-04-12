@@ -112,7 +112,7 @@ export default function ClientForm({ client, defaultCountry }: ClientFormProps) 
           required
           value={formData.name}
           onChange={handleChange}
-          className="w-full px-4 py-2 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-zinc-900 text-zinc-100"
+          className="w-full px-4 py-2 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand bg-zinc-900 text-zinc-100"
           placeholder="Juan Pérez"
         />
       </div>
@@ -144,7 +144,7 @@ export default function ClientForm({ client, defaultCountry }: ClientFormProps) 
           name="address"
           value={formData.address}
           onChange={handleChange}
-          className="w-full px-4 py-2 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-zinc-900 text-zinc-100"
+          className="w-full px-4 py-2 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand bg-zinc-900 text-zinc-100"
           placeholder="Calle Principal 123, Sevilla"
         />
       </div>
@@ -158,7 +158,7 @@ export default function ClientForm({ client, defaultCountry }: ClientFormProps) 
           rows={3}
           value={formData.notes}
           onChange={handleChange}
-          className="w-full px-4 py-2 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-zinc-900 text-zinc-100"
+          className="w-full px-4 py-2 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand bg-zinc-900 text-zinc-100"
           placeholder="Alergias, preferencias, etc."
         />
       </div>

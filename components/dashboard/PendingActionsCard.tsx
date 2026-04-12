@@ -128,11 +128,11 @@ export function PendingActionsCard({ actions: initialActions, hasClock }: Props)
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <CardTitle className="text-lg flex items-center gap-2">
-            <Zap className="h-4 w-4 text-[#3B82F6]" />
+            <Zap className="h-4 w-4 text-brand" />
             Acciones pendientes
           </CardTitle>
           {!allDone && (
-            <span className="inline-flex items-center justify-center h-5 min-w-5 px-1.5 rounded-full bg-[#3B82F6] text-white text-xs font-bold">
+            <span className="inline-flex items-center justify-center h-5 min-w-5 px-1.5 rounded-full bg-brand text-white text-xs font-bold">
               {pendingActions.length}
             </span>
           )}

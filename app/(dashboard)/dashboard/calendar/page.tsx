@@ -24,6 +24,8 @@ export default async function CalendarPage() {
     .select(
       `
       id,
+      business_id,
+      title,
       start_time,
       end_time,
       status,
@@ -31,9 +33,11 @@ export default async function CalendarPage() {
       client_id,
       service_id,
       staff_id,
+      pipeline_stage_id,
       clients(name, phone),
       services(name, duration, price),
-      staff(name)
+      staff(name),
+      pipeline_stages(id, slug, label, sort_order)
     `
     )
     .eq('business_id', businessId)

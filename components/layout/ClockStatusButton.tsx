@@ -261,7 +261,7 @@ export function ClockStatusButton() {
         'w-full flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer',
         isClockedIn
           ? 'bg-red-600 hover:bg-red-500 text-white'
-          : 'bg-[#3B82F6] hover:bg-blue-500 text-white',
+          : 'bg-brand hover:bg-brand-hover text-white',
         (isLoading || actionState === 'success' || actionState === 'scanning') && 'opacity-60 cursor-not-allowed'
       )}
     >
@@ -355,7 +355,7 @@ export function ClockStatusButton() {
           <div className="rounded-xl overflow-hidden border border-zinc-700 relative bg-black mb-3">
             <div ref={scannerRef} className="w-full aspect-square" />
             <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-              <ScanLine className="h-32 w-32 text-blue-400/50" />
+              <ScanLine className="h-32 w-32 text-brand/50" />
             </div>
             <p className="absolute bottom-2 left-0 right-0 text-center text-[10px] text-white/70 px-2">
               Apunta al QR del local

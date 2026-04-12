@@ -146,7 +146,7 @@ export function MyRequests({
             'flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium cursor-pointer transition-all',
             showForm
               ? 'bg-zinc-700 text-zinc-200 hover:bg-zinc-600'
-              : 'bg-[#3B82F6] text-white hover:bg-blue-500'
+              : 'bg-brand text-white hover:bg-brand-hover'
           )}
         >
           {showForm ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
@@ -174,7 +174,7 @@ export function MyRequests({
                   className={cn(
                     'py-2 px-3 rounded-lg text-xs font-medium border transition-colors cursor-pointer text-left',
                     formType === t
-                      ? 'bg-blue-600 border-blue-500 text-white'
+                      ? 'bg-brand border-brand text-white'
                       : 'bg-zinc-800 border-zinc-700 text-zinc-300 hover:border-zinc-600'
                   )}
                 >
@@ -193,7 +193,7 @@ export function MyRequests({
                 value={formStart}
                 onChange={e => setFormStart(e.target.value)}
                 required
-                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-blue-500"
+                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-brand"
               />
             </div>
             <div>
@@ -204,7 +204,7 @@ export function MyRequests({
                 min={formStart}
                 onChange={e => setFormEnd(e.target.value)}
                 required
-                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-blue-500"
+                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-brand"
               />
             </div>
           </div>
@@ -216,7 +216,7 @@ export function MyRequests({
               value={formNotes}
               onChange={e => setFormNotes(e.target.value)}
               rows={2}
-              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-blue-500 resize-none"
+              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-brand resize-none"
               placeholder="Motivo o comentario adicional..."
             />
           </div>
@@ -231,7 +231,7 @@ export function MyRequests({
           <button
             type="submit"
             disabled={submitting}
-            className="w-full py-2.5 rounded-xl text-sm font-semibold bg-[#3B82F6] hover:bg-blue-500 text-white transition-colors disabled:opacity-60 cursor-pointer"
+            className="w-full py-2.5 rounded-xl text-sm font-semibold bg-brand hover:bg-brand-hover text-white transition-colors disabled:opacity-60 cursor-pointer"
           >
             {submitting ? <Loader2 className="h-4 w-4 animate-spin mx-auto" /> : 'Enviar solicitud'}
           </button>

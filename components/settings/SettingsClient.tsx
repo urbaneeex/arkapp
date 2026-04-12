@@ -682,7 +682,7 @@ export function SettingsClient({
                     id="industry"
                     value={industry}
                     onChange={(e) => setIndustry(e.target.value)}
-                    className="mt-1 flex h-10 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6] focus-visible:ring-offset-2"
+                    className="mt-1 flex h-10 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
                   >
                     {INDUSTRIES.map((i) => (
                       <option key={i} value={i}>
@@ -1216,7 +1216,7 @@ export function SettingsClient({
                   id="clock_method"
                   value={clockInMethod}
                   onChange={(e) => setClockInMethod(e.target.value as 'manual' | 'qr' | 'gps')}
-                  className="mt-1 flex h-10 w-full max-w-xs rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]"
+                  className="mt-1 flex h-10 w-full max-w-xs rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
                 >
                   <option value="manual">Solo botón (sin verificación extra)</option>
                   <option value="qr">Código QR rotativo</option>
@@ -1230,10 +1230,10 @@ export function SettingsClient({
               </div>
 
               {clockInMethod === 'qr' && (
-                <div className="rounded-lg border border-blue-700/30 bg-blue-950/20 p-4 flex items-start gap-3">
-                  <ScanLine className="h-5 w-5 text-blue-400 mt-0.5 shrink-0" />
+                <div className="rounded-lg border border-brand/30 bg-brand/10 p-4 flex items-start gap-3">
+                  <ScanLine className="h-5 w-5 text-brand mt-0.5 shrink-0" />
                   <div className="space-y-1">
-                    <p className="text-sm text-blue-300 font-medium">Pantalla QR del local</p>
+                    <p className="text-sm text-brand font-medium">Pantalla QR del local</p>
                     <p className="text-xs text-zinc-400">
                       Abre esta pantalla en una tableta o monitor del local para que los empleados puedan escanear el código.
                     </p>
@@ -1241,7 +1241,7 @@ export function SettingsClient({
                       href="/dashboard/clock"
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 mt-1"
+                      className="inline-flex items-center gap-1.5 text-xs text-brand hover:text-brand mt-1"
                     >
                       <ExternalLink className="h-3.5 w-3.5" />
                       Abrir pantalla QR
@@ -1254,7 +1254,7 @@ export function SettingsClient({
                 <div className="space-y-4 pt-2 border-t border-zinc-800">
                   <div className="flex items-center justify-between flex-wrap gap-2">
                     <h4 className="text-sm font-medium text-zinc-200 flex items-center gap-2">
-                      <MapPin className="h-4 w-4 text-blue-400" />
+                      <MapPin className="h-4 w-4 text-brand" />
                       Ubicación del negocio
                     </h4>
                     <Button
@@ -1293,7 +1293,7 @@ export function SettingsClient({
                   </div>
                   <div>
                     <Label htmlFor="geo_radius">
-                      Radio de fichaje: <span className="text-blue-400">{geofenceRadius} metros</span>
+                      Radio de fichaje: <span className="text-brand">{geofenceRadius} metros</span>
                     </Label>
                     <input
                       id="geo_radius"
@@ -1303,7 +1303,7 @@ export function SettingsClient({
                       step={10}
                       value={geofenceRadius}
                       onChange={(e) => setGeofenceRadius(Number(e.target.value))}
-                      className="mt-2 w-full max-w-xs accent-blue-500 cursor-pointer"
+                      className="mt-2 w-full max-w-xs accent-brand cursor-pointer"
                     />
                     <div className="flex justify-between text-xs text-zinc-600 max-w-xs mt-0.5">
                       <span>50 m</span>

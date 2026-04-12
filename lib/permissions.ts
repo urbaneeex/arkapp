@@ -15,10 +15,12 @@ export type LevelId = (typeof PERMISSION_LEVEL_IDS)[number]
 
 export type PermissionKey =
   | 'calendar_view'
+  | 'work_board_view'
   | 'appointments_create'
   | 'appointments_edit'
   | 'appointments_delete'
   | 'appointments_move'
+  | 'pipeline_stages_manage'
   | 'clients_view'
   | 'clients_edit'
   | 'clients_delete'
@@ -44,10 +46,12 @@ export type PermissionMatrix = Record<LevelId, Permissions>
 
 const baseKeys: PermissionKey[] = [
   'calendar_view',
+  'work_board_view',
   'appointments_create',
   'appointments_edit',
   'appointments_delete',
   'appointments_move',
+  'pipeline_stages_manage',
   'clients_view',
   'clients_edit',
   'clients_delete',
@@ -79,15 +83,18 @@ function makePermissions(overrides: Partial<Permissions>): Permissions {
 export const DEFAULT_MATRIX: PermissionMatrix = {
   basico: makePermissions({
     calendar_view: true,
+    work_board_view: true,
   }),
   bajo: makePermissions({
     calendar_view: true,
+    work_board_view: true,
     appointments_create: true,
     clients_view: true,
     services_view: true,
   }),
   medio: makePermissions({
     calendar_view: true,
+    work_board_view: true,
     appointments_create: true,
     appointments_edit: true,
     appointments_move: true,
@@ -103,6 +110,7 @@ export const DEFAULT_MATRIX: PermissionMatrix = {
   }),
   alto: makePermissions({
     calendar_view: true,
+    work_board_view: true,
     appointments_create: true,
     appointments_edit: true,
     appointments_delete: true,
@@ -124,9 +132,11 @@ export const DEFAULT_MATRIX: PermissionMatrix = {
     time_tracking_manage: true,
     absences_view: true,
     absences_manage: true,
+    pipeline_stages_manage: true,
   }),
   propietario: makePermissions({
     calendar_view: true,
+    work_board_view: true,
     appointments_create: true,
     appointments_edit: true,
     appointments_delete: true,
@@ -149,6 +159,7 @@ export const DEFAULT_MATRIX: PermissionMatrix = {
     time_tracking_manage: true,
     absences_view: true,
     absences_manage: true,
+    pipeline_stages_manage: true,
   }),
 }
 
@@ -174,10 +185,16 @@ export function getDefaultMatrixForDb(): Record<string, Permissions> {
 /** Filas para la UI de la matriz (categoría, etiqueta, key del permiso) */
 export const PERMISSION_ROWS: { category: string; permission: string; key: PermissionKey }[] = [
   { category: 'Calendario', permission: 'Ver calendario', key: 'calendar_view' },
+  { category: 'Calendario', permission: 'Ver tablero (Kanban / lista)', key: 'work_board_view' },
   { category: 'Calendario', permission: 'Crear citas', key: 'appointments_create' },
   { category: 'Calendario', permission: 'Editar citas', key: 'appointments_edit' },
   { category: 'Calendario', permission: 'Eliminar citas', key: 'appointments_delete' },
   { category: 'Calendario', permission: 'Mover/arrastrar citas', key: 'appointments_move' },
+  {
+    category: 'Calendario',
+    permission: 'Gestionar columnas del embudo (Kanban)',
+    key: 'pipeline_stages_manage',
+  },
   { category: 'Clientes', permission: 'Ver clientes', key: 'clients_view' },
   { category: 'Clientes', permission: 'Crear y editar clientes', key: 'clients_edit' },
   { category: 'Clientes', permission: 'Eliminar clientes', key: 'clients_delete' },
