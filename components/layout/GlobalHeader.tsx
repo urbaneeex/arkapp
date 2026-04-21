@@ -1,38 +1,30 @@
 'use client'
 
-import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/client'
-import { getBusinessForUserClient } from '@/lib/supabase/business-client'
+import dynamic from 'next/dynamic'
 import { UserMenu } from '@/components/layout/UserMenu'
-import { ClockStatusButton } from '@/components/layout/ClockStatusButton'
 import { cn } from '@/lib/utils'
 
-export function GlobalHeader() {
-  const [user, setUser] = useState<{
-    email: string
-    name?: string
-  } | null>(null)
-  const [businessName, setBusinessName] = useState<string | null>(null)
+// ClockStatusButton es pesado (polling, QR scanner, geolocalización).
+// Lo cargamos de forma diferida para no bloquear el LCP del header.
+const ClockStatusButton = dynamic(
+  () => import('@/components/layout/ClockStatusButton').then((m) => m.ClockStatusButton),
+  {
+    ssr: false,
+    loading: () => <div className="h-7 w-16 rounded-full bg-zinc-800/60 border border-zinc-700 animate-pulse" />,
+  }
+)
 
-  useEffect(() => {
-    const supabase = createClient()
-    const load = async () => {
-      const {
-        data: { user: authUser },
-      } = await supabase.auth.getUser()
-      if (!authUser) return
-      setUser({
-        email: authUser.email || '',
-        name:
-          authUser.user_metadata?.full_name ||
-          authUser.user_metadata?.name,
-      })
-      const business = await getBusinessForUserClient(authUser.id)
-      setBusinessName(business?.name ?? null)
-    }
-    load()
-  }, [])
+type GlobalHeaderProps = {
+  /** Datos pre-renderizados desde el layout server — elimina CLS */
+  initialUserName?: string
+  initialBusinessName?: string
+}
+
+export function GlobalHeader({ initialUserName = '', initialBusinessName = '' }: GlobalHeaderProps) {
+  const user = initialUserName
+    ? { email: '', name: initialUserName }
+    : null
 
   return (
     <header
@@ -43,22 +35,22 @@ export function GlobalHeader() {
         'px-4 lg:pl-4 lg:pr-6'
       )}
     >
-      {/* Izquierda: logo "Arkapp x [Nombre del Negocio]" */}
+      {/* Logo: siempre visible en el primer paint gracias a los props del servidor */}
       <Link
         href="/dashboard/calendar"
         className="cursor-pointer flex items-center focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-zinc-950 rounded"
       >
         <span className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-white">
           <span className="font-display">Arkapp</span>
-          {businessName ? (
-            <span className="font-sans font-normal"> x {businessName}</span>
+          {initialBusinessName ? (
+            <span className="font-sans font-normal"> x {initialBusinessName}</span>
           ) : null}
         </span>
       </Link>
 
-      {/* Derecha: botón fichaje + avatar → menú usuario */}
+      {/* Derecha: fichaje (lazy) + avatar */}
       <div className="flex items-center gap-3">
-        {user && <ClockStatusButton />}
+        <ClockStatusButton />
         {user ? (
           <UserMenu user={user} />
         ) : (
