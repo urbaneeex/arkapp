@@ -5,6 +5,7 @@ import { ThemeProvider } from "@/contexts/ThemeContext";
 import { SonnerToaster } from "@/components/ui/sonner-toaster";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { Analytics } from "@vercel/analytics/next";
+import { FontLoader } from "@/components/layout/FontLoader";
 import "./globals.css";
 
 const spaceGrotesk = Space_Grotesk({
@@ -34,10 +35,8 @@ export default function RootLayout({
   return (
     <html lang="es" suppressHydrationWarning>
       <head>
-        <link
-          rel="stylesheet"
-          href="https://api.fontshare.com/v2/css?f[]=clash-display@400,500,600,700&display=swap"
-        />
+        {/* Preconnect para reducir latencia cuando FontLoader cargue la fuente */}
+        <link rel="preconnect" href="https://api.fontshare.com" crossOrigin="anonymous" />
         <script
           dangerouslySetInnerHTML={{
             __html: `(function(){var t=localStorage.getItem('arkapp-theme');t=t==='light'||t==='dark'?t:'dark';document.documentElement.classList.remove('dark','light');document.documentElement.classList.add(t);})();`,
@@ -51,6 +50,7 @@ export default function RootLayout({
           <SessionGuard>
             {children}
             <SonnerToaster />
+            <FontLoader />
             <SpeedInsights />
             <Analytics />
           </SessionGuard>

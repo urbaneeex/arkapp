@@ -1,6 +1,8 @@
-import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import type { Metadata } from 'next'
+import { Suspense } from 'react'
+import { getCachedUser } from '@/lib/supabase/server'
+import { createClient } from '@/lib/supabase/server'
 import { getBusinessForUser } from '@/lib/supabase/business'
 import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -48,14 +50,34 @@ const SIGNATURE_TYPE_ACTIONS: Record<string, string> = {
   time_report: 'Pendiente de firmar',
 }
 
-export default async function DashboardPage() {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
+// ─── Skeleton ────────────────────────────────────────────────────────────────
 
-  const businessResult = await getBusinessForUser(user.id)
+function DashboardSkeleton() {
+  return (
+    <>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-8">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div key={i} className="h-32 rounded-lg bg-zinc-900 animate-pulse" />
+        ))}
+      </div>
+      <div className="grid gap-6 lg:grid-cols-2">
+        <div className="h-64 rounded-lg bg-zinc-900 animate-pulse" />
+        <div className="h-64 rounded-lg bg-zinc-900 animate-pulse" />
+      </div>
+    </>
+  )
+}
+
+// ─── Dashboard content (streamed) ────────────────────────────────────────────
+
+async function DashboardContent({
+  userId,
+  userEmail,
+}: {
+  userId: string
+  userEmail: string
+}) {
+  const businessResult = await getBusinessForUser(userId)
   if (!businessResult) {
     return (
       <div className="rounded-lg border border-amber-200 bg-amber-950/50 p-6 text-amber-200">
@@ -68,33 +90,9 @@ export default async function DashboardPage() {
   }
 
   const business = businessResult.business
-  const isOwner = business.owner_uid === user.id
+  const isOwner = businessResult.isOwner
 
-  const { data: myStaff } = await supabase
-    .from('staff')
-    .select('id, access_level, name')
-    .eq('business_id', business.id)
-    .or(`id.eq.${user.id},email.eq.${user.email ?? ''}`)
-    .is('deleted_at', null)
-    .maybeSingle()
-
-  const accessLevel = myStaff?.access_level
-  const normalizedLevel: LevelId =
-    typeof accessLevel === 'string' && (PERMISSION_LEVEL_IDS as readonly string[]).includes(accessLevel)
-      ? (accessLevel as LevelId)
-      : 'basico'
-  const canSeeLiveClockPanel =
-    isOwner ||
-    DEFAULT_MATRIX[normalizedLevel].time_tracking_view ||
-    DEFAULT_MATRIX[normalizedLevel].time_tracking_manage
-
-  const myStaffId = myStaff?.id ?? user.id
-  const userDisplayName =
-    myStaff?.name?.trim() ||
-    (typeof user.user_metadata?.full_name === 'string' && user.user_metadata.full_name.trim()) ||
-    (typeof user.user_metadata?.name === 'string' && user.user_metadata.name.trim()) ||
-    user.email?.split('@')[0]?.trim() ||
-    'Usuario'
+  const supabase = await createClient()
 
   const todayStart = startOfToday().toISOString()
   const todayEnd = endOfToday().toISOString()
@@ -103,19 +101,28 @@ export default async function DashboardPage() {
   const monthStart = startOfMonth(new Date()).toISOString()
   const monthEnd = endOfMonth(new Date()).toISOString()
 
+  // myStaff primero (necesitamos su id para las queries personales)
+  const { data: myStaff } = await supabase
+    .from('staff')
+    .select('id, access_level, name')
+    .eq('business_id', business.id)
+    .or(`id.eq.${userId},email.eq.${userEmail}`)
+    .is('deleted_at', null)
+    .maybeSingle()
+
+  const myStaffId = myStaff?.id ?? userId
+
+  // Todas las demás queries en paralelo
   const [
     { count: todayCount },
     { count: weekCount },
     { count: clientsCount },
-    { count: servicesCount },
     { data: revenueData },
     { data: monthAppointments },
     { count: noShowCount },
     { data: nextAppointments },
-    // Pending actions — owner
     { count: pendingAbsencesCount },
     { count: pendingSignaturesOwnerCount },
-    // Pending actions — employee
     { data: myPendingSignatures },
     { data: myPendingAbsences },
     { data: myOpenEntry },
@@ -136,10 +143,6 @@ export default async function DashboardPage() {
       .in('status', ['pending', 'confirmed', 'in_progress', 'completed']),
     supabase
       .from('clients')
-      .select('*', { count: 'exact', head: true })
-      .eq('business_id', business.id),
-    supabase
-      .from('services')
       .select('*', { count: 'exact', head: true })
       .eq('business_id', business.id),
     supabase
@@ -164,40 +167,33 @@ export default async function DashboardPage() {
       .lte('start_time', monthEnd),
     supabase
       .from('appointments')
-      .select(
-        'id, start_time, end_time, status, clients(name), services(name)'
-      )
+      .select('id, start_time, end_time, status, clients(name), services(name)')
       .eq('business_id', business.id)
       .gte('start_time', todayStart)
       .in('status', ['pending', 'confirmed', 'in_progress'])
       .order('start_time', { ascending: true })
       .limit(5),
-    // Owner: absence requests pending approval
     supabase
       .from('staff_absence_requests')
       .select('*', { count: 'exact', head: true })
       .eq('business_id', business.id)
       .eq('status', 'pending'),
-    // Owner: only uploaded documents pending employee signature (not vacation/schedule/time_report)
     supabase
       .from('staff_signatures')
       .select('*', { count: 'exact', head: true })
       .eq('business_id', business.id)
       .eq('status', 'pending')
       .eq('document_type', 'document'),
-    // Employee: my signatures pending
     supabase
       .from('staff_signatures')
       .select('id, document_type, reference_period')
       .eq('staff_id', myStaffId)
       .eq('status', 'pending'),
-    // Employee: my absence requests pending approval
     supabase
       .from('staff_absence_requests')
       .select('id, type, start_date')
       .eq('staff_id', myStaffId)
       .eq('status', 'pending'),
-    // Employee: open clock-in entry today
     supabase
       .from('time_entries')
       .select('id, clock_in')
@@ -206,6 +202,16 @@ export default async function DashboardPage() {
       .is('clock_out', null)
       .maybeSingle(),
   ])
+
+  const accessLevel = myStaff?.access_level
+  const normalizedLevel: LevelId =
+    typeof accessLevel === 'string' && (PERMISSION_LEVEL_IDS as readonly string[]).includes(accessLevel)
+      ? (accessLevel as LevelId)
+      : 'basico'
+  const canSeeLiveClockPanel =
+    isOwner ||
+    DEFAULT_MATRIX[normalizedLevel].time_tracking_view ||
+    DEFAULT_MATRIX[normalizedLevel].time_tracking_manage
 
   const revenue =
     revenueData?.reduce((acc, row) => acc + (row.price_total ?? 0), 0) ?? 0
@@ -230,11 +236,9 @@ export default async function DashboardPage() {
           ? 'time_report'
           : 'document'
 
-  // Build pending actions list depending on role
   type ActionItem = Parameters<typeof PendingActionsCard>[0]['actions'][number]
   const pendingActions: ActionItem[] = []
 
-  // Clock-in reminder ALWAYS FIRST — only for users with time tracking access
   const hasClock =
     isOwner ||
     DEFAULT_MATRIX[normalizedLevel].time_tracking_view ||
@@ -251,7 +255,6 @@ export default async function DashboardPage() {
   }
 
   if (isOwner || DEFAULT_MATRIX[normalizedLevel].absences_manage) {
-    // Manager/owner sees team-level actions
     const absences = pendingAbsencesCount ?? 0
     pendingActions.push({
       id: 'absences',
@@ -279,7 +282,6 @@ export default async function DashboardPage() {
     })
   }
 
-  // Every logged-in user sees their own pending items
   const mySigs = myPendingSignatures?.length ?? 0
   if (mySigs > 0) {
     pendingActions.push({
@@ -305,6 +307,7 @@ export default async function DashboardPage() {
       count: myAbsences,
     })
   }
+
   const totalMonth = monthAppointments?.length ?? 0
   const completedMonth =
     monthAppointments?.filter((a) => a.status === 'completed').length ?? 0
@@ -362,9 +365,7 @@ export default async function DashboardPage() {
   ]
 
   return (
-    <div>
-      <PageHeader title={`Hola, ${userDisplayName}`} className="mb-8" />
-
+    <>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-8">
         {stats.map(({ title, value, icon: Icon, href, color }) => (
           <Link key={title} href={href} className="cursor-pointer">
@@ -414,7 +415,7 @@ export default async function DashboardPage() {
                             {serviceName ?? 'Sin servicio'} ·{' '}
                             {format(
                               new Date(apt.start_time),
-                              "HH:mm",
+                              'HH:mm',
                               { locale: es }
                             )}
                           </p>
@@ -449,6 +450,32 @@ export default async function DashboardPage() {
           <LiveClockPanel businessId={business.id} />
         </div>
       )}
+    </>
+  )
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
+
+export default async function DashboardPage() {
+  const user = await getCachedUser()
+  if (!user) redirect('/login')
+
+  // Nombre desde auth metadata — disponible sin RTT extra
+  const authDisplayName =
+    (user.user_metadata?.full_name as string | undefined)?.trim() ||
+    (user.user_metadata?.name as string | undefined)?.trim() ||
+    user.email?.split('@')[0]?.trim() ||
+    'Usuario'
+
+  return (
+    <div>
+      {/* Renderiza instantáneamente sin esperar datos */}
+      <PageHeader title={`Hola, ${authDisplayName}`} className="mb-8" />
+
+      {/* Los datos streaman en cuanto la DB responde */}
+      <Suspense fallback={<DashboardSkeleton />}>
+        <DashboardContent userId={user.id} userEmail={user.email ?? ''} />
+      </Suspense>
     </div>
   )
 }

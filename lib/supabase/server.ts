@@ -1,5 +1,6 @@
 import { createServerClient as createSupabaseServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { cache } from 'react'
 
 export async function createClient() {
   const cookieStore = await cookies()
@@ -30,3 +31,13 @@ export async function createClient() {
 export async function createServerClient() {
   return createClient()
 }
+
+/**
+ * Devuelve el usuario autenticado deduplicado por request (React cache).
+ * Múltiples llamadas en layout + page comparten el mismo resultado sin RTT extra.
+ */
+export const getCachedUser = cache(async () => {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  return user
+})

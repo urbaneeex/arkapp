@@ -1,10 +1,10 @@
-import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { GlobalHeader } from '@/components/layout/GlobalHeader'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { MobileBottomNav } from '@/components/layout/MobileBottomNav'
 import { DashboardMain } from '@/components/layout/DashboardMain'
 import { PermissionsProvider } from '@/contexts/PermissionsContext'
+import { getCachedUser } from '@/lib/supabase/server'
 import { getBusinessAccess } from '@/lib/supabase/business'
 
 export default async function DashboardLayout({
@@ -12,10 +12,7 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode
 }) {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const user = await getCachedUser()
   if (!user) redirect('/login')
 
   // Owners nuevos sin fila en businesses → alta en /onboarding. Staff asociado → mismo getBusinessAccess.
