@@ -1,9 +1,14 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import type { Metadata } from 'next'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { SettingsClient } from '@/components/settings/SettingsClient'
 import { RequirePermission } from '@/components/auth/RequirePermission'
 import { getBusinessIdForUser } from '@/lib/supabase/business'
+
+export const metadata: Metadata = {
+  title: 'Ajustes',
+}
 
 export default async function SettingsPage() {
   const supabase = await createClient()
@@ -60,7 +65,7 @@ export default async function SettingsPage() {
   return (
     <RequirePermission permission="settings_manage">
       <div>
-        <PageHeader title="Configuración" subtitle="Gestiona la información de tu negocio y preferencias" />
+        <PageHeader title="Configuración" />
         <SettingsClient
         business={{
           id: business.id,

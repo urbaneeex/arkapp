@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import type { Metadata } from 'next'
 import { getBusinessForUser } from '@/lib/supabase/business'
 import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -26,6 +27,10 @@ import {
   format,
 } from 'date-fns'
 import { es } from 'date-fns/locale'
+
+export const metadata: Metadata = {
+  title: 'Inicio',
+}
 
 /** Sector label used in "N documento(s) de [sector]" */
 const SIGNATURE_TYPE_SECTORS: Record<string, string> = {
@@ -358,7 +363,7 @@ export default async function DashboardPage() {
 
   return (
     <div>
-      <PageHeader title={`Hola, ${userDisplayName}`} subtitle="Resumen de tu negocio" className="mb-8" />
+      <PageHeader title={`Hola, ${userDisplayName}`} className="mb-8" />
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-8">
         {stats.map(({ title, value, icon: Icon, href, color }) => (

@@ -147,9 +147,6 @@ export function StaffClient({
             </Link>
           )}
         </div>
-        <p className="text-sm text-zinc-400 mt-1">
-          Gestiona empleados, turnos, fichajes, vacaciones, roles y permisos
-        </p>
       </header>
       <TabsList className="flex w-full flex-row flex-wrap justify-start gap-2 h-auto p-1 bg-zinc-800 cursor-default">
         {tabs.map(({ value, icon: Icon, label }) => (

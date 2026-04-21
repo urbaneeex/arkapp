@@ -19,8 +19,8 @@ type Staff = { id: string; name: string }
 
 type AppointmentRow = {
   id: string
-  start_time: string
-  end_time: string
+  start_time: string | null
+  end_time: string | null
   status: string | null
   title?: string | null
   pipeline_stage_id?: string | null
@@ -90,7 +90,9 @@ export function AppointmentEditModal({
         <DialogHeader>
           <DialogTitle className="text-2xl font-bold text-zinc-100">Editar cita</DialogTitle>
           <p className="text-sm font-medium text-zinc-300 mt-1">
-            {format(parseISO(appointment.start_time), "EEEE d MMMM · HH:mm", { locale: es })}
+            {appointment.start_time
+              ? format(parseISO(appointment.start_time), "EEEE d MMMM · HH:mm", { locale: es })
+              : 'Sin fecha — añade horario en el formulario'}
           </p>
         </DialogHeader>
         <AppointmentForm

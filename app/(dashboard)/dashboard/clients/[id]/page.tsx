@@ -43,7 +43,6 @@ export default async function ClientDetailPage({
         </Link>
         <div className="flex-1">
           <h1 className="font-display text-2xl font-bold text-zinc-100">{client.name}</h1>
-          <p className="text-sm text-zinc-400">Cliente</p>
         </div>
         <Link href={`/dashboard/clients/${client.id}/edit`} className="cursor-pointer">
           <Button className="cursor-pointer">

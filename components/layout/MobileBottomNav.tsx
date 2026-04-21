@@ -8,8 +8,8 @@ import { cn } from '@/lib/utils'
 const items = [
   { href: '/dashboard', label: 'Dashboard', icon: Home },
   { href: '/dashboard/work-board', label: 'Tablero', icon: LayoutGrid },
-  { href: '/dashboard/calendar', label: 'Agenda', icon: CalendarDays },
-  { href: '/dashboard/calendar?new=1', label: 'Nueva cita', icon: CirclePlus, featured: true },
+  { href: '/dashboard/work-board?view=calendar&period=week', label: 'Agenda', icon: CalendarDays },
+  { href: '/dashboard/work-board?view=calendar&period=week&new=1', label: 'Nueva cita', icon: CirclePlus, featured: true },
   { href: '/dashboard/services', label: 'Servicios', icon: Briefcase },
   { href: '/dashboard/settings', label: 'Cuenta', icon: UserCircle },
 ]

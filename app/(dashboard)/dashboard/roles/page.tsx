@@ -1,7 +1,12 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import type { Metadata } from 'next'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { RolesManagement } from '@/components/roles/RolesManagement'
+
+export const metadata: Metadata = {
+  title: 'Roles',
+}
 
 export default async function RolesPage() {
   const supabase = await createClient()
@@ -32,7 +37,7 @@ export default async function RolesPage() {
 
   return (
     <div>
-      <PageHeader title="Roles" subtitle="Gestiona los roles y permisos de tu equipo" />
+      <PageHeader title="Roles" />
       <RolesManagement businessId={business.id} initialRoles={roles ?? []} initialStaff={staff ?? []} />
     </div>
   )

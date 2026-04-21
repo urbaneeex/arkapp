@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { createClient as createServerClient } from '@/lib/supabase/server'
 import { Resend } from 'resend'
 import { randomUUID } from 'crypto'
 
@@ -55,6 +56,13 @@ function buildInviteEmailHtml(name: string, inviteUrl: string): string {
 
 export async function POST(request: NextRequest) {
   try {
+    // ── Autenticación: solo usuarios autenticados pueden invitar ────────────
+    const supabaseUser = await createServerClient()
+    const { data: { user } } = await supabaseUser.auth.getUser()
+    if (!user) {
+      return NextResponse.json({ error: 'No autenticado' }, { status: 401 })
+    }
+
     const body = await request.json()
     const { email, name, staff_id: bodyStaffId } = body
 
@@ -91,7 +99,7 @@ export async function POST(request: NextRequest) {
     if (!staffId) {
       const { data: staffRow, error: staffError } = await supabaseAdmin
         .from('staff')
-        .select('id')
+        .select('id, business_id')
         .eq('email', email)
         .single()
       if (staffError || !staffRow) {
@@ -101,6 +109,17 @@ export async function POST(request: NextRequest) {
         )
       }
       staffId = staffRow.id
+
+      // ── Verificar que el usuario autenticado es owner del negocio ─────────
+      const { data: ownerCheck } = await supabaseAdmin
+        .from('businesses')
+        .select('id')
+        .eq('id', staffRow.business_id)
+        .eq('owner_uid', user.id)
+        .maybeSingle()
+      if (!ownerCheck) {
+        return NextResponse.json({ error: 'Sin permisos para invitar a este negocio' }, { status: 403 })
+      }
     }
 
     await supabaseAdmin
@@ -109,8 +128,9 @@ export async function POST(request: NextRequest) {
       .eq('staff_id', staffId)
 
     const inviteToken = randomUUID()
+    // Token válido 48 horas (reducido desde 7 días por seguridad)
     const expiresAt = new Date()
-    expiresAt.setDate(expiresAt.getDate() + 7)
+    expiresAt.setHours(expiresAt.getHours() + 48)
 
     const { error: insertError } = await supabaseAdmin.from('staff_invites').insert({
       staff_id: staffId,
@@ -122,10 +142,7 @@ export async function POST(request: NextRequest) {
 
     if (insertError) {
       console.error('Error creando invitación:', insertError)
-      return NextResponse.json(
-        { error: insertError.message || 'Error al crear la invitación' },
-        { status: 500 }
-      )
+      return NextResponse.json({ error: 'Error al crear la invitación' }, { status: 500 })
     }
 
     const inviteUrl = `${SITE_URL}/auth/accept-invite?token=${inviteToken}`
@@ -141,29 +158,17 @@ export async function POST(request: NextRequest) {
       })
 
       if (sendError) {
-        console.error('Resend error:', {
-          message: sendError.message,
-          name: sendError.name,
-        })
-        return NextResponse.json(
-          { error: sendError.message || 'Error al enviar el correo de invitación' },
-          { status: 500 }
-        )
+        console.error('Resend error:', { message: sendError.message, name: sendError.name })
+        return NextResponse.json({ error: 'Error al enviar el correo de invitación' }, { status: 500 })
       }
     } catch (err) {
       console.error('Error enviando email con Resend:', err)
-      return NextResponse.json(
-        { error: err instanceof Error ? err.message : 'Error al enviar el correo de invitación' },
-        { status: 500 }
-      )
+      return NextResponse.json({ error: 'Error al enviar el correo de invitación' }, { status: 500 })
     }
 
     return NextResponse.json({ success: true }, { status: 200 })
   } catch (error) {
     console.error('Error en API de invitación:', error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Error al crear la invitación' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Error al crear la invitación' }, { status: 500 })
   }
 }

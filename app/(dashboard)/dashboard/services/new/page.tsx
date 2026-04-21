@@ -20,7 +20,7 @@ export default async function NewServicePage() {
 
   return (
     <div className="max-w-xl">
-      <PageHeader title="Nuevo servicio" subtitle="Añade un servicio con precio y duración" />
+      <PageHeader title="Nuevo servicio" />
       <ServiceForm businessId={business.id} />
     </div>
   )

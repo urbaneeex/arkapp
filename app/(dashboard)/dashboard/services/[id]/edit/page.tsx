@@ -34,7 +34,7 @@ export default async function EditServicePage({
 
   return (
     <div className="max-w-xl">
-      <PageHeader title="Editar servicio" subtitle={service.name} />
+      <PageHeader title="Editar servicio" />
       <ServiceForm businessId={business.id} service={service} />
     </div>
   )

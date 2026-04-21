@@ -1,9 +1,14 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import type { Metadata } from 'next'
 import { Suspense } from 'react'
 import { StaffClient } from '@/components/staff/StaffClient'
 import { RequirePermission } from '@/components/auth/RequirePermission'
 import { getBusinessIdForUser } from '@/lib/supabase/business'
+
+export const metadata: Metadata = {
+  title: 'Equipo',
+}
 
 export default async function StaffPage() {
   const supabase = await createClient()

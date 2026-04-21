@@ -42,8 +42,8 @@ export function AppointmentForm({
   staff: Staff[]
   appointment?: {
     id: string
-    start_time: string
-    end_time: string
+    start_time: string | null
+    end_time: string | null
     status: string | null
     title?: string | null
     pipeline_stage_id?: string | null
@@ -78,12 +78,14 @@ export function AppointmentForm({
     }
   }, [businessId, supabase])
 
-  const defaultStart = appointment
-    ? format(parseISO(appointment.start_time), "yyyy-MM-dd'T'HH:mm")
-    : format(new Date(), "yyyy-MM-dd'T'HH:mm")
-  const defaultEnd = appointment
-    ? format(parseISO(appointment.end_time), "yyyy-MM-dd'T'HH:mm")
-    : ''
+  const defaultStart =
+    appointment?.start_time && !Number.isNaN(parseISO(appointment.start_time).getTime())
+      ? format(parseISO(appointment.start_time), "yyyy-MM-dd'T'HH:mm")
+      : format(new Date(), "yyyy-MM-dd'T'HH:mm")
+  const defaultEnd =
+    appointment?.end_time && !Number.isNaN(parseISO(appointment.end_time).getTime())
+      ? format(parseISO(appointment.end_time), "yyyy-MM-dd'T'HH:mm")
+      : ''
 
   const defaultStageId = appointment?.pipeline_stage_id ?? ''
   const [form, setForm] = useState({

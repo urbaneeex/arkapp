@@ -26,7 +26,7 @@ export default async function NewStaffPage() {
 
   return (
     <div className="max-w-xl">
-      <PageHeader title="Nuevo empleado" subtitle="Añade un empleado o miembro del equipo" />
+      <PageHeader title="Nuevo empleado" />
       <StaffForm businessId={business.id} staff={undefined} initialRoles={roles ?? []} />
     </div>
   )

@@ -4,6 +4,7 @@ export type PipelineStageRow = {
   slug: string
   label: string
   sort_order: number
+  color: string
 }
 
 /** Opciones de empleado para creación rápida en el tablero (id = fila staff, suele coincidir con auth uid). */
@@ -19,8 +20,8 @@ export type WorkItemCard = {
   business_id: string
   title: string
   displayTitle: string
-  start_time: string
-  end_time: string
+  start_time: string | null
+  end_time: string | null
   client_id: string | null
   client_name: string | null
   staff_id: string | null

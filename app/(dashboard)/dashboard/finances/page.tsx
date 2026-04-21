@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import type { Metadata } from 'next'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { FinancesPageClient } from '@/components/finances/FinancesPageClient'
 import { RequirePermission } from '@/components/auth/RequirePermission'
@@ -11,6 +12,10 @@ import {
   startOfDay,
   endOfDay,
 } from 'date-fns'
+
+export const metadata: Metadata = {
+  title: 'Finanzas',
+}
 
 export default async function FinancesPage() {
   const supabase = await createClient()
@@ -69,7 +74,7 @@ export default async function FinancesPage() {
   return (
     <RequirePermission permission="finances_view">
       <div>
-        <PageHeader title="Finanzas" subtitle="Resumen, ingresos, gastos y reportes" />
+        <PageHeader title="Finanzas" />
         <FinancesPageClient
           businessId={businessId}
         incomeData={incomeData}

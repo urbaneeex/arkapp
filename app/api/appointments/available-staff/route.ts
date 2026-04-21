@@ -80,6 +80,13 @@ function rangesFromScheduleJsonb(schedule: Record<string, { open_time?: string; 
  */
 export async function GET(request: NextRequest) {
   try {
+    // ── Autenticación requerida ──────────────────────────────────────────────
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      return NextResponse.json({ error: 'No autenticado' }, { status: 401 })
+    }
+
     const { searchParams } = new URL(request.url)
     const businessId = searchParams.get('businessId')
     const dateStr = searchParams.get('date') // yyyy-MM-dd
@@ -91,6 +98,26 @@ export async function GET(request: NextRequest) {
         { error: 'Faltan parámetros: businessId, date, startTime, endTime' },
         { status: 400 }
       )
+    }
+
+    // ── Verificar que el businessId pertenece al usuario autenticado ─────────
+    const { data: membership } = await supabase
+      .from('staff')
+      .select('id')
+      .eq('business_id', businessId)
+      .eq('id', user.id)
+      .is('deleted_at', null)
+      .maybeSingle()
+
+    const { data: ownerBusiness } = await supabase
+      .from('businesses')
+      .select('id')
+      .eq('id', businessId)
+      .eq('owner_uid', user.id)
+      .maybeSingle()
+
+    if (!membership && !ownerBusiness) {
+      return NextResponse.json({ error: 'Sin acceso a este negocio' }, { status: 403 })
     }
 
     const aptStartMin = timeToMinutes(startTimeStr)
@@ -110,8 +137,6 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const supabase = await createClient()
-
     // 1) Active staff for this business (include schedule JSONB for Priority 2 on future days)
     const { data: allStaff, error: staffError } = await supabase
       .from('staff')
@@ -121,10 +146,8 @@ export async function GET(request: NextRequest) {
       .order('name')
 
     if (staffError) {
-      return NextResponse.json(
-        { error: staffError.message || 'Error al cargar empleados' },
-        { status: 500 }
-      )
+      console.error('[available-staff] staffError', staffError)
+      return NextResponse.json({ error: 'Error al cargar empleados' }, { status: 500 })
     }
 
     const staffList = allStaff ?? []
@@ -326,20 +349,6 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    console.log(
-      '--- DEBUG HORARIOS PARSEADOS ---',
-      JSON.stringify(
-        Object.fromEntries(
-          staffListTyped.map((s) => [
-            s.id,
-            { name: s.name, ranges: staffScheduleByStaffId.get(s.id) ?? [] },
-          ])
-        ),
-        null,
-        2
-      )
-    )
-    console.log('=== FINAL API RESPONSE ===', JSON.stringify(staffResult, null, 2))
     return NextResponse.json({ staff: staffResult })
   } catch (e) {
     console.error('[available-staff]', e)

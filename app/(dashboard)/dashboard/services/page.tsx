@@ -1,11 +1,16 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import type { Metadata } from 'next'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Plus } from 'lucide-react'
 import { ServicesList } from '@/components/services/ServicesList'
 import { RequirePermission } from '@/components/auth/RequirePermission'
 import { getBusinessIdForUser } from '@/lib/supabase/business'
+
+export const metadata: Metadata = {
+  title: 'Servicios',
+}
 
 export default async function ServicesPage() {
   const supabase = await createClient()
@@ -36,9 +41,6 @@ export default async function ServicesPage() {
         <div className="flex justify-between items-center mb-6">
           <div>
             <h1 className="font-display text-2xl font-bold text-zinc-100">Servicios</h1>
-            <p className="text-sm text-zinc-400 mt-1">
-              Gestiona precios y duraciones ({services?.length ?? 0})
-            </p>
           </div>
           <Link href="/dashboard/services/new" className="cursor-pointer">
             <Button>

@@ -1,9 +1,14 @@
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { redirect } from 'next/navigation'
+import type { Metadata } from 'next'
 import { Suspense } from 'react'
 import { EmployeePortal } from '@/components/fichar/EmployeePortal'
 import { DEFAULT_MATRIX, mergeWithDefault } from '@/lib/permissions'
+
+export const metadata: Metadata = {
+  title: 'Fichar',
+}
 
 async function resolveStaffId(
   supabase: Awaited<ReturnType<typeof createClient>>,

@@ -20,7 +20,6 @@ import {
   isSameMonth,
   getDay,
   parseISO,
-  eachHourOfInterval,
   eachDayOfInterval,
   addMinutes,
   isBefore,
@@ -37,10 +36,10 @@ import {
   useDndMonitor,
   type DragEndEvent,
 } from '@dnd-kit/core'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { Ban, Check, ChevronLeft, ChevronRight, Loader2, Pencil, Plus, Search, User, Wrench, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
 import { ClientOnlyDnd } from '@/components/calendar/ClientOnlyDnd'
 import { AppointmentPopover, type AppointmentForPopover } from '@/components/calendar/AppointmentPopover'
@@ -50,17 +49,23 @@ import { ToastSimple } from '@/components/ui/toast-simple'
 import { getDayOfWeek, getOpenRangesForDay, minutesToTime, timeToMinutes } from '@/lib/availability'
 import type { Shift } from '@/lib/availability'
 import { getClosedRangesForDay } from '@/lib/availability'
-import { ClientSearchCombobox, NewClientFields, type ClientOption } from '@/components/appointments/ClientSearchCombobox'
-import { X, Plus, Trash2, Clock } from 'lucide-react'
-import { PhoneInput } from '@/components/ui/phone-input'
-import { EmailInput } from '@/components/ui/email-input'
-import { normalizeEmail } from '@/lib/email'
 import { createClient } from '@/lib/supabase/client'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { usePermissions } from '@/hooks/usePermissions'
 import { mapAppointmentRowToWorkItem, type AppointmentRowInput } from '@/lib/work-items/mapAppointmentRow'
 import { stageColorClassForSlug } from '@/lib/work-items/stageColors'
 import { canMoveWorkItemByStageSlug } from '@/lib/work-items/canMoveWorkItem'
+import {
+  KanbanQuickDatePicker,
+  combineDateAndOptionalTime,
+} from '@/components/work-board/KanbanQuickDatePicker'
+import {
+  KANBAN_COLUMN_TITLE_TYPO,
+  KANBAN_QUICK_ADD_ROW_MUTED,
+  KANBAN_QUICK_ADD_ROW_TAP,
+} from '@/components/work-board/kanbanTypography'
+import { KanbanQuickAddAppointment, type KanbanService } from '@/components/work-board/WorkBoardKanbanView'
+import type { WorkBoardStaffOption } from '@/lib/work-items/types'
 
 function formatSlotLabel(dateStr: string, timeStr: string): string {
   const formatted = new Intl.DateTimeFormat('es-ES', {
@@ -78,8 +83,8 @@ type AppointmentRow = {
   id: string
   business_id: string
   title?: string | null
-  start_time: string
-  end_time: string
+  start_time: string | null
+  end_time: string | null
   status: string | null
   price_total: number | null
   client_id: string | null
@@ -95,6 +100,9 @@ type AppointmentRow = {
     | null
 }
 
+/** Fila con horario (vista calendario / layout). */
+type AppointmentRowScheduled = AppointmentRow & { start_time: string; end_time: string }
+
 interface AppointmentNormalized {
   id: string
   start_time: string
@@ -109,6 +117,9 @@ interface AppointmentNormalized {
 }
 
 function normalizeAppointment(a: AppointmentRow): AppointmentNormalized {
+  if (!a.start_time || !a.end_time) {
+    throw new Error('normalizeAppointment: se esperaba start_time y end_time')
+  }
   const w = mapAppointmentRowToWorkItem(a as unknown as AppointmentRowInput)
   return {
     id: a.id,
@@ -124,6 +135,102 @@ function normalizeAppointment(a: AppointmentRow): AppointmentNormalized {
   }
 }
 
+// ─── View dropdown ────────────────────────────────────────────────────────────
+
+function ViewDropdown({
+  options,
+  value,
+  activeLabel,
+  onChange,
+}: {
+  options: { value: ViewType; label: string; key: string }[]
+  value: ViewType
+  activeLabel: string
+  onChange: (v: ViewType) => void
+}) {
+  const [open, setOpen] = useState(false)
+
+  // Atajos: D / S / M (código físico KeyD/KeyS/KeyM), sin modificadores, para evitar falsos positivos con e.key
+  useEffect(() => {
+    const CODE_TO_VIEW: Partial<Record<string, ViewType>> = {
+      KeyD: 'day',
+      KeyS: 'week',
+      KeyM: 'month',
+    }
+    function handleKey(e: KeyboardEvent) {
+      if (e.repeat) return
+      if (e.ctrlKey || e.metaKey || e.altKey) return
+      const el = e.target as HTMLElement | null
+      if (!el) return
+      const tag = el.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable) return
+      const mapped = CODE_TO_VIEW[e.code]
+      if (!mapped || !options.some((o) => o.value === mapped)) return
+      onChange(mapped)
+      setOpen(false)
+    }
+    document.addEventListener('keydown', handleKey)
+    return () => document.removeEventListener('keydown', handleKey)
+  }, [options, onChange])
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="flex h-7 cursor-pointer items-center gap-1.5 rounded-md border border-zinc-700 bg-zinc-900 px-2.5 text-xs font-medium text-zinc-400 transition-colors hover:border-zinc-500 hover:text-zinc-200"
+        >
+          {activeLabel}
+          <svg className="h-2.5 w-2.5 shrink-0 text-zinc-500" viewBox="0 0 10 6" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <path d="M1 1l4 4 4-4" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        side="bottom"
+        sideOffset={6}
+        className={cn(
+          'z-[200] w-auto min-w-[140px] border-zinc-700 bg-zinc-950 p-0 text-zinc-100 shadow-2xl',
+          'data-[state=open]:animate-in data-[state=closed]:animate-out',
+          'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
+          'data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95'
+        )}
+      >
+        <p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
+          Período
+        </p>
+        {options.map(({ value: v, label, key }) => (
+          <button
+            key={v}
+            type="button"
+            onClick={() => {
+              onChange(v)
+              setOpen(false)
+            }}
+            className={cn(
+              'flex w-full cursor-pointer items-center justify-between px-3 py-1.5 text-sm transition-colors',
+              value === v
+                ? 'bg-zinc-800 text-zinc-100'
+                : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'
+            )}
+          >
+            <span>{label}</span>
+            <span
+              className={cn(
+                'flex h-5 w-5 items-center justify-center rounded text-[11px] font-bold',
+                value === v ? 'bg-zinc-700 text-zinc-100' : 'bg-zinc-700/50 text-zinc-500'
+              )}
+            >
+              {key}
+            </span>
+          </button>
+        ))}
+      </PopoverContent>
+    </Popover>
+  )
+}
+
 export function CalendarView({
   appointments,
   clients,
@@ -132,9 +239,12 @@ export function CalendarView({
   businessId,
   businessCountry = 'ES',
   shiftsByDay = {},
+  defaultPeriod,
   openNewPanel,
   onNewPanelClosed,
   headerSlot,
+  staffFilter: externalStaffFilter,
+  onStaffFilterChange,
 }: {
   appointments: AppointmentRow[]
   clients: { id: string; name: string; phone?: string | null; email?: string | null }[]
@@ -143,9 +253,14 @@ export function CalendarView({
   businessId: string
   businessCountry?: string | null
   shiftsByDay?: Record<number, Shift[]>
+  /** Periodo inicial (día/semana/mes). Sin definir → día (p. ej. página Calendario). El tablero pasa `week`. */
+  defaultPeriod?: ViewType
   openNewPanel?: boolean
   onNewPanelClosed?: () => void
   headerSlot?: React.ReactNode
+  /** Filtro de empleado controlado externamente (desde WorkBoardActionBar) */
+  staffFilter?: string
+  onStaffFilterChange?: (value: string) => void
 }) {
   const router = useRouter()
   const supabase = createClient()
@@ -153,8 +268,15 @@ export function CalendarView({
   const canMoveAppointments = hasPermission('appointments_move')
   const canEditAppointments = hasPermission('appointments_edit')
   const [current, setCurrent] = useState(new Date())
-  const [view, setView] = useState<ViewType>('day')
-  const [staffFilter, setStaffFilter] = useState<string>('')
+  const [view, setView] = useState<ViewType>(defaultPeriod ?? 'day')
+  const [staffFilter, setStaffFilterInternal] = useState<string>(externalStaffFilter ?? '')
+
+  // Si se controla externamente, sincronizamos
+  const staffFilter_ = externalStaffFilter !== undefined ? externalStaffFilter : staffFilter
+  function setStaffFilter(v: string) {
+    setStaffFilterInternal(v)
+    onStaffFilterChange?.(v)
+  }
   const [popoverAppointment, setPopoverAppointment] = useState<AppointmentForPopover | null>(null)
   const [anchorPosition, setAnchorPosition] = useState<{ x: number; y: number } | null>(null)
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
@@ -167,7 +289,6 @@ export function CalendarView({
   const [moveLoading, setMoveLoading] = useState(false)
   const [editModalAppointmentId, setEditModalAppointmentId] = useState<string | null>(null)
   const [externalPanelOpen, setExternalPanelOpen] = useState(false)
-  const [selectedWeekSlot, setSelectedWeekSlot] = useState<{ day: Date; timeMin: number } | null>(null)
   const [selectedMonthDay, setSelectedMonthDay] = useState<Date | null>(null)
 
   useEffect(() => {
@@ -178,20 +299,27 @@ export function CalendarView({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openNewPanel])
 
+  /** Solo citas con horario: el calendario no puede colocar filas sin start/end. */
+  const appointmentsScheduled = useMemo((): AppointmentRowScheduled[] => {
+    return appointments.filter((a): a is AppointmentRowScheduled =>
+      Boolean(a.start_time && a.end_time)
+    )
+  }, [appointments])
+
   const normalizedForViews = useMemo(
-    () => appointments.map(normalizeAppointment),
-    [appointments]
+    () => appointmentsScheduled.map(normalizeAppointment),
+    [appointmentsScheduled]
   )
 
   const filteredAppointments = useMemo(() => {
-    if (!staffFilter) return normalizedForViews
-    return normalizedForViews.filter((a) => a.staff_id === staffFilter)
-  }, [normalizedForViews, staffFilter])
+    if (!staffFilter_) return normalizedForViews
+    return normalizedForViews.filter((a) => a.staff_id === staffFilter_)
+  }, [normalizedForViews, staffFilter_])
 
-  const appointmentsForWeekView = useMemo(() => {
-    if (!staffFilter) return appointments
-    return appointments.filter((a) => a.staff_id === staffFilter)
-  }, [appointments, staffFilter])
+  const appointmentsForWeekView = useMemo((): AppointmentRowScheduled[] => {
+    if (!staffFilter_) return appointmentsScheduled
+    return appointmentsScheduled.filter((a) => a.staff_id === staffFilter_)
+  }, [appointmentsScheduled, staffFilter_])
 
   const goPrev = () => {
     if (view === 'day') setCurrent((d) => subDays(d, 1))
@@ -218,12 +346,14 @@ export function CalendarView({
 
   const aptsForDay = (day: Date) =>
     filteredAppointments.filter((a) => {
+      if (!a.start_time) return false
       const start = parseISO(a.start_time)
       return isSameDay(start, day)
     })
 
   const aptsForSlot = (day: Date, hour: number) =>
     filteredAppointments.filter((a) => {
+      if (!a.start_time) return false
       const start = parseISO(a.start_time)
       if (!isSameDay(start, day)) return false
       return start.getHours() === hour
@@ -266,6 +396,7 @@ export function CalendarView({
   }, [])
 
   const handleDropAppointment = useCallback((apt: AppointmentNormalized, toDate: Date) => {
+    if (!apt.start_time || !apt.end_time) return
     const fromDate = parseISO(apt.start_time)
     const today = startOfDay(new Date())
     if (toDate < today) {
@@ -281,11 +412,16 @@ export function CalendarView({
     const newStartMs = newStart.getTime()
     const newEndMs = newEnd.getTime()
     const sameDayStaff = filteredAppointments.filter(
-      (a) => a.id !== apt.id && a.staff_id === apt.staff_id && isSameDay(parseISO(a.start_time), toDate)
+      (a) =>
+        a.id !== apt.id &&
+        a.staff_id === apt.staff_id &&
+        !!a.start_time &&
+        !!a.end_time &&
+        isSameDay(parseISO(a.start_time), toDate)
     )
     const conflict = sameDayStaff.find((a) => {
-      const aStart = parseISO(a.start_time).getTime()
-      const aEnd = parseISO(a.end_time).getTime()
+      const aStart = parseISO(a.start_time!).getTime()
+      const aEnd = parseISO(a.end_time!).getTime()
       return newStartMs < aEnd && newEndMs > aStart
     })
     const conflictWarning = conflict
@@ -296,6 +432,7 @@ export function CalendarView({
 
   const handleConfirmMove = useCallback(async () => {
     if (!moveDialog) return
+    if (!moveDialog.apt.start_time || !moveDialog.apt.end_time) return
     setMoveLoading(true)
     const start = parseISO(moveDialog.apt.start_time)
     const end = parseISO(moveDialog.apt.end_time)
@@ -324,46 +461,58 @@ export function CalendarView({
     <div className="flex flex-col flex-1 min-h-0">
       <div className="sticky top-0 z-20 bg-zinc-100 dark:bg-[#0d0d0d] px-4 pt-4 pb-4 lg:px-8 lg:pt-6 lg:pb-6 space-y-4 border-b border-zinc-200 dark:border-zinc-800/80 shrink-0">
         {headerSlot}
-        <div className="flex flex-wrap items-center gap-2 justify-between">
-          <div className="flex items-center gap-2 flex-wrap">
-            <Button variant="outline" size="icon" onClick={goPrev} className="cursor-pointer">
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <Button variant="outline" size="icon" onClick={goNext} className="cursor-pointer">
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-            <Button variant="outline" size="sm" onClick={goToday} className="cursor-pointer">
-              Hoy
-            </Button>
-            <h2 className="text-lg font-semibold text-zinc-100 capitalize min-w-[200px] text-center">
-              {title()}
-            </h2>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            {(['day', 'week', 'month'] as const).map((v) => (
-              <Button
-                key={v}
-                variant={view === v ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setView(v)}
-                className="cursor-pointer capitalize"
-              >
-                {v === 'day' ? 'Día' : v === 'week' ? 'Semana' : 'Mes'}
-              </Button>
-            ))}
-            <select
-              value={staffFilter}
-              onChange={(e) => setStaffFilter(e.target.value)}
-              className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Fecha */}
+          <h2 className="mr-2 text-base font-semibold text-zinc-100 capitalize tabular-nums sm:mr-3">
+            {title()}
+          </h2>
+
+          {/* Flechas */}
+          <div className="inline-flex h-7 items-stretch rounded-md border border-zinc-700 bg-zinc-900/80 p-0.5">
+            <button
+              type="button"
+              onClick={goPrev}
+              className="flex h-full cursor-pointer items-center justify-center rounded px-1.5 text-zinc-400 transition-colors hover:bg-zinc-700/60 hover:text-zinc-100"
+              aria-label="Anterior"
             >
-              <option value="">Todos los empleados</option>
-              {staff.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
+              <ChevronLeft className="h-3 w-3" />
+            </button>
+            <button
+              type="button"
+              onClick={goNext}
+              className="flex h-full cursor-pointer items-center justify-center rounded px-1.5 text-zinc-400 transition-colors hover:bg-zinc-700/60 hover:text-zinc-100"
+              aria-label="Siguiente"
+            >
+              <ChevronRight className="h-3 w-3" />
+            </button>
           </div>
+
+          {/* Selector de vista — dropdown */}
+          {(() => {
+            const VIEW_OPTIONS = [
+              { value: 'day'   as ViewType, label: 'Día',    key: 'D' },
+              { value: 'week'  as ViewType, label: 'Semana', key: 'S' },
+              { value: 'month' as ViewType, label: 'Mes',    key: 'M' },
+            ]
+            const activeLabel = VIEW_OPTIONS.find((o) => o.value === view)?.label ?? 'Vista'
+            return (
+              <ViewDropdown
+                options={VIEW_OPTIONS}
+                value={view}
+                activeLabel={activeLabel}
+                onChange={setView}
+              />
+            )
+          })()}
+
+          {/* Hoy */}
+          <button
+            type="button"
+            onClick={goToday}
+            className="flex h-7 cursor-pointer items-center rounded-md border border-zinc-700 bg-zinc-900/80 px-2.5 text-xs font-medium text-zinc-400 transition-colors hover:border-zinc-500 hover:text-zinc-200"
+          >
+            Hoy
+          </button>
         </div>
       </div>
 
@@ -382,6 +531,7 @@ export function CalendarView({
             onAppointmentClick={(apt, e) => {
               e.preventDefault()
               e.stopPropagation()
+              if (!apt.start_time || !apt.end_time) return
               setAnchorPosition({ x: e.clientX, y: e.clientY })
               setPopoverAppointment({
                 id: apt.id,
@@ -393,9 +543,13 @@ export function CalendarView({
                 staff_name: Array.isArray(apt.staff) ? apt.staff[0]?.name ?? null : apt.staff?.name ?? null,
               })
             }}
-            onSlotClick={(day, timeMin) => setSelectedWeekSlot({ day, timeMin })}
             onNavigateToDate={(date) => { setCurrent(date); setView('day') }}
             onDropInDay={canMoveAppointments ? (apt, toDate) => handleDropAppointment(normalizeAppointment(apt), toDate) : undefined}
+            businessId={businessId}
+            services={services}
+            staff={staff}
+            onSlotToast={(message, type) => setToast({ message, type })}
+            onSlotSaved={() => router.refresh()}
           />
           </div>
         ) : (
@@ -410,16 +564,10 @@ export function CalendarView({
                 onAppointmentClick={handleAppointmentClick}
                 onDropInDay={canMoveAppointments ? handleDropAppointment : undefined}
                 businessId={businessId}
-                businessCountry={businessCountry ?? 'ES'}
-                recentClients={clients.map((c) => ({ id: c.id, name: c.name, phone: c.phone ?? null, email: c.email ?? null }))}
                 services={services}
                 staff={staff}
-                allAppointments={appointments}
-                onNavigateToDate={(date) => {
-                  setCurrent(date)
-                  setView('day')
-                }}
                 onToast={(message, type) => setToast({ message, type })}
+                onSaved={() => router.refresh()}
               />
             )}
             {view === 'month' && (
@@ -481,53 +629,32 @@ export function CalendarView({
       />
 
       {externalPanelOpen && (
-        <NewAppointmentSidePanel
-          day={current}
-          timeMin={9 * 60}
+        <KanbanQuickAddAppointment
+          defaultOpen
+          initialDay={current}
+          initialTimeMin={9 * 60}
           businessId={businessId}
-          businessCountry={businessCountry ?? 'ES'}
-          recentClients={clients.map((c) => ({ id: c.id, name: c.name, phone: c.phone ?? null, email: c.email ?? null }))}
           services={services}
-          staff={staff}
-          allAppointments={appointments}
-          shiftsByDay={shiftsByDay}
+          staffOptions={staff}
           onClose={() => setExternalPanelOpen(false)}
-          onNavigateToDate={(date) => { setCurrent(date); setView('day') }}
+          onSaved={() => router.refresh()}
           onToast={(message, type) => setToast({ message, type })}
-        />
-      )}
-
-      {selectedWeekSlot && (
-        <NewAppointmentSidePanel
-          day={selectedWeekSlot.day}
-          timeMin={selectedWeekSlot.timeMin}
-          businessId={businessId}
-          businessCountry={businessCountry ?? 'ES'}
-          recentClients={clients.map((c) => ({ id: c.id, name: c.name, phone: c.phone ?? null, email: c.email ?? null }))}
-          services={services}
-          staff={staff}
-          allAppointments={appointments}
-          shiftsByDay={shiftsByDay}
-          onClose={() => setSelectedWeekSlot(null)}
-          onNavigateToDate={(date) => { setCurrent(date); setView('day') }}
-          onToast={(message, type) => setToast({ message, type })}
+          wrapperClassName="fixed left-1/2 top-1/2 z-50 w-full max-w-sm -translate-x-1/2 -translate-y-1/2"
         />
       )}
 
       {selectedMonthDay && (
-        <NewAppointmentSidePanel
-          day={selectedMonthDay}
-          timeMin={9 * 60}
+        <KanbanQuickAddAppointment
+          defaultOpen
+          initialDay={selectedMonthDay}
+          initialTimeMin={9 * 60}
           businessId={businessId}
-          businessCountry={businessCountry ?? 'ES'}
-          recentClients={clients.map((c) => ({ id: c.id, name: c.name, phone: c.phone ?? null, email: c.email ?? null }))}
           services={services}
-          staff={staff}
-          allAppointments={appointments}
-          shiftsByDay={shiftsByDay}
+          staffOptions={staff}
           onClose={() => setSelectedMonthDay(null)}
-          onNavigateToDate={(date) => { setCurrent(date); setView('day') }}
+          onSaved={() => router.refresh()}
           onToast={(message, type) => setToast({ message, type })}
+          wrapperClassName="fixed left-1/2 top-1/2 z-50 w-full max-w-sm -translate-x-1/2 -translate-y-1/2"
         />
       )}
     </div>
@@ -567,18 +694,27 @@ function WeekView({
   appointments,
   shiftsByDay = {},
   onAppointmentClick,
-  onSlotClick,
   onNavigateToDate,
   onDropInDay,
+  businessId,
+  services,
+  staff,
+  onSlotToast,
+  onSlotSaved,
 }: {
   weekStart: Date
-  appointments: AppointmentRow[]
+  appointments: AppointmentRowScheduled[]
   shiftsByDay?: Record<number, Shift[]>
-  onAppointmentClick: (apt: AppointmentRow, e: React.MouseEvent) => void
-  onSlotClick: (day: Date, timeMin: number) => void
+  onAppointmentClick: (apt: AppointmentRowScheduled, e: React.MouseEvent) => void
   onNavigateToDate?: (date: Date) => void
-  onDropInDay?: (apt: AppointmentRow, toDate: Date) => void
+  onDropInDay?: (apt: AppointmentRowScheduled, toDate: Date) => void
+  businessId?: string
+  services?: KanbanService[]
+  staff?: WorkBoardStaffOption[]
+  onSlotToast?: (message: string, type: 'success' | 'error') => void
+  onSlotSaved?: () => void
 }) {
+  const [selectedWeekSlot, setSelectedWeekSlot] = useState<{ dayIndex: number; timeMin: number } | null>(null)
   const days = useMemo(
     () => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)),
     [weekStart]
@@ -604,8 +740,9 @@ function WeekView({
 
   const weekStartDate = startOfDay(weekStart)
   const weekEndDate = endOfDay(addDays(weekStart, 6))
-  const appointmentsInWeek = useMemo(() => {
-    return appointments.filter((a) => {
+  const appointmentsInWeek = useMemo((): AppointmentRowScheduled[] => {
+    return appointments.filter((a): a is AppointmentRowScheduled => {
+      if (!a.start_time || !a.end_time) return false
       const start = parseISO(a.start_time)
       return start >= weekStartDate && start <= weekEndDate
     })
@@ -782,7 +919,7 @@ function WeekView({
                 isHourStart={isHourStart}
                 isClosed={closed}
                 hasAppointment={slotHasAppointment}
-                onSlotClick={() => !slotHasAppointment && onSlotClick(day, timeMin)}
+                  onSlotClick={() => !slotHasAppointment && setSelectedWeekSlot({ dayIndex, timeMin })}
               />
             )
           })
@@ -848,6 +985,24 @@ function WeekView({
             />
           )
         })}
+        {selectedWeekSlot && businessId && (
+          <KanbanQuickAddAppointment
+            defaultOpen
+            initialDay={days[selectedWeekSlot.dayIndex]!}
+            initialTimeMin={selectedWeekSlot.timeMin}
+            businessId={businessId}
+            services={services ?? []}
+            staffOptions={staff ?? []}
+            onClose={() => setSelectedWeekSlot(null)}
+            onSaved={onSlotSaved}
+            onToast={onSlotToast}
+            wrapperClassName="absolute z-30 pointer-events-auto w-72"
+            wrapperStyle={{
+              top: Math.max(0, (selectedWeekSlot.timeMin - weekViewStartMin) / MINUTES_PER_SLOT * SLOT_HEIGHT_PX),
+              left: String(selectedWeekSlot.dayIndex * (100 / 7)) + '%',
+            }}
+          />
+        )}
       </div>
 
       {/* Línea “ahora” solo en la columna de hoy, sin pastilla */}
@@ -901,7 +1056,7 @@ function WeekViewDndContent({
   appointmentsInWeek,
 }: {
   children: React.ReactNode
-  appointmentsInWeek: AppointmentRow[]
+  appointmentsInWeek: AppointmentRowScheduled[]
 }) {
   const [activeId, setActiveId] = useState<string | null>(null)
   useDndMonitor({
@@ -954,13 +1109,13 @@ function WeekDraggableAppointment({
   onAppointmentClick,
   canDrag,
 }: {
-  apt: AppointmentRow
+  apt: AppointmentRowScheduled
   dayIndex: number
   topPx: number
   heightPx: number
   leftPct: number
   colWidth: number
-  onAppointmentClick: (apt: AppointmentRow, e: React.MouseEvent) => void
+  onAppointmentClick: (apt: AppointmentRowScheduled, e: React.MouseEvent) => void
   canDrag: boolean
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
@@ -1069,27 +1224,21 @@ function DayView({
   onAppointmentClick,
   onDropInDay,
   businessId,
-  businessCountry = 'ES',
-  recentClients,
   services,
   staff,
-  allAppointments,
-  onNavigateToDate,
   onToast,
+  onSaved,
 }: {
   day: Date
   appointments: AppointmentNormalized[]
   shiftsByDay: Record<number, Shift[]>
   onAppointmentClick: (apt: AppointmentNormalized, e: React.MouseEvent) => void
   onDropInDay?: (apt: AppointmentNormalized, toDate: Date) => void
-  businessId: string
-  businessCountry?: string | null
-  recentClients: ClientOption[]
-  services: { id: string; name: string; duration: number; price: number }[]
-  staff: { id: string; name: string }[]
-  allAppointments: AppointmentRow[]
-  onNavigateToDate?: (date: Date) => void
+  businessId?: string
+  services?: KanbanService[]
+  staff?: WorkBoardStaffOption[]
   onToast?: (message: string, type: 'success' | 'error') => void
+  onSaved?: () => void
 }) {
   const dayOfWeek = getDayOfWeek(day)
   const openRanges = useMemo(
@@ -1250,14 +1399,10 @@ function DayView({
         onAppointmentClick={onAppointmentClick}
         isSlotClosed={isSlotClosed}
         businessId={businessId}
-        businessCountry={businessCountry}
-        recentClients={recentClients}
         services={services}
         staff={staff}
-        allAppointments={allAppointments}
-        shiftsByDay={shiftsByDay}
-        onNavigateToDate={onNavigateToDate}
         onToast={onToast}
+        onSaved={onSaved}
       />
     </DndContext>
   )
@@ -1278,14 +1423,10 @@ function DayViewContent({
   onAppointmentClick,
   isSlotClosed,
   businessId,
-  businessCountry = 'ES',
-  recentClients,
   services,
   staff,
-  allAppointments,
-  shiftsByDay,
-  onNavigateToDate,
   onToast,
+  onSaved,
 }: {
   day: Date
   appointments: AppointmentNormalized[]
@@ -1299,15 +1440,11 @@ function DayViewContent({
   timeLabels: { min: number; label: string }[]
   onAppointmentClick: (apt: AppointmentNormalized, e: React.MouseEvent) => void
   isSlotClosed: (slotIndex: number) => boolean
-  businessId: string
-  businessCountry?: string | null
-  recentClients: { id: string; name: string; phone?: string | null; email?: string | null }[]
-  services: { id: string; name: string; duration: number; price: number }[]
-  staff: { id: string; name: string }[]
-  allAppointments: AppointmentRow[]
-  shiftsByDay?: Record<number, Shift[]>
-  onNavigateToDate?: (date: Date) => void
+  businessId?: string
+  services?: KanbanService[]
+  staff?: WorkBoardStaffOption[]
   onToast?: (message: string, type: 'success' | 'error') => void
+  onSaved?: () => void
 }) {
   const [activeId, setActiveId] = useState<string | null>(null)
   const [selectedSlotTime, setSelectedSlotTime] = useState<{ slotIndex: number; timeMin: number } | null>(null)
@@ -1452,6 +1589,23 @@ function DayViewContent({
                   />
                 )
               })}
+              {selectedSlotTime && businessId && (
+                <KanbanQuickAddAppointment
+                  defaultOpen
+                  initialDay={day}
+                  initialTimeMin={selectedSlotTime.timeMin}
+                  businessId={businessId}
+                  services={services ?? []}
+                  staffOptions={staff ?? []}
+                  onClose={() => setSelectedSlotTime(null)}
+                  onSaved={onSaved}
+                  onToast={onToast}
+                  wrapperClassName="absolute z-30 pointer-events-auto w-72 right-0"
+                  wrapperStyle={{
+                    top: Math.max(0, (selectedSlotTime.timeMin - dayViewStartMin) / MINUTES_PER_SLOT * SLOT_HEIGHT_PX),
+                  }}
+                />
+              )}
             </div>
           </div>
         </div>
@@ -1487,22 +1641,6 @@ function DayViewContent({
         ) : null}
       </DragOverlay>
 
-      {selectedSlotTime && (
-        <NewAppointmentSidePanel
-          day={day}
-          timeMin={selectedSlotTime.timeMin}
-          businessId={businessId}
-          businessCountry={businessCountry ?? 'ES'}
-          recentClients={recentClients}
-          services={services}
-          staff={staff}
-          allAppointments={allAppointments}
-          shiftsByDay={shiftsByDay}
-          onClose={() => setSelectedSlotTime(null)}
-          onNavigateToDate={onNavigateToDate}
-          onToast={onToast}
-        />
-      )}
     </>
   )
 }
@@ -1618,1003 +1756,6 @@ function DayDraggableAppointment({
       </span>
       <span className="leading-tight truncate w-full opacity-75">{apt.display_title}</span>
     </button>
-  )
-}
-
-function NewAppointmentSidePanel({
-  day,
-  timeMin,
-  businessId,
-  businessCountry = 'ES',
-  recentClients,
-  services,
-  staff,
-  allAppointments,
-  shiftsByDay,
-  onClose,
-  onNavigateToDate,
-  onToast,
-}: {
-  day: Date
-  timeMin: number
-  businessId: string
-  businessCountry?: string | null
-  recentClients: ClientOption[]
-  services: { id: string; name: string; duration: number; price: number }[]
-  staff: { id: string; name: string }[]
-  allAppointments: AppointmentRow[]
-  shiftsByDay?: Record<number, Shift[]>
-  onClose: () => void
-  onNavigateToDate?: (date: Date) => void
-  onToast?: (message: string, type: 'success' | 'error') => void
-}) {
-  const supabase = createClient()
-  const [step, setStep] = useState(1)
-  const [currentDay, setCurrentDay] = useState(day)
-  const [currentTimeMin, setCurrentTimeMin] = useState(timeMin)
-  const [showCalendarPopup, setShowCalendarPopup] = useState(false)
-  const [showTimeDropdown, setShowTimeDropdown] = useState(false)
-  const calendarRef = useRef<HTMLDivElement>(null)
-  const timeDropdownRef = useRef<HTMLDivElement>(null)
-  const [clientSearchText, setClientSearchText] = useState('')
-  const [selectedClient, setSelectedClient] = useState<ClientOption | null>(null)
-  const [isNewClient, setIsNewClient] = useState(false)
-  const [editingClientName, setEditingClientName] = useState('')
-  const [editingClientPhone, setEditingClientPhone] = useState('')
-  const [editingClientEmail, setEditingClientEmail] = useState('')
-  const [newClientName, setNewClientName] = useState('')
-  const [newClientPhone, setNewClientPhone] = useState('')
-  const [newClientEmail, setNewClientEmail] = useState('')
-  const [newClientAddress, setNewClientAddress] = useState('')
-  const [phoneDuplicateError, setPhoneDuplicateError] = useState<string | null>(null)
-  const [selectedServices, setSelectedServices] = useState<{ id: string; name: string; duration: number; price: number }[]>([])
-  const [showAddService, setShowAddService] = useState(false)
-  const [selectedStaff, setSelectedStaff] = useState<{ id: string; name: string } | null>(null)
-  const [staffAvailability, setStaffAvailability] = useState<Record<string, { available: boolean; alternativeSlots?: { date: Date; timeMin: number; timeLabel: string }[] }>>({})
-  const [loadingAvailability, setLoadingAvailability] = useState(false)
-  const [showCloseConfirm, setShowCloseConfirm] = useState(false)
-  const [useAnyAvailableStaff, setUseAnyAvailableStaff] = useState(false)
-  const [noClient, setNoClient] = useState(false)
-
-  const hours = Math.floor(currentTimeMin / 60)
-  const minutes = currentTimeMin % 60
-  const timeLabel = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
-
-  const totalDuration = useMemo(() => selectedServices.reduce((sum, s) => sum + s.duration, 0), [selectedServices])
-  const totalPrice = useMemo(() => selectedServices.reduce((sum, s) => sum + s.price, 0), [selectedServices])
-  const endTimeMin = currentTimeMin + totalDuration
-  const endHours = Math.floor(endTimeMin / 60)
-  const endMinutes = endTimeMin % 60
-  const endTimeLabel = `${String(endHours).padStart(2, '0')}:${String(endMinutes).padStart(2, '0')}`
-
-  const hasData = useMemo(() => {
-    return !!(noClient || selectedClient || (isNewClient && newClientName) || selectedServices.length > 0 || selectedStaff || useAnyAvailableStaff)
-  }, [noClient, selectedClient, isNewClient, newClientName, selectedServices.length, selectedStaff, useAnyAvailableStaff])
-
-  const handleOverlayClick = () => {
-    if (hasData) {
-      setShowCloseConfirm(true)
-    } else {
-      onClose()
-    }
-  }
-
-  const handleConfirmClose = async () => {
-    if (selectedClient?.id && !isNewClient && !noClient) {
-      const phoneInForm = editingClientPhone.trim()
-      const originalPhone = (selectedClient.phone ?? '').trim()
-      const emailInForm = editingClientEmail.trim()
-      const originalEmail = (selectedClient.email ?? '').trim()
-      const phoneChanged = phoneInForm !== originalPhone
-      const emailChanged = emailInForm !== originalEmail
-      if (phoneChanged || emailChanged) {
-        const updateData: { phone?: string | null; email?: string | null } = {}
-        if (phoneChanged) updateData.phone = phoneInForm || null
-        if (emailChanged) updateData.email = emailInForm ? normalizeEmail(editingClientEmail) || null : null
-        await supabase
-          .from('clients')
-          .update(updateData)
-          .eq('id', selectedClient.id)
-          .eq('business_id', businessId)
-      }
-    }
-    setShowCloseConfirm(false)
-    onClose()
-  }
-
-  const handleCancelClose = () => {
-    setShowCloseConfirm(false)
-  }
-
-  const [creating, setCreating] = useState(false)
-  const [createError, setCreateError] = useState<string | null>(null)
-
-  const handleCreateAppointment = async () => {
-    if (selectedServices.length === 0) {
-      setCreateError('Selecciona al menos un servicio')
-      return
-    }
-    if (!selectedStaff && !useAnyAvailableStaff) {
-      setCreateError('Selecciona un empleado o "Cualquier empleado disponible"')
-      return
-    }
-    if (!noClient && !selectedClient && (!isNewClient || !newClientName || !newClientPhone)) {
-      setCreateError('Completa los datos del cliente o pulsa «Continuar sin ficha de cliente»')
-      return
-    }
-
-    setCreating(true)
-    setCreateError(null)
-
-    try {
-      let clientId: string | null = null
-
-      if (!noClient && isNewClient) {
-        const { data: existingByPhone } = await supabase
-          .from('clients')
-          .select('id')
-          .eq('business_id', businessId)
-          .eq('phone', newClientPhone.trim())
-          .maybeSingle()
-
-        if (existingByPhone) {
-          setCreateError(`Ya existe un cliente con este teléfono`)
-          setCreating(false)
-          return
-        }
-
-        const { data: newClient, error: insertClientErr } = await supabase
-          .from('clients')
-          .insert({
-            business_id: businessId,
-            name: newClientName.trim(),
-            phone: newClientPhone.trim(),
-            email: newClientEmail.trim() ? normalizeEmail(newClientEmail) || null : null,
-            address: newClientAddress.trim() || null,
-          })
-          .select('id')
-          .single()
-
-        if (insertClientErr) {
-          setCreateError(insertClientErr.message)
-          setCreating(false)
-          return
-        }
-        clientId = newClient.id
-      } else if (!noClient) {
-        clientId = selectedClient?.id ?? null
-        if (clientId) {
-          const phoneInForm = editingClientPhone.trim()
-          const originalPhone = (selectedClient?.phone ?? '').trim()
-          const emailInForm = editingClientEmail.trim()
-          const originalEmail = (selectedClient?.email ?? '').trim()
-          const phoneChanged = phoneInForm !== originalPhone
-          const emailChanged = emailInForm !== originalEmail
-          if (phoneChanged || emailChanged) {
-            const updateData: { phone?: string | null; email?: string | null } = {}
-            if (phoneChanged) updateData.phone = phoneInForm || null
-            if (emailChanged) updateData.email = emailInForm ? normalizeEmail(editingClientEmail) || null : null
-            const { error: updateErr } = await supabase
-              .from('clients')
-              .update(updateData)
-              .eq('id', clientId)
-            if (updateErr) {
-              setCreateError(updateErr.message)
-              setCreating(false)
-              return
-            }
-          }
-        }
-      }
-
-      if (!noClient && !clientId) {
-        setCreateError('Error al obtener el cliente')
-        setCreating(false)
-        return
-      }
-
-      let finalStaffId: string | null = null
-      if (useAnyAvailableStaff) {
-        const availableStaff = staff.find((s) => staffAvailability[s.id]?.available)
-        if (availableStaff) {
-          finalStaffId = availableStaff.id
-        }
-      } else {
-        finalStaffId = selectedStaff?.id ?? null
-      }
-
-      const startDateTime = new Date(currentDay)
-      startDateTime.setHours(Math.floor(currentTimeMin / 60), currentTimeMin % 60, 0, 0)
-      const endDateTime = addMinutes(startDateTime, totalDuration)
-
-      const { data: insertedAppointment, error: insertAptErr } = await supabase
-        .from('appointments')
-        .insert({
-          business_id: businessId,
-          client_id: clientId,
-          service_id: selectedServices[0]?.id || null,
-          staff_id: finalStaffId,
-          start_time: startDateTime.toISOString(),
-          end_time: endDateTime.toISOString(),
-          status: 'confirmed',
-          price_total: totalPrice,
-        })
-        .select('id')
-        .single()
-
-      if (insertAptErr) {
-        setCreateError(insertAptErr.message)
-        setCreating(false)
-        return
-      }
-
-      if (insertedAppointment?.id) {
-        try {
-          await fetch('/api/webhooks/n8n-appointment', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ appointmentId: insertedAppointment.id }),
-          })
-        } catch (e) {
-          console.error('[CalendarView] Fallo al llamar al webhook n8n:', e)
-        }
-      }
-
-      const clientNameDisplay = noClient ? 'sin cliente' : (isNewClient ? newClientName : selectedClient?.name ?? 'Cliente')
-      const serviceNames = selectedServices.map((s) => s.name).join(', ')
-      const staffNameDisplay = useAnyAvailableStaff ? 'empleado disponible' : selectedStaff?.name ?? 'empleado'
-
-      onToast?.(
-        noClient
-          ? `Cita creada correctamente (sin ficha de cliente) el ${format(currentDay, 'EEEE d MMM', { locale: es })} a las ${timeLabel}`
-          : `Cita creada correctamente para ${clientNameDisplay} el ${format(currentDay, 'EEEE d MMM', { locale: es })} a las ${timeLabel}`,
-        'success'
-      )
-
-      onClose()
-
-      if (onNavigateToDate) {
-        onNavigateToDate(startDateTime)
-      }
-
-      setTimeout(() => {
-        window.location.reload()
-      }, 500)
-    } catch (err) {
-      setCreateError(err instanceof Error ? err.message : 'Error al crear la cita')
-      setCreating(false)
-    }
-  }
-
-  const addService = (service: { id: string; name: string; duration: number; price: number }) => {
-    if (!selectedServices.some((s) => s.id === service.id)) {
-      setSelectedServices([...selectedServices, service])
-      setShowAddService(false)
-    }
-  }
-
-  const removeService = (serviceId: string) => {
-    setSelectedServices(selectedServices.filter((s) => s.id !== serviceId))
-  }
-
-  const checkStaffAvailability = useCallback(async () => {
-    if (selectedServices.length === 0 || totalDuration === 0) {
-      setStaffAvailability({})
-      return
-    }
-
-    setLoadingAvailability(true)
-    const dateStr = format(currentDay, 'yyyy-MM-dd')
-    const startTimeStr = minutesToTime(currentTimeMin)
-    const endTimeStr = minutesToTime(currentTimeMin + totalDuration)
-    const params = new URLSearchParams({
-      businessId,
-      date: dateStr,
-      startTime: startTimeStr,
-      endTime: endTimeStr,
-    })
-
-    const availability: Record<string, { available: boolean; alternativeSlots?: { date: Date; timeMin: number; timeLabel: string }[] }> = {}
-
-    try {
-      const res = await fetch(`/api/appointments/available-staff?${params}`)
-      const data = await res.json()
-      const staffFromApi = (data.staff ?? []) as { id: string; name?: string; isAvailableForRequestedTime?: boolean; suggestedSlots?: { date: string; time: string }[] }[]
-      for (const staffMember of staff) {
-        const apiStaff = staffFromApi.find((s) => s.id === staffMember.id)
-        const available = apiStaff?.isAvailableForRequestedTime ?? false
-        const suggestedSlots = apiStaff?.suggestedSlots ?? []
-        const alternativeSlots = suggestedSlots.map((slot) => ({
-          date: new Date(slot.date + 'T12:00:00'),
-          timeMin: timeToMinutes(slot.time),
-          timeLabel: formatSlotLabel(slot.date, slot.time),
-        }))
-        availability[staffMember.id] = { available, alternativeSlots }
-      }
-    } catch {
-      for (const staffMember of staff) {
-        availability[staffMember.id] = { available: false, alternativeSlots: [] }
-      }
-    }
-    setStaffAvailability(availability)
-    setLoadingAvailability(false)
-  }, [selectedServices, totalDuration, currentTimeMin, currentDay, staff, businessId])
-
-  useEffect(() => {
-    if (step === 2 && selectedServices.length > 0) {
-      checkStaffAvailability()
-    }
-  }, [step, selectedServices, checkStaffAvailability])
-
-  useEffect(() => {
-    if (step === 2 && selectedServices.length > 0) {
-      checkStaffAvailability()
-    }
-  }, [currentDay, currentTimeMin, checkStaffAvailability, step, selectedServices.length])
-
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (calendarRef.current && !calendarRef.current.contains(e.target as Node)) {
-        setShowCalendarPopup(false)
-      }
-      if (timeDropdownRef.current && !timeDropdownRef.current.contains(e.target as Node)) {
-        setShowTimeDropdown(false)
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
-
-  const handleSelectExistingClient = (client: ClientOption) => {
-    setSelectedClient(client)
-    setIsNewClient(false)
-    setClientSearchText(client.name)
-    setEditingClientName(client.name)
-    setEditingClientPhone(client.phone || '')
-    setEditingClientEmail(client.email || '')
-  }
-
-  const handleUpdateClient = async () => {
-    if (!selectedClient) return
-
-    const { error } = await supabase
-      .from('clients')
-      .update({
-        name: editingClientName.trim(),
-        phone: editingClientPhone.trim() || null,
-        email: editingClientEmail.trim() ? normalizeEmail(editingClientEmail) || null : null,
-      })
-      .eq('id', selectedClient.id)
-
-    if (error) {
-      onToast?.(error.message, 'error')
-      return
-    }
-
-    setSelectedClient({
-      ...selectedClient,
-      name: editingClientName.trim(),
-      phone: editingClientPhone.trim() || null,
-      email: editingClientEmail.trim() ? normalizeEmail(editingClientEmail) || null : null,
-    })
-    setClientSearchText(editingClientName.trim())
-    onToast?.('Cliente actualizado correctamente', 'success')
-  }
-
-  const handleSelectNewClient = (name: string) => {
-    setIsNewClient(true)
-    setSelectedClient(null)
-    setNewClientName(name)
-    setClientSearchText(name)
-  }
-
-  const handleNext = () => {
-    if (step === 1 && (noClient || selectedClient || (isNewClient && newClientName && newClientPhone))) {
-      setStep(2)
-    }
-  }
-
-  const handlePrevious = () => {
-    if (step > 1) {
-      setStep(step - 1)
-      if (step === 2) {
-        setNoClient(false)
-      }
-    }
-  }
-
-  const dayLabel = format(currentDay, 'EEE d MMM', { locale: es })
-  const dayLabelFull = format(currentDay, 'EEEE d \'de\' MMMM yyyy', { locale: es })
-  const clientName = noClient ? null : (selectedClient?.name ?? (isNewClient && newClientName ? newClientName : null))
-  const today = new Date()
-  const canGoPrev = !isBefore(currentDay, today) || !isSameDay(currentDay, today)
-
-  const handleDatePrev = () => {
-    if (canGoPrev) {
-      const newDate = subDays(currentDay, 1)
-      setCurrentDay(newDate)
-    }
-  }
-
-  const handleDateNext = () => {
-    const newDate = addDays(currentDay, 1)
-    setCurrentDay(newDate)
-  }
-
-  const getAvailableTimeSlots = useMemo(() => {
-    const dayOfWeek = getDayOfWeek(currentDay)
-    const openRanges = getOpenRangesForDay(shiftsByDay ?? {}, dayOfWeek)
-    const slots: { timeMin: number; label: string }[] = []
-    for (const range of openRanges) {
-      for (let min = range.start; min <= range.end - totalDuration; min += 5) {
-        const hours = Math.floor(min / 60)
-        const minutes = min % 60
-        slots.push({
-          timeMin: min,
-          label: `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`,
-        })
-      }
-    }
-    const currentRounded = Math.floor(currentTimeMin / 15) * 15
-    if (currentRounded >= 0 && currentRounded < 24 * 60 && totalDuration > 0) {
-      const exists = slots.some((s) => s.timeMin === currentRounded)
-      if (!exists) {
-        const h = Math.floor(currentRounded / 60)
-        const m = currentRounded % 60
-        slots.push({ timeMin: currentRounded, label: `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}` })
-        slots.sort((a, b) => a.timeMin - b.timeMin)
-      }
-    }
-    return slots
-  }, [currentDay, shiftsByDay, totalDuration, currentTimeMin])
-
-  const handleTimeSelect = (timeMin: number) => {
-    setCurrentTimeMin(timeMin)
-    setShowTimeDropdown(false)
-  }
-
-  const handleSlotSelect = (slot: { date: Date; timeMin: number; timeLabel: string }) => {
-    setCurrentDay(slot.date)
-    setCurrentTimeMin(slot.timeMin)
-  }
-
-  const [calendarMonth, setCalendarMonth] = useState(startOfMonth(currentDay))
-  const calendarDays = useMemo(() => {
-    const monthStart = startOfMonth(calendarMonth)
-    const monthEnd = endOfMonth(calendarMonth)
-    const start = startOfWeek(monthStart, { weekStartsOn: 1 })
-    const end = endOfWeek(monthEnd, { weekStartsOn: 1 })
-    return eachDayOfInterval({ start, end })
-  }, [calendarMonth])
-
-  const handleCalendarDateSelect = (date: Date) => {
-    if (isBefore(date, today) && !isSameDay(date, today)) return
-    setCurrentDay(date)
-    setShowCalendarPopup(false)
-  }
-
-  return (
-    <>
-      <div
-        className="fixed inset-0 bg-black/50 z-40 transition-opacity"
-        onClick={handleOverlayClick}
-      />
-      <div className="fixed right-0 top-0 bottom-0 w-full max-w-md bg-zinc-900 shadow-xl z-50 flex flex-col animate-in slide-in-from-right duration-300">
-        <div className="flex items-center justify-between p-4 border-b border-zinc-800">
-          <h2 className="text-lg font-semibold text-zinc-100">Nueva cita</h2>
-          <button
-            onClick={() => {
-              if (hasData) {
-                setShowCloseConfirm(true)
-              } else {
-                onClose()
-              }
-            }}
-            className="p-1.5 hover:bg-zinc-800 rounded-lg transition-colors"
-            aria-label="Cerrar"
-          >
-            <X className="w-5 h-5 text-zinc-400" />
-          </button>
-        </div>
-
-        <div className="bg-gradient-to-br from-zinc-800 to-zinc-900/80 border-b border-zinc-800 px-6 py-5">
-          <div className="space-y-4">
-            <div className="flex items-center justify-between gap-3">
-              <button
-                onClick={handleDatePrev}
-                disabled={!canGoPrev}
-                className={cn(
-                  'p-1.5 rounded-lg transition-colors',
-                  canGoPrev ? 'hover:bg-zinc-700 cursor-pointer' : 'opacity-30 cursor-not-allowed'
-                )}
-                aria-label="Día anterior"
-              >
-                <ChevronLeft className="w-5 h-5 text-zinc-300" />
-              </button>
-              <div className="flex-1 text-center relative" ref={calendarRef}>
-                <button
-                  onClick={() => setShowCalendarPopup(!showCalendarPopup)}
-                  className="text-2xl font-bold text-zinc-100 hover:text-zinc-300 transition-colors cursor-pointer"
-                >
-                  {format(currentDay, 'EEEE d \'de\' MMMM', { locale: es })}
-                </button>
-                {showCalendarPopup && (
-                  <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 bg-zinc-900 rounded-lg shadow-xl border border-zinc-800 p-4 z-[60] w-80">
-                    <div className="flex items-center justify-between mb-4">
-                      <button
-                        onClick={() => setCalendarMonth(subMonths(calendarMonth, 1))}
-                        className="p-1 hover:bg-zinc-800 rounded"
-                      >
-                        <ChevronLeft className="w-4 h-4" />
-                      </button>
-                      <h3 className="font-semibold text-zinc-100">
-                        {format(calendarMonth, 'MMMM yyyy', { locale: es })}
-                      </h3>
-                      <button
-                        onClick={() => setCalendarMonth(addMonths(calendarMonth, 1))}
-                        className="p-1 hover:bg-zinc-800 rounded"
-                      >
-                        <ChevronRight className="w-4 h-4" />
-                      </button>
-                    </div>
-                    <div className="grid grid-cols-7 gap-1 mb-2">
-                      {['L', 'M', 'X', 'J', 'V', 'S', 'D'].map((day) => (
-                        <div key={day} className="text-xs font-medium text-zinc-400 text-center py-1">
-                          {day}
-                        </div>
-                      ))}
-                    </div>
-                    <div className="grid grid-cols-7 gap-1">
-                      {calendarDays.map((date) => {
-                        const isCurrentMonth = isSameMonth(date, calendarMonth)
-                        const isSelected = isSameDay(date, currentDay)
-                        const isPast = isBefore(date, today) && !isSameDay(date, today)
-                        const isToday = isSameDay(date, new Date())
-                        return (
-                          <button
-                            key={date.toISOString()}
-                            onClick={() => handleCalendarDateSelect(date)}
-                            disabled={isPast}
-                            className={cn(
-                              'h-8 rounded text-sm transition-colors',
-                              !isCurrentMonth && 'text-zinc-400',
-                              isPast && 'cursor-not-allowed opacity-50',
-                              isSelected && 'bg-brand text-white font-semibold',
-                              !isSelected && !isPast && isCurrentMonth && 'hover:bg-zinc-800 text-zinc-100',
-                              isToday && !isSelected && 'ring-2 ring-brand'
-                            )}
-                          >
-                            {format(date, 'd')}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-              <button
-                onClick={handleDateNext}
-                className="p-1.5 rounded-lg hover:bg-zinc-700 transition-colors cursor-pointer"
-                aria-label="Día siguiente"
-              >
-                <ChevronRight className="w-5 h-5 text-zinc-300" />
-              </button>
-            </div>
-
-            <div className="flex items-center justify-center gap-4">
-              <div className="relative" ref={timeDropdownRef}>
-                <button
-                  onClick={() => setShowTimeDropdown(!showTimeDropdown)}
-                  className="flex items-center gap-2 px-4 py-2 bg-zinc-900 rounded-lg border border-zinc-700 hover:border-zinc-500 transition-colors cursor-pointer"
-                >
-                  <Clock className="w-4 h-4 text-zinc-400" />
-                  <span className="text-xl font-semibold text-zinc-100">{timeLabel}</span>
-                </button>
-                {showTimeDropdown && (
-                  <div className="absolute top-full left-0 mt-2 bg-zinc-900 rounded-lg shadow-xl border border-zinc-800 max-h-64 overflow-y-auto z-[60] w-48">
-                    {getAvailableTimeSlots.map((slot) => (
-                      <button
-                        key={slot.timeMin}
-                        onClick={() => handleTimeSelect(slot.timeMin)}
-                        className={cn(
-                          'w-full text-left px-4 py-2 hover:bg-zinc-950 transition-colors',
-                          slot.timeMin === currentTimeMin && 'bg-brand/25 text-zinc-100 font-semibold'
-                        )}
-                      >
-                        {slot.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <div className="text-sm text-zinc-400">
-                <span className="font-medium">{endTimeLabel}</span>
-                <span className="ml-1">({totalDuration} min)</span>
-              </div>
-            </div>
-
-            <div className="pt-2 border-t border-zinc-800 space-y-1">
-              {noClient && <p className="text-xs font-medium text-zinc-400">Sin ficha de cliente</p>}
-              {clientName && <p className="text-xs font-medium text-zinc-300">{clientName}</p>}
-              {selectedServices.length > 0 && (
-                <p className="text-xs font-medium text-zinc-300">
-                  {selectedServices[0].name}
-                  {selectedServices.length > 1 && ` +${selectedServices.length - 1} más`}
-                </p>
-              )}
-              {useAnyAvailableStaff && <p className="text-xs font-medium text-zinc-300">Cualquier empleado disponible</p>}
-              {selectedStaff && !useAnyAvailableStaff && <p className="text-xs font-medium text-zinc-300">{selectedStaff.name}</p>}
-              {totalPrice > 0 && <p className="text-xs font-medium text-zinc-300">{totalPrice}€</p>}
-            </div>
-          </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-6">
-          {step === 1 && (
-            <div className="space-y-4">
-              <div>
-                <Label className="text-zinc-100 font-medium">Cliente</Label>
-                <ClientSearchCombobox
-                  businessId={businessId}
-                  recentClients={[]}
-                  value={clientSearchText}
-                  onChange={setClientSearchText}
-                  onSelectExisting={handleSelectExistingClient}
-                  onSelectNew={handleSelectNewClient}
-                  disabled={noClient}
-                  className="mt-1 [&_input]:text-zinc-100 [&_input]:font-medium"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={noClient}
-                  onClick={() => {
-                    setNoClient(true)
-                    setSelectedClient(null)
-                    setIsNewClient(false)
-                    setClientSearchText('')
-                    setStep(2)
-                  }}
-                  className="mt-2 w-full sm:w-auto"
-                >
-                  Continuar sin ficha de cliente
-                </Button>
-              </div>
-
-              {selectedClient && !isNewClient && (
-                <div className="mt-3 space-y-3 rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-xs font-medium text-zinc-300">Datos del cliente</p>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={handleUpdateClient}
-                      className="text-xs"
-                    >
-                      Guardar cambios
-                    </Button>
-                  </div>
-                  <div>
-                    <Label htmlFor="existing-client-name" className="text-zinc-100 font-medium">Nombre</Label>
-                    <Input
-                      id="existing-client-name"
-                      value={editingClientName}
-                      onChange={(e) => setEditingClientName(e.target.value)}
-                      className="mt-1 text-zinc-100 font-medium bg-zinc-900"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="existing-client-phone-display" className="text-zinc-100 font-medium">Teléfono</Label>
-                    <PhoneInput
-                      id="existing-client-phone-display"
-                      value={editingClientPhone}
-                      defaultCountry={businessCountry ?? 'ES'}
-                      onChange={setEditingClientPhone}
-                      className="mt-1"
-                    />
-                  </div>
-                  <div>
-                    <EmailInput
-                      id="existing-client-email-display"
-                      label="Email"
-                      value={editingClientEmail}
-                      onChange={setEditingClientEmail}
-                      optional
-                      placeholder="Sin email"
-                      className="mt-1"
-                    />
-                  </div>
-                </div>
-              )}
-
-              {isNewClient && (
-                <NewClientFields
-                  name={newClientName}
-                  phone={newClientPhone}
-                  email={newClientEmail}
-                  address={newClientAddress}
-                  onNameChange={setNewClientName}
-                  onPhoneChange={(v) => {
-                    setNewClientPhone(v)
-                    setPhoneDuplicateError(null)
-                  }}
-                  onEmailChange={setNewClientEmail}
-                  onAddressChange={setNewClientAddress}
-                  phoneError={phoneDuplicateError ?? undefined}
-                  defaultCountry={businessCountry ?? 'ES'}
-                />
-              )}
-            </div>
-          )}
-
-          {step === 2 && (
-            <div className="space-y-6">
-              <div>
-                <Label className="text-zinc-100 font-medium">Servicios</Label>
-                {selectedServices.length > 0 && (
-                  <div className="mt-2 mb-4 space-y-2">
-                    {selectedServices.map((service) => (
-                      <div
-                        key={service.id}
-                        className="flex items-center justify-between p-3 rounded-lg border border-zinc-800 bg-zinc-950"
-                      >
-                        <div className="flex-1">
-                          <p className="font-medium text-zinc-100">{service.name}</p>
-                          <p className="text-xs text-zinc-400">
-                            {service.duration} min · {service.price}€
-                          </p>
-                        </div>
-                        <button
-                          onClick={() => removeService(service.id)}
-                          className="p-1.5 hover:bg-red-900/50 rounded-lg transition-colors"
-                          aria-label="Eliminar servicio"
-                        >
-                          <Trash2 className="w-4 h-4 text-red-600" />
-                        </button>
-                      </div>
-                    ))}
-                    <div className="pt-2 border-t border-zinc-800">
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="font-semibold text-zinc-100">Total:</span>
-                        <div className="text-right">
-                          <p className="font-semibold text-zinc-100">{totalDuration} min</p>
-                          <p className="text-zinc-400">{totalPrice}€</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-                <div className="mt-2 space-y-2">
-                  {services
-                    .filter((s) => !selectedServices.some((sel) => sel.id === s.id))
-                    .map((service) => (
-                      <button
-                        key={service.id}
-                        onClick={() => addService(service)}
-                        className={cn(
-                          'w-full text-left p-3 rounded-lg border transition-colors',
-                          selectedServices.some((s) => s.id === service.id)
-                            ? 'border-brand bg-brand/25'
-                            : 'border-zinc-800 hover:border-zinc-700 hover:bg-zinc-950'
-                        )}
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="font-medium text-zinc-100">{service.name}</span>
-                          <span className="text-sm text-zinc-400">{service.price}€</span>
-                        </div>
-                        <p className="text-xs text-zinc-400 mt-1">{service.duration} min</p>
-                      </button>
-                    ))}
-                  {selectedServices.length > 0 && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => setShowAddService(!showAddService)}
-                      className="w-full mt-2"
-                    >
-                      <Plus className="w-4 h-4 mr-2" />
-                      Añadir otro servicio
-                    </Button>
-                  )}
-                </div>
-              </div>
-
-              {selectedServices.length > 0 && (
-                <div>
-                  <Label className="text-zinc-100 font-medium">Empleado</Label>
-                  {loadingAvailability ? (
-                    <p className="mt-2 text-sm text-zinc-400">Verificando disponibilidad...</p>
-                  ) : (
-                    <div className="mt-2 space-y-2">
-                      {staff
-                        .sort((a, b) => {
-                          const aAvail = staffAvailability[a.id]?.available ?? false
-                          const bAvail = staffAvailability[b.id]?.available ?? false
-                          if (aAvail === bAvail) return 0
-                          return aAvail ? -1 : 1
-                        })
-                        .map((staffMember) => {
-                          const availability = staffAvailability[staffMember.id]
-                          const isAvailable = availability?.available ?? false
-                          const isSelected = selectedStaff?.id === staffMember.id
-                          const alternatives = availability?.alternativeSlots ?? []
-
-                          return (
-                            <div key={staffMember.id} className="space-y-2">
-                              <button
-                                onClick={() => {
-                                  if (isAvailable) {
-                                    setSelectedStaff(isSelected ? null : staffMember)
-                                    setUseAnyAvailableStaff(false)
-                                  }
-                                }}
-                                className={cn(
-                                  'w-full text-left p-3 rounded-lg border transition-colors flex items-center justify-between',
-                                  isSelected
-                                    ? 'border-brand bg-brand/25'
-                                    : isAvailable
-                                      ? 'border-zinc-800 hover:border-zinc-700 hover:bg-zinc-950'
-                                      : 'border-zinc-800 bg-zinc-900/50 opacity-75'
-                                )}
-                              >
-                                <span className="font-medium text-zinc-100">{staffMember.name}</span>
-                                <span
-                                  className={cn(
-                                    'text-xs px-2 py-1 rounded-full font-medium',
-                                    isAvailable ? 'bg-emerald-900/50 text-emerald-300' : 'bg-red-900/50 text-red-300'
-                                  )}
-                                >
-                                  {isAvailable ? 'Disponible' : 'No disponible'}
-                                </span>
-                              </button>
-                              {!isAvailable && (
-                                <div className="ml-4 pl-4 border-l-2 border-zinc-800 space-y-2">
-                                  {alternatives.length > 0 ? (
-                                    <div className="flex gap-2 flex-wrap mt-2">
-                                      {alternatives.slice(0, 3).map((slot, i) => (
-                                        <button
-                                          key={i}
-                                          type="button"
-                                          onClick={() => {
-                                            handleSlotSelect(slot)
-                                            setSelectedStaff(staffMember)
-                                            setUseAnyAvailableStaff(false)
-                                          }}
-                                          className="bg-amber-100 text-amber-800 text-xs px-3 py-1 rounded-full cursor-pointer hover:bg-amber-200 transition-colors"
-                                        >
-                                          {slot.timeLabel}
-                                        </button>
-                                      ))}
-                                    </div>
-                                  ) : (
-                                    <p className="text-xs text-gray-500">No hay horarios disponibles próximos</p>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          )
-                        })}
-                      <button
-                        onClick={() => {
-                          setUseAnyAvailableStaff(!useAnyAvailableStaff)
-                          if (!useAnyAvailableStaff) {
-                            setSelectedStaff(null)
-                          }
-                        }}
-                        className={cn(
-                          'w-full text-left p-3 rounded-lg border transition-colors flex items-center justify-between',
-                          useAnyAvailableStaff
-                            ? 'border-brand bg-brand/25'
-                            : 'border-zinc-800 hover:border-zinc-700 hover:bg-zinc-950'
-                        )}
-                      >
-                        <span className="font-medium text-zinc-100">Cualquier empleado disponible</span>
-                        <span className="text-xs px-2 py-1 rounded-full font-medium bg-green-100 text-green-700">
-                          Auto
-                        </span>
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        <div className="border-t border-zinc-800 p-4 flex gap-3">
-          {step > 1 && (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handlePrevious}
-              className="flex-1"
-            >
-              Anterior
-            </Button>
-          )}
-          {step === 1 && (
-            <Button
-              type="button"
-              onClick={handleNext}
-              disabled={!selectedClient && (!isNewClient || !newClientName || !newClientPhone)}
-              className="flex-1"
-            >
-              Siguiente
-            </Button>
-          )}
-          {step === 2 && (
-            <>
-              {selectedServices.length > 0 && (selectedStaff || useAnyAvailableStaff) ? (
-                (() => {
-                  const availableCount = staff.filter((s) => staffAvailability[s.id]?.available).length
-                  const canCreate =
-                    !loadingAvailability &&
-                    (useAnyAvailableStaff ? availableCount > 0 : !!(selectedStaff && staffAvailability[selectedStaff.id]?.available))
-                  return (
-                    <>
-                      {!loadingAvailability && availableCount === 0 && (
-                        <p className="text-sm text-amber-500 px-4 pb-2">
-                          No hay profesionales disponibles para este horario y servicio.
-                        </p>
-                      )}
-                      <Button
-                        type="button"
-                        onClick={handleCreateAppointment}
-                        disabled={creating || !canCreate}
-                        className="flex-1"
-                      >
-                        {creating ? 'Creando...' : 'Crear cita'}
-                      </Button>
-                    </>
-                  )
-                })()
-              ) : (
-                <Button
-                  type="button"
-                  disabled
-                  className="flex-1"
-                >
-                  Selecciona servicios y empleado
-                </Button>
-              )}
-            </>
-          )}
-        </div>
-        {createError && (
-          <div className="px-4 pb-4">
-            <p className="text-sm text-red-600">{createError}</p>
-          </div>
-        )}
-      </div>
-
-      <Dialog open={showCloseConfirm} onOpenChange={(open) => !open && setShowCloseConfirm(false)}>
-        <DialogContent className="z-[60]">
-          <DialogHeader>
-            <DialogTitle>¿Descartar esta cita?</DialogTitle>
-            <DialogDescription>Perderás los datos introducidos</DialogDescription>
-          </DialogHeader>
-          <div className="flex gap-3 mt-4">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleCancelClose}
-              className="flex-1"
-            >
-              Cancelar
-            </Button>
-            <Button
-              type="button"
-              onClick={handleConfirmClose}
-              className="flex-1 bg-red-600 hover:bg-red-700"
-            >
-              Descartar
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-    </>
   )
 }
 

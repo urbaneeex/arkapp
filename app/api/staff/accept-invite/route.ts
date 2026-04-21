@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
 
     const { data: invite, error: inviteError } = await supabaseAdmin
       .from('staff_invites')
-      .select('id, staff_id, email, used')
+      .select('id, staff_id, email, used, expires_at')
       .eq('invite_token', token)
       .single()
 
@@ -36,6 +36,11 @@ export async function POST(request: NextRequest) {
 
     if (invite.used) {
       return NextResponse.json({ error: 'Esta invitación ya fue utilizada' }, { status: 400 })
+    }
+
+    // ── Verificar que la invitación no ha expirado ───────────────────────────
+    if (invite.expires_at && new Date(invite.expires_at) < new Date()) {
+      return NextResponse.json({ error: 'El enlace de invitación ha expirado' }, { status: 400 })
     }
 
     const { data: staffRow } = await supabaseAdmin
@@ -53,9 +58,12 @@ export async function POST(request: NextRequest) {
     const staffName = staffRow.name
     const oldStaffId = invite.staff_id
 
-    // Comprobar si ya existe usuario con ese email en Auth
-    const { data: { users } } = await supabaseAdmin.auth.admin.listUsers()
-    const existingUser = users?.find((u) => u.email?.toLowerCase() === email.toLowerCase())
+    // Comprobar si ya existe usuario con ese email en Auth.
+    // Supabase JS no expone getUserByEmail; usamos listUsers con paginación
+    // pero limitado a las primeras páginas para evitar escaneos completos.
+    let existingUser: { id: string; email?: string; user_metadata?: Record<string, unknown> } | null = null
+    const { data: { users: firstPage } } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 200 })
+    existingUser = firstPage?.find((u) => u.email?.toLowerCase() === email.toLowerCase()) ?? null
 
     let authUserId: string
 
@@ -85,7 +93,7 @@ export async function POST(request: NextRequest) {
       })
       if (createError || !newUser) {
         console.error('Error creando usuario:', createError)
-        return NextResponse.json({ error: createError?.message || 'Error al crear la cuenta' }, { status: 500 })
+        return NextResponse.json({ error: 'Error al crear la cuenta' }, { status: 500 })
       }
       authUserId = newUser.user.id
     }
@@ -165,9 +173,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, email })
   } catch (error) {
     console.error('Error accept-invite:', error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Error al aceptar la invitación' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Error al aceptar la invitación' }, { status: 500 })
   }
 }

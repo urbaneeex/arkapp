@@ -1,9 +1,14 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import type { Metadata } from 'next'
 import { BarChart3 } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { EmptyState } from '@/components/ui/empty-state'
 import { RequirePermission } from '@/components/auth/RequirePermission'
+
+export const metadata: Metadata = {
+  title: 'Reportes',
+}
 
 export default async function ReportsPage() {
   const supabase = await createClient()
@@ -15,7 +20,7 @@ export default async function ReportsPage() {
   return (
     <RequirePermission permission="reports_view">
       <div>
-        <PageHeader title="Reportes y analíticas" subtitle="Ingresos, ocupación y rendimiento de tu negocio" />
+        <PageHeader title="Reportes y analíticas" />
 
         <EmptyState
           icon={<BarChart3 className="h-6 w-6" />}

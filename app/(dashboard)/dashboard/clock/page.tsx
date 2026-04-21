@@ -1,7 +1,12 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import type { Metadata } from 'next'
 import { getBusinessIdForUser } from '@/lib/supabase/business'
 import { QRClockDisplay } from '@/components/clock/QRClockDisplay'
+
+export const metadata: Metadata = {
+  title: 'Reloj QR',
+}
 
 export default async function ClockDisplayPage() {
   const supabase = await createClient()

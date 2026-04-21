@@ -7,17 +7,33 @@ function pickName(n: NestedName): string | null {
   return Array.isArray(n) ? n[0]?.name ?? null : n.name
 }
 
+function staffNamesFromKanbanAssignees(metadata: unknown): string | null {
+  if (!metadata || typeof metadata !== 'object') return null
+  const m = metadata as Record<string, unknown>
+  const raw = m.kanban_assignees
+  if (!Array.isArray(raw) || raw.length === 0) return null
+  const names: string[] = []
+  for (const entry of raw) {
+    if (entry && typeof entry === 'object' && 'name' in entry) {
+      const n = String((entry as { name: unknown }).name).trim()
+      if (n) names.push(n)
+    }
+  }
+  return names.length > 0 ? names.join(' · ') : null
+}
+
 export type AppointmentRowInput = {
   id: string
   business_id: string
   title?: string | null
-  start_time: string
-  end_time: string
+  start_time: string | null
+  end_time: string | null
   status?: string | null
   price_total?: number | null
   client_id?: string | null
   service_id?: string | null
   staff_id?: string | null
+  metadata?: unknown | null
   pipeline_stage_id: string
   clients?: NestedName
   services?: NestedName
@@ -49,7 +65,8 @@ function pickStage(
 export function mapAppointmentRowToWorkItem(row: AppointmentRowInput): WorkItemCard {
   const clientName = pickName(row.clients ?? null)
   const serviceName = pickName(row.services ?? null)
-  const staffName = pickName(row.staff ?? null)
+  const staffFromMeta = staffNamesFromKanbanAssignees(row.metadata ?? null)
+  const staffName = staffFromMeta ?? pickName(row.staff ?? null)
   const stage = pickStage(row)
   const title = row.title?.trim() || null
   const displayTitle =

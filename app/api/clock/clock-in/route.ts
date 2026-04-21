@@ -97,7 +97,14 @@ async function resolveStaffRecord(
   return { staffId: newStaff.id, businessId: newStaff.business_id }
 }
 
+function getClientIp(req: NextRequest): string {
+  const fwd = req.headers.get('x-forwarded-for')
+  if (fwd) return fwd.split(',')[0]?.trim() ?? 'unknown'
+  return req.headers.get('x-real-ip') ?? 'unknown'
+}
+
 export async function POST(request: NextRequest) {
+  const clientIp = getClientIp(request)
   try {
     const body = await request.json()
     const { action, qr_token, lat, lng } = body as {
@@ -203,7 +210,7 @@ export async function POST(request: NextRequest) {
 
       if (error) {
         console.error('[clock-in POST break]', error)
-        return NextResponse.json({ error: error.message }, { status: 500 })
+        return NextResponse.json({ error: 'Error al registrar la pausa' }, { status: 500 })
       }
 
       return NextResponse.json({ data, action: 'break_started' })
@@ -236,7 +243,7 @@ export async function POST(request: NextRequest) {
 
       if (error) {
         console.error('[clock-in POST resume]', error)
-        return NextResponse.json({ error: error.message }, { status: 500 })
+        return NextResponse.json({ error: 'Error al reanudar la jornada' }, { status: 500 })
       }
 
       return NextResponse.json({ data, action: 'break_ended' })
@@ -267,13 +274,15 @@ export async function POST(request: NextRequest) {
           source,
           verified_lat: verifiedLat,
           verified_lng: verifiedLng,
+          // Registrar IP como auditoría anti-suplantación de GPS
+          metadata: { client_ip: clientIp },
         })
         .select()
         .single()
 
       if (error) {
         console.error('[clock-in POST in]', error)
-        return NextResponse.json({ error: error.message }, { status: 500 })
+        return NextResponse.json({ error: 'Error al registrar la entrada' }, { status: 500 })
       }
 
       return NextResponse.json({ data, action: 'clocked_in' }, { status: 201 })
@@ -311,14 +320,13 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       console.error('[clock-in POST out]', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: 'Error al registrar la salida' }, { status: 500 })
     }
 
     return NextResponse.json({ data, action: 'clocked_out' })
   } catch (error) {
-    const msg = error instanceof Error ? error.message : 'Error inesperado'
     console.error('[clock-in POST]', error)
-    return NextResponse.json({ error: msg }, { status: 500 })
+    return NextResponse.json({ error: 'Error inesperado' }, { status: 500 })
   }
 }
 

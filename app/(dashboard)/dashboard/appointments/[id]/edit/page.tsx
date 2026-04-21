@@ -58,7 +58,7 @@ export default async function EditAppointmentPage({
 
   return (
     <div className="max-w-xl">
-      <PageHeader title="Editar cita" subtitle={new Date(appointment.start_time).toLocaleString('es')} />
+      <PageHeader title="Editar cita" />
       <AppointmentForm
         businessId={business.id}
         clients={clients ?? []}

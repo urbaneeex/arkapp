@@ -49,7 +49,7 @@ export default async function EditStaffPage({
 
   return (
     <div className="max-w-xl">
-      <PageHeader title="Editar empleado" subtitle={staff.name} />
+      <PageHeader title="Editar empleado" />
       <StaffForm
         businessId={business.id}
         staff={staff}

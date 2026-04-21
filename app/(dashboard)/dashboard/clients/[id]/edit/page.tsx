@@ -34,7 +34,7 @@ export default async function EditClientPage({
 
   return (
     <div className="max-w-2xl">
-      <PageHeader title="Editar cliente" subtitle={client.name} />
+      <PageHeader title="Editar cliente" />
       <ClientForm client={client} defaultCountry={(business as { country?: string | null }).country ?? 'ES'} />
     </div>
   )

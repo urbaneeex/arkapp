@@ -12,8 +12,16 @@ const spaceGrotesk = Space_Grotesk({
 });
 
 export const metadata: Metadata = {
-  title: "CitasPro | CRM de citas y clientes",
+  title: {
+    default: "Arkapp",
+    template: "%s - Arkapp",
+  },
   description: "Gestiona citas, clientes y servicios de cualquier tipo de negocio",
+  icons: {
+    icon: "/logo%20arkapp%20final.svg",
+    shortcut: "/logo%20arkapp%20final.svg",
+    apple: "/logo%20arkapp%20final.svg",
+  },
 };
 
 export default function RootLayout({

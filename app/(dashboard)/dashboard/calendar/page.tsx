@@ -1,7 +1,12 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import type { Metadata } from 'next'
 import { CalendarPageClient } from '@/components/calendar/CalendarPageClient'
 import { getBusinessIdForUser } from '@/lib/supabase/business'
+
+export const metadata: Metadata = {
+  title: 'Calendario',
+}
 
 export default async function CalendarPage() {
   const supabase = await createClient()

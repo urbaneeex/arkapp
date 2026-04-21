@@ -95,7 +95,6 @@ export function QRClockDisplay({
     <div className="flex flex-col items-center justify-center min-h-[70vh] gap-8 px-4">
       <div className="text-center">
         <h1 className="font-display text-2xl font-bold text-zinc-100">{businessName}</h1>
-        <p className="text-zinc-400 mt-1">Escanea el código para fichar</p>
       </div>
 
       <div className="relative">

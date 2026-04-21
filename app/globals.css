@@ -70,6 +70,22 @@ html.light body {
   background: #52525b;
 }
 
+/**
+ * Rueda hora/minutos (Kanban): anula el scrollbar global `*` para no mostrar barra.
+ */
+.kanban-time-wheel-scroll {
+  scrollbar-width: none !important;
+  scrollbar-color: transparent transparent !important;
+  -ms-overflow-style: none !important;
+}
+
+.kanban-time-wheel-scroll::-webkit-scrollbar {
+  width: 0 !important;
+  height: 0 !important;
+  display: none !important;
+  background: transparent !important;
+}
+
 /* Iconos nativos de fecha/hora (calendario, reloj) en UI oscura — forzar blanco */
 .datetime-input-dark {
   color-scheme: dark;

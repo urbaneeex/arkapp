@@ -1,6 +1,11 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import type { Metadata } from 'next'
 import { MonthlyReportView } from '@/components/staff/MonthlyReportView'
+
+export const metadata: Metadata = {
+  title: 'Informe mensual',
+}
 
 export default async function MonthlyReportPage({
   searchParams,

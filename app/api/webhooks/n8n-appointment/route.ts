@@ -123,6 +123,16 @@ function escapeHtml(text: string): string {
 
 export async function POST(req: Request) {
   try {
+    // ── Verificar secreto compartido del webhook ─────────────────────────────
+    const webhookSecret = process.env.WEBHOOK_SECRET
+    if (webhookSecret) {
+      const authHeader = req.headers.get('authorization') ?? ''
+      const provided = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : ''
+      if (provided !== webhookSecret) {
+        return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+      }
+    }
+
     const { appointmentId } = await req.json()
 
     const supabase = await createClient()
@@ -163,6 +173,9 @@ export async function POST(req: Request) {
     const phoneValidForSend = hasPhone && isPhoneValidForSending(client!.phone!, businessCountry)
     const clientId = client?.id ?? (apt as { client_id?: string | null }).client_id ?? null
 
+    const startTimeRaw = (apt as { start_time?: string | null }).start_time
+    const hasScheduledTime = Boolean(startTimeRaw && String(startTimeRaw).trim())
+
     const metadataUpdates: Record<string, string> = {}
 
     if (process.env.N8N_WEBHOOK_URL && waConnected) {
@@ -172,14 +185,14 @@ export async function POST(req: Request) {
         const phoneForWa = getPhoneForWhatsApp(client!.phone!, businessCountry)
         if (!phoneForWa) {
           metadataUpdates.phone_status = 'invalid'
-        } else {
+        } else if (hasScheduledTime) {
           const formattedDate = new Intl.DateTimeFormat('es-ES', {
             weekday: 'long',
             day: 'numeric',
             month: 'long',
             hour: '2-digit',
             minute: '2-digit',
-          }).format(new Date((apt as { start_time: string }).start_time))
+          }).format(new Date(startTimeRaw!))
           const businessAddress = (business?.address ?? '').trim() || 'Consultar con el establecimiento'
           const payload = {
             businessName: business.name,
@@ -221,15 +234,17 @@ export async function POST(req: Request) {
           const resendApiKey = process.env.RESEND_API_KEY
           if (resendApiKey) {
             const resend = new Resend(resendApiKey)
-            const startDate = new Date((apt as { start_time: string }).start_time)
             const businessAddress = (business?.address ?? '').trim() || 'Consultar con el establecimiento'
-            const icsString = generateICS(
-              business?.name ?? 'Negocio',
-              service?.name ?? 'Servicio',
-              startDate,
-              businessAddress
-            )
-            await resend.emails.send({
+            const formattedDateLabel = hasScheduledTime
+              ? new Intl.DateTimeFormat('es-ES', {
+                  weekday: 'long',
+                  day: 'numeric',
+                  month: 'long',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                }).format(new Date(startTimeRaw!))
+              : 'Sin fecha fijada — el establecimiento te contactará para concertarla.'
+            const emailPayload: Parameters<typeof resend.emails.send>[0] = {
               from: RESEND_FROM,
               to: clientEmail,
               subject: `📅 Confirmación de tu cita en ${business?.name ?? 'el negocio'}`,
@@ -237,22 +252,23 @@ export async function POST(req: Request) {
                 business?.name ?? '',
                 client?.name ?? 'Cliente',
                 service?.name ?? 'Servicio',
-                new Intl.DateTimeFormat('es-ES', {
-                  weekday: 'long',
-                  day: 'numeric',
-                  month: 'long',
-                  hour: '2-digit',
-                  minute: '2-digit',
-                }).format(startDate),
+                formattedDateLabel,
                 businessAddress
               ),
-              attachments: [
-                {
-                  filename: 'reserva-arkapp.ics',
-                  content: Buffer.from(icsString),
-                },
-              ],
-            })
+            }
+            if (hasScheduledTime) {
+              const startDate = new Date(startTimeRaw!)
+              const icsString = generateICS(
+                business?.name ?? 'Negocio',
+                service?.name ?? 'Servicio',
+                startDate,
+                businessAddress
+              )
+              emailPayload.attachments = [
+                { filename: 'reserva-arkapp.ics', content: Buffer.from(icsString) },
+              ]
+            }
+            await resend.emails.send(emailPayload)
           }
         } catch (mailError) {
           console.error('[n8n-appointment] Error enviando email de confirmación (no bloqueante):', mailError)
