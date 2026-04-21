@@ -29,6 +29,7 @@ import {
   format,
 } from 'date-fns'
 import { es } from 'date-fns/locale'
+import { WORK_BOARD_CALENDAR_PATH } from '@/lib/routes'
 
 export const metadata: Metadata = {
   title: 'Inicio',
@@ -321,14 +322,14 @@ async function DashboardContent({
       title: 'Citas hoy',
       value: todayCount ?? 0,
       icon: Calendar,
-      href: '/dashboard/calendar',
+      href: WORK_BOARD_CALENDAR_PATH,
       color: 'bg-brand text-white',
     },
     {
       title: 'Citas esta semana',
       value: weekCount ?? 0,
       icon: Clock,
-      href: '/dashboard/calendar',
+      href: WORK_BOARD_CALENDAR_PATH,
       color: 'bg-brand text-white',
     },
     {
@@ -434,7 +435,7 @@ async function DashboardContent({
               </p>
             )}
             <Link
-              href="/dashboard/calendar"
+              href={WORK_BOARD_CALENDAR_PATH}
               className="mt-4 inline-block text-sm font-medium text-brand hover:underline cursor-pointer"
             >
               Ver calendario →

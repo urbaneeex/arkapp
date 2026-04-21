@@ -1346,7 +1346,7 @@ export function KanbanQuickAddAppointment({
       <div
         ref={panelRef}
         className={cn(
-          'min-w-0 space-y-0 overflow-hidden rounded-lg border border-zinc-500/90 bg-zinc-950/80 p-3 font-sans shadow-inner transition-[box-shadow,border-color] duration-200',
+          'min-w-0 space-y-0 overflow-hidden rounded-lg border border-zinc-500/90 bg-zinc-950 p-3 font-sans shadow-xl shadow-black/40 transition-[box-shadow,border-color] duration-200',
           dateMenuOpen && 'border-brand/40 ring-1 ring-brand/25 ring-inset',
           wrapperClassName
         )}

@@ -6,11 +6,12 @@ import { usePermissions } from '@/hooks/usePermissions'
 import type { PermissionKey } from '@/lib/permissions'
 import { Button } from '@/components/ui/button'
 import { ShieldX } from 'lucide-react'
+import { WORK_BOARD_CALENDAR_PATH } from '@/lib/routes'
 
 export function RequirePermission({
   permission,
   children,
-  redirectTo = '/dashboard/calendar',
+  redirectTo = WORK_BOARD_CALENDAR_PATH,
 }: {
   permission: PermissionKey
   children: React.ReactNode

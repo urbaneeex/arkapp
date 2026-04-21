@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import { redirect } from 'next/navigation'
 import { GlobalHeader } from '@/components/layout/GlobalHeader'
 import { Sidebar } from '@/components/layout/Sidebar'
@@ -29,7 +30,11 @@ export default async function DashboardLayout({
         <GlobalHeader initialUserName={userName} initialBusinessName={businessName} />
         <Sidebar />
         <DashboardMain>{children}</DashboardMain>
-        <MobileBottomNav />
+        <Suspense
+          fallback={<div className="lg:hidden shrink-0 h-[calc(4.25rem+env(safe-area-inset-bottom))]" aria-hidden />}
+        >
+          <MobileBottomNav />
+        </Suspense>
       </div>
     </PermissionsProvider>
   )

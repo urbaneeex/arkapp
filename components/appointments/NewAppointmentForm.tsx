@@ -35,6 +35,7 @@ import {
 } from '@/lib/availability'
 import { cn } from '@/lib/utils'
 import { notifyByType } from '@/lib/notify'
+import { WORK_BOARD_CALENDAR_PATH } from '@/lib/routes'
 
 function formatSlotLabel(dateStr: string, timeStr: string): string {
   const formatted = new Intl.DateTimeFormat('es-ES', {
@@ -528,7 +529,7 @@ export function NewAppointmentForm({
           : `Cita creada correctamente para ${isNewClient ? newClientName : selectedClient?.name} el ${format(start, "EEEE d MMM", { locale: es })} a las ${format(start, 'HH:mm')}.${isNewClient ? ' Cliente nuevo añadido al sistema.' : ''}`,
         'success'
       )
-      router.push('/dashboard/calendar')
+      router.push(WORK_BOARD_CALENDAR_PATH)
       router.refresh()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al crear la cita')
@@ -548,7 +549,7 @@ export function NewAppointmentForm({
         await supabase.from('clients').update(updateData).eq('id', selectedClient.id)
       }
     }
-    router.push('/dashboard/calendar')
+    router.push(WORK_BOARD_CALENDAR_PATH)
   }
 
   const selectedStartMin = selectedDate && startDateTime ? timeToMinutes(startDateTime.slice(11, 16)) : null

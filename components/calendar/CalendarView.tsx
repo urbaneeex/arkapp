@@ -664,6 +664,8 @@ export function CalendarView({
 const MINUTES_PER_SLOT = 15
 const SLOTS_PER_HOUR = 4
 const SLOT_HEIGHT_PX = 24
+/** Altura aproximada de la tarjeta rápida: si no cabe debajo del slot, se ancla hacia arriba. */
+const CALENDAR_QUICK_ADD_CARD_EST_PX = 400
 const HOUR_HEIGHT_PX = SLOTS_PER_HOUR * SLOT_HEIGHT_PX
 const MINUTES_PER_DAY = 24 * 60
 
@@ -836,6 +838,22 @@ function WeekView({
     [appointmentsInWeek, days, totalSlots, weekViewStartMin, onDropInDay]
   )
 
+  const weekQuickAddCardStyle = useMemo((): React.CSSProperties | undefined => {
+    if (!selectedWeekSlot) return undefined
+    const slotTopPx =
+      ((selectedWeekSlot.timeMin - weekViewStartMin) / MINUTES_PER_SLOT) * SLOT_HEIGHT_PX
+    const gridBodyHeightPx = totalSlots * SLOT_HEIGHT_PX
+    const spaceBelow = gridBodyHeightPx - slotTopPx
+    const openUpward = spaceBelow < CALENDAR_QUICK_ADD_CARD_EST_PX
+    const topPx = openUpward
+      ? Math.max(0, slotTopPx - CALENDAR_QUICK_ADD_CARD_EST_PX)
+      : Math.max(0, slotTopPx)
+    return {
+      top: topPx,
+      left: `${selectedWeekSlot.dayIndex * (100 / 7)}%`,
+    }
+  }, [selectedWeekSlot, weekViewStartMin, totalSlots])
+
   const weekViewContent = (
     <div className="relative w-full overflow-auto flex flex-col flex-1 min-h-0 bg-zinc-900">
       <div
@@ -963,7 +981,7 @@ function WeekView({
 
       {/* Citas: misma lógica que DayView (top/height en slots de 15 min), arrastrables si onDropInDay */}
       <div
-        className="absolute left-[56px] top-[var(--week-header-row)] right-0 bottom-0 pointer-events-none overflow-visible z-10"
+        className="absolute left-[56px] top-[var(--week-header-row)] right-0 bottom-0 pointer-events-none overflow-visible z-40"
         style={{ '--week-header-row': `${headerRowHeightPx}px` } as React.CSSProperties}
       >
         {appointmentsWithLayout.map(({ apt, dayIndex, topPx, heightPx }) => {
@@ -996,11 +1014,8 @@ function WeekView({
             onClose={() => setSelectedWeekSlot(null)}
             onSaved={onSlotSaved}
             onToast={onSlotToast}
-            wrapperClassName="absolute z-30 pointer-events-auto w-72"
-            wrapperStyle={{
-              top: Math.max(0, (selectedWeekSlot.timeMin - weekViewStartMin) / MINUTES_PER_SLOT * SLOT_HEIGHT_PX),
-              left: String(selectedWeekSlot.dayIndex * (100 / 7)) + '%',
-            }}
+            wrapperClassName="absolute z-50 pointer-events-auto w-72"
+            wrapperStyle={weekQuickAddCardStyle}
           />
         )}
       </div>
@@ -1008,7 +1023,7 @@ function WeekView({
       {/* Línea “ahora” solo en la columna de hoy, sin pastilla */}
       {isTodayInWeek && currentTimeTop != null && (
         <div
-          className="absolute left-0 right-0 z-30 pointer-events-none flex items-start"
+          className="absolute left-0 right-0 z-10 pointer-events-none flex items-start"
           style={{ top: headerRowHeightPx + currentTimeTop }}
         >
           <div className="w-[56px] shrink-0" />
@@ -1512,6 +1527,19 @@ function DayViewContent({
     }
   }, [isToday, currentTimeTop])
 
+  const calendarQuickAddSlotStyle = useMemo((): React.CSSProperties | undefined => {
+    if (!selectedSlotTime) return undefined
+    const slotTopPx =
+      ((selectedSlotTime.timeMin - dayViewStartMin) / MINUTES_PER_SLOT) * SLOT_HEIGHT_PX
+    const gridHeightPx = totalSlots * SLOT_HEIGHT_PX
+    const spaceBelow = gridHeightPx - slotTopPx
+    const openUpward = spaceBelow < CALENDAR_QUICK_ADD_CARD_EST_PX
+    const topPx = openUpward
+      ? Math.max(0, slotTopPx - CALENDAR_QUICK_ADD_CARD_EST_PX)
+      : Math.max(0, slotTopPx)
+    return { top: topPx }
+  }, [selectedSlotTime, dayViewStartMin, totalSlots])
+
   return (
     <>
       <div className="relative grid grid-cols-[56px_1fr] w-full">
@@ -1526,7 +1554,10 @@ function DayViewContent({
             </div>
           ))}
         </div>
-        <div className="relative min-h-[400px] flex flex-col bg-zinc-900" style={{ height: totalSlots * SLOT_HEIGHT_PX }}>
+        <div
+          className="relative z-30 min-h-[400px] flex flex-col bg-zinc-900"
+          style={{ height: totalSlots * SLOT_HEIGHT_PX }}
+        >
           {/* Capa de fondo: franjas cerradas (solo visual, no bloquea eventos) */}
           <div className="absolute inset-0 z-0 pointer-events-none" aria-hidden>
             {closedHourRuns.map((run, i) => (
@@ -1564,7 +1595,7 @@ function DayViewContent({
             })}
           </div>
           {/* Capa de citas: overlay que no bloquea (solo los botones son clickeables) */}
-          <div className="absolute inset-0 z-20 pointer-events-none overflow-visible">
+          <div className="absolute inset-0 z-40 pointer-events-none overflow-visible">
             <div className="relative w-full h-full">
               {appointmentsWithColumns.map(({ apt, startMin, endMin, columnIndex, totalColumns }) => {
                 const slotOffset = (startMin - dayViewStartMin) / MINUTES_PER_SLOT
@@ -1600,10 +1631,8 @@ function DayViewContent({
                   onClose={() => setSelectedSlotTime(null)}
                   onSaved={onSaved}
                   onToast={onToast}
-                  wrapperClassName="absolute z-30 pointer-events-auto w-72 right-0"
-                  wrapperStyle={{
-                    top: Math.max(0, (selectedSlotTime.timeMin - dayViewStartMin) / MINUTES_PER_SLOT * SLOT_HEIGHT_PX),
-                  }}
+                  wrapperClassName="absolute z-50 pointer-events-auto w-72 right-0"
+                  wrapperStyle={calendarQuickAddSlotStyle}
                 />
               )}
             </div>
@@ -1612,7 +1641,7 @@ function DayViewContent({
         {isToday && currentTimeTop != null && (
           <div
             ref={currentTimeLineRef}
-            className="absolute left-0 right-0 z-30 pointer-events-none flex items-start"
+            className="absolute left-0 right-0 z-10 pointer-events-none flex items-start"
             style={{ top: currentTimeTop }}
           >
             <div className="w-[56px] flex justify-end shrink-0">

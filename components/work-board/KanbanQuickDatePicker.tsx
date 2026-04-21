@@ -54,16 +54,16 @@ function parseDateOnlyLocal(yyyyMmDd: string): Date | null {
   return Number.isNaN(d.getTime()) ? null : d
 }
 
-/** Texto tipo «5/5/26 a las 8:15 p. m.» */
+/** Texto tipo «5/5/26 a las 20:15» (24 h). */
 function formatDateTimeChip(d: Date) {
-  return format(d, "d/M/yy 'a las' h:mm a", { locale: es })
+  return format(d, "d/M/yy 'a las' HH:mm", { locale: es })
 }
 
-/** Vista bajo la rueda: 12 h (medianoche → 12:00 a. m., no 00:00). */
+/** Texto bajo la rueda de hora (24 h). */
 function formatTimeListLabel(hhmm: string) {
   const [h, m] = hhmm.split(':').map(Number)
   if (Number.isNaN(h) || Number.isNaN(m)) return hhmm
-  return format(new Date(2020, 0, 1, h, m), 'h:mm a', { locale: es })
+  return format(new Date(2020, 0, 1, h, m), 'HH:mm')
 }
 
 const WHEEL_MINUTES_FIVE = Array.from({ length: 12 }, (_, i) => i * 5) as readonly number[]

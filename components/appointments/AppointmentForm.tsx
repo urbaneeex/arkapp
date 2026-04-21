@@ -12,6 +12,7 @@ import { addMinutes, format, parseISO } from 'date-fns'
 import { useToastFeedback } from '@/hooks/use-toast-feedback'
 import { notifySuccess } from '@/lib/notify'
 import type { PipelineStageRow } from '@/lib/work-items/types'
+import { WORK_BOARD_CALENDAR_PATH } from '@/lib/routes'
 
 type Client = { id: string; name: string; phone?: string; email?: string }
 type Service = { id: string; name: string; duration: number; price: number }
@@ -168,7 +169,7 @@ export function AppointmentForm({
         setLoading(false)
         return
       }
-      if (redirectOnSuccess) router.push('/dashboard/calendar')
+      if (redirectOnSuccess) router.push(WORK_BOARD_CALENDAR_PATH)
       else onSuccess?.()
       notifySuccess('Cita actualizada correctamente')
     } else {
@@ -215,7 +216,7 @@ export function AppointmentForm({
           console.error('[AppointmentForm] Fallo al llamar al webhook n8n:', e)
         }
       }
-      if (redirectOnSuccess) router.push('/dashboard/calendar')
+      if (redirectOnSuccess) router.push(WORK_BOARD_CALENDAR_PATH)
       else onSuccess?.()
       notifySuccess('Cita creada correctamente')
     }
@@ -403,7 +404,7 @@ export function AppointmentForm({
         <Button
           type="button"
           variant="outline"
-          onClick={() => (onCancel ? onCancel() : router.push('/dashboard/calendar'))}
+          onClick={() => (onCancel ? onCancel() : router.push(WORK_BOARD_CALENDAR_PATH))}
         >
           Cancelar
         </Button>
