@@ -3,6 +3,8 @@ import { Space_Grotesk } from "next/font/google";
 import { SessionGuard } from "@/components/auth/SessionGuard";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { SonnerToaster } from "@/components/ui/sonner-toaster";
+import { SpeedInsights } from "@vercel/speed-insights/next";
+import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 
 const spaceGrotesk = Space_Grotesk({
@@ -49,6 +51,8 @@ export default function RootLayout({
           <SessionGuard>
             {children}
             <SonnerToaster />
+            <SpeedInsights />
+            <Analytics />
           </SessionGuard>
         </ThemeProvider>
       </body>
