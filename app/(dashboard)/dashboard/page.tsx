@@ -15,8 +15,8 @@ import {
   UserX,
   Clock,
 } from 'lucide-react'
+import dynamic from 'next/dynamic'
 import { PageHeader } from '@/components/layout/PageHeader'
-import { LiveClockPanel } from '@/components/dashboard/LiveClockPanel'
 import { PendingActionsCard, type ActionIconKey } from '@/components/dashboard/PendingActionsCard'
 import { DEFAULT_MATRIX, PERMISSION_LEVEL_IDS, type LevelId } from '@/lib/permissions'
 import {
@@ -30,6 +30,19 @@ import {
 } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { WORK_BOARD_CALENDAR_PATH } from '@/lib/routes'
+
+const LiveClockPanel = dynamic(
+  () =>
+    import('@/components/dashboard/LiveClockPanel').then((m) => m.LiveClockPanel),
+  {
+    loading: () => (
+      <div
+        className="mt-6 h-40 w-full animate-pulse rounded-lg border border-zinc-800 bg-zinc-900/40"
+        aria-hidden
+      />
+    ),
+  }
+)
 
 export const metadata: Metadata = {
   title: 'Inicio',

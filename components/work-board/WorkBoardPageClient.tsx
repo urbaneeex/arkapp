@@ -1,14 +1,41 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
+import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
 import { usePermissions } from '@/hooks/usePermissions'
 import type { WorkItemCard, WorkBoardStaffOption, PipelineStageRow } from '@/lib/work-items/types'
 import { WorkBoardToolbar, type WorkBoardViewMode } from './WorkBoardToolbar'
 import { WorkBoardActionBar } from './WorkBoardActionBar'
-import { WorkBoardKanbanView } from './WorkBoardKanbanView'
-import { WorkBoardConfigPanel } from './WorkBoardConfigPanel'
-import { CalendarView } from '@/components/calendar/CalendarView'
+
+const WorkBoardKanbanView = dynamic(
+  () => import('./WorkBoardKanbanView').then((m) => m.WorkBoardKanbanView),
+  {
+    loading: () => (
+      <div
+        className="min-h-[280px] animate-pulse rounded-lg bg-zinc-900/60"
+        aria-hidden
+      />
+    ),
+  }
+)
+
+const CalendarView = dynamic(
+  () => import('@/components/calendar/CalendarView').then((m) => m.CalendarView),
+  {
+    loading: () => (
+      <div
+        className="min-h-[50vh] w-full min-w-0 flex-1 animate-pulse bg-zinc-900/50"
+        aria-hidden
+      />
+    ),
+  }
+)
+
+const WorkBoardConfigPanel = dynamic(
+  () => import('./WorkBoardConfigPanel').then((m) => m.WorkBoardConfigPanel),
+  { loading: () => null }
+)
 
 type Shift = { open_time: string; close_time: string; is_closed: boolean }
 

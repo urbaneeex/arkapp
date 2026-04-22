@@ -35,6 +35,15 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // Menos JS transferido: importar solo módulos usados de paquetes con muchos subpaths
+  // (lucide: docenas de iconos; date-fns: muchas funciones; RBC: tipos/exports).
+  experimental: {
+    optimizePackageImports: [
+      "lucide-react",
+      "date-fns",
+      "react-big-calendar",
+    ],
+  },
   async headers() {
     return [
       {
