@@ -1,3 +1,5 @@
+import type { KanbanPriorityLevel } from './kanbanPriority'
+
 export type PipelineStageRow = {
   id: string
   business_id: string
@@ -33,4 +35,6 @@ export type WorkItemCard = {
   stage_label: string
   status: string | null
   price_total: number | null
+  /** Desde `metadata.kanban_priority` en citas del tablero. */
+  kanban_priority?: KanbanPriorityLevel | null
 }

@@ -1,3 +1,4 @@
+import { parseKanbanPriorityFromMetadata } from './kanbanPriority'
 import type { WorkItemCard } from './types'
 
 type NestedName = { name: string } | { name: string }[] | null
@@ -90,5 +91,6 @@ export function mapAppointmentRowToWorkItem(row: AppointmentRowInput): WorkItemC
     stage_label: stage.label,
     status: row.status ?? null,
     price_total: row.price_total ?? null,
+    kanban_priority: parseKanbanPriorityFromMetadata(row.metadata ?? null),
   }
 }

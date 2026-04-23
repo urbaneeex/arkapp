@@ -1,17 +1,22 @@
 'use client'
 
 import { parseISO } from 'date-fns'
-import { Calendar, User } from 'lucide-react'
+import { Calendar, Flag, User, Wrench } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { stageColorClassForSlug } from '@/lib/work-items/stageColors'
+import {
+  kanbanPriorityFlagClass,
+  kanbanPriorityLabel,
+} from '@/lib/work-items/kanbanPriority'
 import {
   formatTaskRangeRelative,
   taskRangeHasOverduePart,
 } from '@/lib/work-items/formatRelativeTaskRange'
+import { stageColorClassForSlug } from '@/lib/work-items/stageColors'
 import type { WorkItemCard } from '@/lib/work-items/types'
 
-const badgeBase =
-  'inline-flex max-w-full items-center gap-1.5 rounded-md border border-zinc-700/70 bg-zinc-950/55 px-2 py-1 font-medium text-zinc-300'
+function iconBox(compact: boolean | undefined) {
+  return cn('inline-flex shrink-0 items-center justify-center', compact ? 'h-3 w-3' : 'h-3.5 w-3.5')
+}
 
 export function WorkBoardCard({
   item,
@@ -27,9 +32,15 @@ export function WorkBoardCard({
   const end = hasSchedule ? parseISO(item.end_time!) : null
   const now = new Date()
   const rangeLabel =
-    start && end ? formatTaskRangeRelative(start, end, now) : 'Sin fecha'
+    start && end ? formatTaskRangeRelative(start, end, now) : null
   const rangeOverdue = start && end ? taskRangeHasOverduePart(start, end, now) : false
   const assignee = item.staff_name?.trim() || null
+  const client = item.client_name?.trim() || null
+  const service = item.service_name?.trim() || null
+  const priority = item.kanban_priority ?? null
+  const priorityText = kanbanPriorityLabel(priority)
+
+  const textRow = compact ? 'text-[11px] leading-snug' : 'text-xs leading-snug'
 
   return (
     <button
@@ -42,47 +53,85 @@ export function WorkBoardCard({
       )}
     >
       <p className="font-semibold leading-snug text-zinc-100 truncate">{item.displayTitle}</p>
-      <p
-        className={cn(
-          'truncate mt-0.5 leading-snug text-zinc-400',
-          compact ? 'text-xs' : 'text-sm'
-        )}
-      >
-        {item.client_name?.trim() || 'Sin cliente'}
-      </p>
-      <div className={cn('mt-2 flex flex-wrap items-center gap-1.5', compact ? 'gap-1' : 'gap-1.5')}>
-        <span
-          className={cn(badgeBase, compact ? 'text-[11px]' : 'text-xs')}
-          title={assignee ? `Responsable: ${assignee}` : 'Sin responsable asignado'}
-        >
-          <User
-            className={cn('shrink-0 text-zinc-500', compact ? 'h-3 w-3' : 'h-3.5 w-3.5')}
-            aria-hidden
-          />
-          <span className="min-w-0 truncate">{assignee ?? 'Sin asignar'}</span>
-        </span>
-        <span
+
+      <div className={cn('mt-2 flex flex-col gap-1', compact ? 'gap-0.5' : 'gap-1')}>
+        {/* 1. Fecha */}
+        <div
           className={cn(
-            badgeBase,
-            compact ? 'text-[11px]' : 'text-xs',
-            rangeOverdue && 'border-red-500/35 bg-red-950/25 text-red-300'
+            'flex min-h-[1.125rem] items-center gap-1.5',
+            rangeOverdue && hasSchedule && 'text-red-300'
           )}
           title={
             hasSchedule
               ? `Inicio: ${item.start_time}\nFin: ${item.end_time}`
               : 'Sin fecha programada'
           }
+          aria-label={rangeLabel ?? 'Sin fecha programada'}
         >
           <Calendar
             className={cn(
-              'shrink-0',
-              compact ? 'h-3 w-3' : 'h-3.5 w-3.5',
-              rangeOverdue ? 'text-red-400/90' : 'text-zinc-500'
+              iconBox(compact),
+              rangeOverdue && hasSchedule ? 'text-red-400/90' : 'text-zinc-500'
             )}
             aria-hidden
           />
-          <span className="min-w-0 truncate tabular-nums">{rangeLabel}</span>
-        </span>
+          {rangeLabel ? (
+            <span className={cn('min-w-0 truncate tabular-nums text-zinc-300', textRow)}>
+              {rangeLabel}
+            </span>
+          ) : null}
+        </div>
+
+        {/* 2. Empleados */}
+        <div
+          className="flex min-h-[1.125rem] items-center gap-1.5"
+          title={assignee ? `Responsable: ${assignee}` : 'Sin responsable asignado'}
+          aria-label={assignee ?? 'Sin responsable asignado'}
+        >
+          <User className={cn(iconBox(compact), 'text-zinc-500')} aria-hidden />
+          {assignee ? (
+            <span className={cn('min-w-0 truncate text-zinc-300', textRow)}>{assignee}</span>
+          ) : null}
+        </div>
+
+        {/* 3. Prioridad */}
+        <div
+          className="flex min-h-[1.125rem] items-center gap-1.5"
+          title={priorityText ?? 'Sin prioridad'}
+          aria-label={priorityText ?? 'Sin prioridad'}
+        >
+          <Flag
+            className={cn(iconBox(compact), priority ? kanbanPriorityFlagClass(priority) : 'text-zinc-500')}
+            aria-hidden
+          />
+          {priorityText ? (
+            <span className={cn('min-w-0 truncate text-zinc-300', textRow)}>{priorityText}</span>
+          ) : null}
+        </div>
+
+        {/* 4. Cliente */}
+        <div
+          className="flex min-h-[1.125rem] items-center gap-1.5"
+          title={client ? `Cliente: ${client}` : 'Sin cliente'}
+          aria-label={client ?? 'Sin cliente'}
+        >
+          <User className={cn(iconBox(compact), 'text-zinc-500')} aria-hidden />
+          {client ? (
+            <span className={cn('min-w-0 truncate text-zinc-300', textRow)}>{client}</span>
+          ) : null}
+        </div>
+
+        {/* 5. Servicio */}
+        <div
+          className="flex min-h-[1.125rem] items-center gap-1.5"
+          title={service ? `Servicio: ${service}` : 'Sin servicio'}
+          aria-label={service ?? 'Sin servicio'}
+        >
+          <Wrench className={cn(iconBox(compact), 'text-zinc-500')} aria-hidden />
+          {service ? (
+            <span className={cn('min-w-0 truncate text-zinc-300', textRow)}>{service}</span>
+          ) : null}
+        </div>
       </div>
     </button>
   )
