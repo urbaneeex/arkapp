@@ -1,6 +1,14 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import {
+  type ComponentProps,
+  type CSSProperties,
+  useState,
+  useRef,
+  useEffect,
+  useCallback,
+  useMemo,
+} from 'react'
 import {
   DndContext,
   closestCenter,
@@ -8,6 +16,7 @@ import {
   PointerSensor,
   useSensor,
   useSensors,
+  useDroppable,
 } from '@dnd-kit/core'
 import {
   SortableContext,
@@ -16,15 +25,40 @@ import {
   arrayMove,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { GripVertical, Plus, MoreHorizontal, Pencil, Palette, Trash2, ArrowRight, AlertTriangle } from 'lucide-react'
+import {
+  GripVertical,
+  MoreHorizontal,
+  Pencil,
+  Palette,
+  LayoutList,
+  Info,
+  Circle,
+  CircleDashed,
+  CheckCircle2,
+  Ban,
+  Plus,
+  Trash2,
+  ArrowRight,
+  AlertTriangle,
+} from 'lucide-react'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import type { PipelineStageRow, WorkItemCard } from '@/lib/work-items/types'
+import {
+  STAGE_CATEGORY_ORDER,
+  STAGE_CATEGORY_META,
+  enforcedCategoryForSlug,
+  isImmutableStageSlug,
+  type PipelineStageCategory,
+} from '@/lib/work-items/pipelineStageDefinitions'
 
 const PRESET_COLORS = [
   '#6366f1',
@@ -44,25 +78,61 @@ const PRESET_COLORS = [
 type LocalStage = {
   uid: string
   id?: string
+  slug: string
+  stage_category: PipelineStageCategory
   label: string
   color: string
   sort_order: number
 }
 
-type Conflict = {
-  id: string
-  label: string
-  color: string
-  count: number
-}
-
-type Reassignment = {
-  from_id: string
-  to_id: string
-}
-
 function generateUid() {
   return `new_${Math.random().toString(36).slice(2)}`
+}
+
+function sortStagesByCategory(stages: LocalStage[]): LocalStage[] {
+  return STAGE_CATEGORY_ORDER.flatMap((cat) =>
+    stages
+      .filter((s) => s.stage_category === cat)
+      .sort((a, b) => a.sort_order - b.sort_order)
+  )
+}
+
+function withSequentialSortOrder(stages: LocalStage[]): LocalStage[] {
+  return stages.map((s, i) => ({ ...s, sort_order: i }))
+}
+
+function mergeGroups(
+  prev: LocalStage[],
+  changedCat: PipelineStageCategory,
+  reorderedInCat: LocalStage[]
+): LocalStage[] {
+  const heads = STAGE_CATEGORY_ORDER.map((c) =>
+    c === changedCat
+      ? reorderedInCat
+      : prev.filter((s) => s.stage_category === c).sort((a, b) => a.sort_order - b.sort_order)
+  )
+  return withSequentialSortOrder(heads.flat())
+}
+
+function finalizeWithCategoryList(
+  restWithoutActive: LocalStage[],
+  targetCat: PipelineStageCategory,
+  newTargetList: LocalStage[]
+): LocalStage[] {
+  const heads = STAGE_CATEGORY_ORDER.map((c) =>
+    c === targetCat
+      ? newTargetList
+      : restWithoutActive
+          .filter((s) => s.stage_category === c)
+          .sort((a, b) => a.sort_order - b.sort_order)
+  )
+  return withSequentialSortOrder(heads.flat())
+}
+
+function parseCatDropId(id: string): PipelineStageCategory | null {
+  if (!id.startsWith('cat-')) return null
+  const c = id.slice(4) as PipelineStageCategory
+  return STAGE_CATEGORY_ORDER.includes(c) ? c : null
 }
 
 // ─── Color picker ────────────────────────────────────────────────────────────
@@ -85,7 +155,7 @@ function ColorPickerPopover({ color, onChange }: { color: string; onChange: (c: 
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1.5 rounded px-2 py-1 text-sm text-zinc-300 hover:bg-zinc-700/60 transition-colors w-full text-left"
+        className="flex w-full items-center gap-1.5 rounded px-2 py-1 text-left text-sm text-zinc-300 transition-colors hover:bg-zinc-700/60"
       >
         <Palette className="h-3.5 w-3.5 shrink-0 text-zinc-400" />
         Cambiar color
@@ -99,7 +169,10 @@ function ColorPickerPopover({ color, onChange }: { color: string; onChange: (c: 
                 key={c}
                 type="button"
                 title={c}
-                onClick={() => { onChange(c); setOpen(false) }}
+                onClick={() => {
+                  onChange(c)
+                  setOpen(false)
+                }}
                 className={cn(
                   'h-6 w-6 rounded-full transition-transform hover:scale-110 ring-2 ring-transparent',
                   color === c && 'ring-white/70'
@@ -114,18 +187,18 @@ function ColorPickerPopover({ color, onChange }: { color: string; onChange: (c: 
   )
 }
 
-// ─── Item action menu ─────────────────────────────────────────────────────────
-
 function ItemMenu({
   color,
   onRename,
   onColorChange,
   onDelete,
+  canDelete,
 }: {
   color: string
   onRename: () => void
   onColorChange: (c: string) => void
-  onDelete: () => void
+  onDelete?: () => void
+  canDelete?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -144,7 +217,7 @@ function ItemMenu({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex h-7 w-7 items-center justify-center rounded text-zinc-500 hover:bg-zinc-700/60 hover:text-zinc-200 transition-colors"
+        className="flex h-7 w-7 items-center justify-center rounded text-zinc-500 transition-colors hover:bg-zinc-700/60 hover:text-zinc-200"
       >
         <MoreHorizontal className="h-4 w-4" />
       </button>
@@ -152,32 +225,78 @@ function ItemMenu({
         <div className="absolute right-0 top-full z-[200] mt-1.5 min-w-[160px] rounded-xl border border-zinc-700 bg-zinc-900 py-1 shadow-xl">
           <button
             type="button"
-            onClick={() => { onRename(); setOpen(false) }}
-            className="flex items-center gap-2 px-3 py-1.5 text-sm text-zinc-300 hover:bg-zinc-700/60 transition-colors w-full text-left"
+            onClick={() => {
+              onRename()
+              setOpen(false)
+            }}
+            className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-zinc-300 transition-colors hover:bg-zinc-700/60"
           >
             <Pencil className="h-3.5 w-3.5 shrink-0 text-zinc-400" />
             Renombrar
           </button>
           <ColorPickerPopover
             color={color}
-            onChange={(c) => { onColorChange(c); setOpen(false) }}
+            onChange={(c) => {
+              onColorChange(c)
+              setOpen(false)
+            }}
           />
-          <div className="my-1 border-t border-zinc-800" />
-          <button
-            type="button"
-            onClick={() => { onDelete(); setOpen(false) }}
-            className="flex items-center gap-2 px-3 py-1.5 text-sm text-red-400 hover:bg-zinc-700/60 transition-colors w-full text-left"
-          >
-            <Trash2 className="h-3.5 w-3.5 shrink-0" />
-            Eliminar estado
-          </button>
+          {canDelete && onDelete ? (
+            <>
+              <div className="my-1 border-t border-zinc-800" />
+              <button
+                type="button"
+                onClick={() => {
+                  onDelete()
+                  setOpen(false)
+                }}
+                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-red-400 transition-colors hover:bg-zinc-700/60"
+              >
+                <Trash2 className="h-3.5 w-3.5 shrink-0" />
+                Eliminar estado
+              </button>
+            </>
+          ) : null}
         </div>
       )}
     </div>
   )
 }
 
-// ─── Sortable stage row ───────────────────────────────────────────────────────
+function StageSlugIcon({ slug }: { slug: string }) {
+  if (!slug) return <Circle className="h-4 w-4 shrink-0 text-zinc-600" aria-hidden />
+  if (slug === 'pending') {
+    return <CircleDashed className="h-4 w-4 shrink-0 text-zinc-400" aria-hidden />
+  }
+  if (slug === 'completed') {
+    return <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" aria-hidden />
+  }
+  if (slug === 'cancelled' || slug === 'no_show') {
+    return <Ban className="h-4 w-4 shrink-0 text-zinc-500" aria-hidden />
+  }
+  return <Circle className="h-4 w-4 shrink-0 text-violet-400" aria-hidden />
+}
+
+function CategoryDroppable({
+  category,
+  children,
+}: {
+  category: PipelineStageCategory
+  children: React.ReactNode
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: `cat-${category}` })
+  return (
+    <div
+      ref={setNodeRef}
+      className={cn(
+        'min-h-10 space-y-2 rounded-lg border border-dashed border-zinc-800/90 p-1.5 transition-colors',
+        isOver && 'border-brand/35 bg-brand/5'
+      )}
+    >
+      {children}
+    </div>
+  )
+}
 
 function SortableStageItem({
   stage,
@@ -186,14 +305,18 @@ function SortableStageItem({
 }: {
   stage: LocalStage
   onUpdate: (uid: string, patch: Partial<LocalStage>) => void
-  onDelete: (uid: string) => void
+  onDelete?: (uid: string) => void
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: stage.uid })
+  const locked = isImmutableStageSlug(stage.slug)
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: stage.uid,
+    disabled: false,
+  })
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(stage.label)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  const style: React.CSSProperties = {
+  const style: CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.5 : 1,
@@ -215,20 +338,31 @@ function SortableStageItem({
     <div
       ref={setNodeRef}
       style={style}
-      className="flex items-center gap-2 rounded-lg border border-zinc-700/60 bg-zinc-800/60 px-2 py-2"
+      className={cn(
+        'flex items-center gap-2 rounded-xl border bg-zinc-950/50 px-2.5 py-2.5 shadow-sm transition-shadow',
+        isDragging
+          ? 'border-brand/40 ring-1 ring-brand/25 shadow-md'
+          : 'border-zinc-800/90 hover:border-zinc-700/90'
+      )}
     >
       <button
         type="button"
-        className="cursor-grab touch-none text-zinc-600 hover:text-zinc-400 active:cursor-grabbing"
+        className="cursor-grab touch-none rounded-md p-0.5 text-zinc-500 hover:bg-zinc-800/80 hover:text-zinc-300 active:cursor-grabbing"
+        aria-label={locked ? 'Reordenar (solo en esta categoría)' : 'Arrastrar para reordenar o cambiar de categoría'}
         {...attributes}
         {...listeners}
       >
         <GripVertical className="h-4 w-4" />
       </button>
 
-      <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: stage.color }} />
+      <StageSlugIcon slug={stage.slug} />
 
-      <div className="flex-1 min-w-0">
+      <span
+        className="h-3 w-3 shrink-0 rounded-full ring-1 ring-zinc-700/80"
+        style={{ backgroundColor: stage.color }}
+      />
+
+      <div className="min-w-0 flex-1">
         {editing ? (
           <input
             ref={inputRef}
@@ -240,12 +374,15 @@ function SortableStageItem({
               if (e.key === 'Enter') commitEdit()
               if (e.key === 'Escape') setEditing(false)
             }}
-            className="w-full rounded bg-zinc-700/60 px-1.5 py-0.5 text-sm text-zinc-100 outline-none ring-1 ring-brand/60"
+            className="w-full rounded-lg border border-brand/50 bg-zinc-900 px-2.5 py-1.5 text-sm font-medium uppercase tracking-wide text-zinc-100 outline-none ring-2 ring-brand/20 placeholder:normal-case placeholder:text-zinc-500"
+            placeholder="Nombre del estado"
+            maxLength={120}
           />
         ) : (
           <span
-            className="block truncate text-sm font-medium text-zinc-100 cursor-text"
+            className="block cursor-text truncate text-sm font-semibold uppercase tracking-wide text-zinc-100"
             onDoubleClick={startEdit}
+            title="Doble clic para editar"
           >
             {stage.label}
           </span>
@@ -256,13 +393,19 @@ function SortableStageItem({
         color={stage.color}
         onRename={startEdit}
         onColorChange={(c) => onUpdate(stage.uid, { color: c })}
-        onDelete={() => onDelete(stage.uid)}
+        canDelete={!locked && Boolean(onDelete)}
+        onDelete={onDelete ? () => onDelete(stage.uid) : undefined}
       />
     </div>
   )
 }
 
-// ─── Reassignment step ────────────────────────────────────────────────────────
+type Conflict = {
+  id: string
+  label: string
+  color: string
+  count: number
+}
 
 function ReassignStep({
   conflicts,
@@ -279,8 +422,8 @@ function ReassignStep({
     <div className="space-y-4">
       <div className="flex items-start gap-2.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3.5 py-3">
         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
-        <p className="text-sm text-amber-200 leading-snug">
-          Los siguientes estados tienen tareas asignadas. Elige a qué estado moverlas antes de eliminarlos.
+        <p className="text-sm leading-snug text-amber-200">
+          Hay tareas en estados que vas a eliminar. Elige a qué estado moverlas.
         </p>
       </div>
 
@@ -309,7 +452,7 @@ function ReassignStep({
                 Selecciona un estado destino…
               </option>
               {survivingStages.map((s) => (
-                <option key={s.uid} value={s.id ?? s.uid}>
+                <option key={s.uid} value={s.id ?? ''} disabled={!s.id}>
                   {s.label}
                 </option>
               ))}
@@ -340,77 +483,159 @@ export function WorkBoardConfigPanel({
   const [deletedIds, setDeletedIds] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [addingLabel, setAddingLabel] = useState('')
-  const [showAdd, setShowAdd] = useState(false)
-  const addInputRef = useRef<HTMLInputElement>(null)
-
-  // Reassignment step state
   const [step, setStep] = useState<'edit' | 'reassign'>('edit')
   const [conflicts, setConflicts] = useState<Conflict[]>([])
   const [reassignments, setReassignments] = useState<Record<string, string>>({})
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
-  )
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
 
   useEffect(() => {
     if (open) {
-      setLocal(
-        stages.map((s, i) => ({
-          uid: s.id,
-          id: s.id,
-          label: s.label,
-          color: s.color || '#6366f1',
-          sort_order: s.sort_order ?? i,
-        }))
-      )
+      const mapped: LocalStage[] = stages.map((s) => ({
+        uid: s.id,
+        id: s.id,
+        slug: s.slug,
+        stage_category: enforcedCategoryForSlug(s.slug, s.stage_category),
+        label: s.label,
+        color: s.color || '#6366f1',
+        sort_order: s.sort_order ?? 0,
+      }))
+      setLocal(withSequentialSortOrder(sortStagesByCategory(mapped)))
       setDeletedIds([])
       setError(null)
-      setShowAdd(false)
-      setAddingLabel('')
       setStep('edit')
       setConflicts([])
       setReassignments({})
     }
   }, [open, stages])
 
-  useEffect(() => {
-    if (showAdd) setTimeout(() => addInputRef.current?.focus(), 0)
-  }, [showAdd])
-
-  function handleDragEnd(event: DragEndEvent) {
-    const { active, over } = event
-    if (over && active.id !== over.id) {
-      setLocal((items) => {
-        const oldIdx = items.findIndex((i) => i.uid === active.id)
-        const newIdx = items.findIndex((i) => i.uid === over.id)
-        return arrayMove(items, oldIdx, newIdx).map((item, idx) => ({ ...item, sort_order: idx }))
+  const updateStage = useCallback((uid: string, patch: Partial<LocalStage>) => {
+    setLocal((prev) =>
+      prev.map((s) => {
+        if (s.uid !== uid) return s
+        const next = { ...s, ...patch }
+        if (next.slug) {
+          next.stage_category = enforcedCategoryForSlug(next.slug, next.stage_category)
+        }
+        return next
       })
-    }
-  }
+    )
+  }, [])
 
-  function updateStage(uid: string, patch: Partial<LocalStage>) {
-    setLocal((prev) => prev.map((s) => (s.uid === uid ? { ...s, ...patch } : s)))
-  }
+  const deleteStage = useCallback((uid: string) => {
+    setLocal((prev) => {
+      const stage = prev.find((s) => s.uid === uid)
+      if (!stage || isImmutableStageSlug(stage.slug)) return prev
+      if (stage.id) {
+        const id = stage.id
+        queueMicrotask(() => {
+          setDeletedIds((d) => (d.includes(id) ? d : [...d, id]))
+        })
+      }
+      return prev.filter((s) => s.uid !== uid)
+    })
+  }, [])
 
-  function deleteStage(uid: string) {
-    const stage = local.find((s) => s.uid === uid)
-    if (stage?.id) setDeletedIds((prev) => [...prev, stage.id!])
-    setLocal((prev) => prev.filter((s) => s.uid !== uid))
-  }
-
-  function addStage() {
-    const trimmed = addingLabel.trim()
-    if (!trimmed) return
+  const addStage = useCallback((category: PipelineStageCategory) => {
     const uid = generateUid()
-    const maxOrder = local.reduce((m, s) => Math.max(m, s.sort_order), -1)
-    setLocal((prev) => [...prev, { uid, label: trimmed, color: '#6366f1', sort_order: maxOrder + 1 }])
-    setAddingLabel('')
-    setShowAdd(false)
-  }
+    setLocal((prev) => {
+      const next: LocalStage[] = [
+        ...prev,
+        {
+          uid,
+          label: 'Nuevo estado',
+          slug: '',
+          stage_category: category,
+          color: '#6366f1',
+          sort_order: prev.length,
+        },
+      ]
+      return withSequentialSortOrder(sortStagesByCategory(next))
+    })
+  }, [])
 
-  // Stage IDs que sobreviven (quedan en local y tienen id real)
-  const survivingStages = local.filter((s) => !!s.id)
+  const stagesByCategory = useCallback((list: LocalStage[]) => {
+    const sorted = sortStagesByCategory(list)
+    const groups = new Map<PipelineStageCategory, LocalStage[]>()
+    for (const cat of STAGE_CATEGORY_ORDER) {
+      groups.set(
+        cat,
+        sorted.filter((s) => s.stage_category === cat)
+      )
+    }
+    return groups
+  }, [])
+
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
+    const { active, over } = event
+    if (!over) return
+    const activeId = String(active.id)
+    const overId = String(over.id)
+    if (activeId === overId) return
+
+    setLocal((prev) => {
+      const activeItem = prev.find((s) => s.uid === activeId)
+      if (!activeItem) return prev
+
+      const locked = isImmutableStageSlug(activeItem.slug)
+      const overCatPrefix = parseCatDropId(overId)
+      const overItem = prev.find((s) => s.uid === overId)
+
+      if (locked) {
+        if (overCatPrefix && overCatPrefix !== activeItem.stage_category) return prev
+        if (overItem && overItem.stage_category !== activeItem.stage_category) return prev
+        const cat = activeItem.stage_category
+        const group = prev
+          .filter((s) => s.stage_category === cat)
+          .sort((a, b) => a.sort_order - b.sort_order)
+        const oldIdx = group.findIndex((s) => s.uid === activeId)
+        const newIdx = overItem ? group.findIndex((s) => s.uid === overId) : group.length - 1
+        if (oldIdx < 0 || newIdx < 0) return prev
+        const reordered = arrayMove(group, oldIdx, newIdx)
+        return mergeGroups(prev, cat, reordered)
+      }
+
+      if (overItem && activeItem.stage_category === overItem.stage_category) {
+        const cat = activeItem.stage_category
+        const group = prev
+          .filter((s) => s.stage_category === cat)
+          .sort((a, b) => a.sort_order - b.sort_order)
+        const oldIdx = group.findIndex((s) => s.uid === activeId)
+        const newIdx = group.findIndex((s) => s.uid === overId)
+        if (oldIdx < 0 || newIdx < 0) return prev
+        const reordered = arrayMove(group, oldIdx, newIdx)
+        return mergeGroups(prev, cat, reordered)
+      }
+
+      if (overItem && activeItem.stage_category !== overItem.stage_category) {
+        const rest = prev.filter((s) => s.uid !== activeId)
+        const moved = { ...activeItem, stage_category: overItem.stage_category }
+        const targetList = rest
+          .filter((s) => s.stage_category === overItem.stage_category)
+          .sort((a, b) => a.sort_order - b.sort_order)
+        const insIdx = targetList.findIndex((s) => s.uid === overId)
+        const newTarget =
+          insIdx < 0
+            ? [...targetList, moved]
+            : [...targetList.slice(0, insIdx), moved, ...targetList.slice(insIdx)]
+        return finalizeWithCategoryList(rest, overItem.stage_category, newTarget)
+      }
+
+      if (overCatPrefix) {
+        const rest = prev.filter((s) => s.uid !== activeId)
+        const moved = { ...activeItem, stage_category: overCatPrefix }
+        const targetList = rest
+          .filter((s) => s.stage_category === overCatPrefix)
+          .sort((a, b) => a.sort_order - b.sort_order)
+        const newTarget = [...targetList, moved]
+        return finalizeWithCategoryList(rest, overCatPrefix, newTarget)
+      }
+
+      return prev
+    })
+  }, [])
+
+  const survivingStages = useMemo(() => local.filter((s) => !!s.id), [local])
 
   function handleApplyClick() {
     if (deletedIds.length === 0) {
@@ -418,14 +643,18 @@ export function WorkBoardConfigPanel({
       return
     }
 
-    // Contar tareas por estado eliminado
     const foundConflicts: Conflict[] = []
     for (const delId of deletedIds) {
       const count = items.filter((item) => item.pipeline_stage_id === delId).length
       if (count > 0) {
         const original = stages.find((s) => s.id === delId)
         if (original) {
-          foundConflicts.push({ id: delId, label: original.label, color: original.color || '#6366f1', count })
+          foundConflicts.push({
+            id: delId,
+            label: original.label,
+            color: original.color || '#6366f1',
+            count,
+          })
         }
       }
     }
@@ -440,26 +669,29 @@ export function WorkBoardConfigPanel({
   }
 
   function handleConfirmReassign() {
-    // Validar que todos los conflictos tienen destino
     const missing = conflicts.filter((c) => !reassignments[c.id])
     if (missing.length > 0) {
       setError('Debes elegir un estado destino para cada grupo de tareas.')
       return
     }
     setError(null)
-    void doSave(conflicts.map((c) => ({ from_id: c.id, to_id: reassignments[c.id] })))
+    void doSave(conflicts.map((c) => ({ from_id: c.id, to_id: reassignments[c.id]! })))
   }
 
-  async function doSave(reassignmentList: Reassignment[]) {
+  async function doSave(reassignmentList: { from_id: string; to_id: string }[]) {
     setSaving(true)
     setError(null)
 
+    const ordered = withSequentialSortOrder(sortStagesByCategory(local))
     const body = {
-      stages: local.map((s, i) => ({
+      stages: ordered.map((s) => ({
         ...(s.id ? { id: s.id } : {}),
         label: s.label,
         color: s.color,
-        sort_order: i,
+        sort_order: s.sort_order,
+        stage_category: s.slug
+          ? enforcedCategoryForSlug(s.slug, s.stage_category)
+          : s.stage_category,
       })),
       deleted_ids: deletedIds,
       reassignments: reassignmentList,
@@ -488,78 +720,93 @@ export function WorkBoardConfigPanel({
     }
   }
 
+  const groups = stagesByCategory(local)
   const allReassigned = conflicts.length > 0 && conflicts.every((c) => !!reassignments[c.id])
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose() }}>
-      <DialogContent className="max-w-md p-0 gap-0 overflow-hidden">
-        <DialogHeader className="px-5 pt-5 pb-4 border-b border-zinc-800">
-          <DialogTitle className="text-base font-semibold text-zinc-100">
-            {step === 'edit' ? 'Configuración del tablero' : 'Mover tareas antes de eliminar'}
+      <DialogContent className="max-w-lg gap-0 overflow-hidden p-0 sm:max-w-lg">
+        <DialogHeader className="space-y-2 border-b border-zinc-800 bg-zinc-950/40 px-5 pb-5 pt-6 text-left">
+          <DialogTitle className="font-display text-xl font-bold tracking-tight text-zinc-100">
+            {step === 'edit' ? 'Ajustes del tablero' : 'Reasignar tareas'}
           </DialogTitle>
-          <p className="text-xs text-zinc-400 mt-0.5">
+          <DialogDescription className="text-sm leading-relaxed text-zinc-400">
             {step === 'edit'
-              ? 'Ordena, renombra o elimina los estados del embudo'
-              : 'Elige el estado destino para las tareas de cada columna eliminada'}
-          </p>
+              ? 'Pendiente y Completada son obligatorias y no se eliminan ni cambian de categoría. Crea más estados con + y muévelos entre grupos arrastrando.'
+              : 'Indica el estado destino para las tareas de cada columna eliminada.'}
+          </DialogDescription>
         </DialogHeader>
 
-        <div className="px-4 py-4 max-h-[60vh] overflow-y-auto">
+        <div className="max-h-[min(60vh,32rem)] overflow-y-auto px-5 py-5">
           {step === 'edit' ? (
-            <div className="space-y-2">
-              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-                <SortableContext items={local.map((s) => s.uid)} strategy={verticalListSortingStrategy}>
-                  {local.map((stage) => (
-                    <SortableStageItem
-                      key={stage.uid}
-                      stage={stage}
-                      onUpdate={updateStage}
-                      onDelete={deleteStage}
-                    />
-                  ))}
-                </SortableContext>
-              </DndContext>
-
-              {showAdd ? (
-                <div className="flex items-center gap-2 rounded-lg border border-dashed border-zinc-600 bg-zinc-800/40 px-3 py-2">
-                  <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: '#6366f1' }} />
-                  <input
-                    ref={addInputRef}
-                    value={addingLabel}
-                    onChange={(e) => setAddingLabel(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') addStage()
-                      if (e.key === 'Escape') setShowAdd(false)
-                    }}
-                    placeholder="Nombre del estado…"
-                    className="flex-1 bg-transparent text-sm text-zinc-100 placeholder:text-zinc-500 outline-none"
-                  />
-                  <button
-                    type="button"
-                    onClick={addStage}
-                    className="rounded bg-brand/20 px-2 py-0.5 text-xs font-medium text-brand hover:bg-brand/30 transition-colors"
-                  >
-                    Añadir
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowAdd(false)}
-                    className="text-xs text-zinc-500 hover:text-zinc-300"
-                  >
-                    Cancelar
-                  </button>
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+              <div className="space-y-6">
+                <div className="flex gap-3 rounded-lg border border-zinc-800/80 bg-zinc-950/30 px-3.5 py-3">
+                  <LayoutList className="mt-0.5 h-4 w-4 shrink-0 text-brand" aria-hidden />
+                  <div className="min-w-0 space-y-0.5">
+                    <p className="text-sm font-medium text-zinc-200">Categorías del embudo</p>
+                    <p className="text-xs leading-snug text-zinc-500">
+                      Arrastra estados entre categorías salvo Pendiente y Completada, que solo se reordenan dentro de
+                      su grupo.
+                    </p>
+                  </div>
                 </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setShowAdd(true)}
-                  className="flex w-full items-center gap-2 rounded-lg border border-dashed border-zinc-700 px-3 py-2 text-sm text-zinc-500 hover:border-zinc-500 hover:text-zinc-300 transition-colors"
-                >
-                  <Plus className="h-4 w-4" />
-                  Agregar estado
-                </button>
-              )}
-            </div>
+
+                {STAGE_CATEGORY_ORDER.map((category) => {
+                  const catStages = groups.get(category) ?? []
+                  const ids = catStages.map((s) => s.uid)
+                  return (
+                    <section key={category} className="space-y-2">
+                      <div className="flex items-center justify-between gap-2 px-0.5">
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                            {STAGE_CATEGORY_META[category].title}
+                          </h3>
+                          <button
+                            type="button"
+                            className="rounded p-0.5 text-zinc-600 hover:text-zinc-400"
+                            title={STAGE_CATEGORY_META[category].description}
+                            aria-label={STAGE_CATEGORY_META[category].description}
+                          >
+                            <Info className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 gap-1 px-2 text-xs text-zinc-400 hover:text-zinc-200"
+                          onClick={() => addStage(category)}
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                          Añadir
+                        </Button>
+                      </div>
+                      <CategoryDroppable category={category}>
+                        <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+                          <ul className="space-y-2" role="list">
+                            {catStages.length === 0 ? (
+                              <li className="px-2 py-3 text-center text-xs text-zinc-600">
+                                Suelta aquí o usa Añadir
+                              </li>
+                            ) : null}
+                            {catStages.map((stage) => (
+                              <li key={stage.uid}>
+                                <SortableStageItem
+                                  stage={stage}
+                                  onUpdate={updateStage}
+                                  onDelete={deleteStage}
+                                />
+                              </li>
+                            ))}
+                          </ul>
+                        </SortableContext>
+                      </CategoryDroppable>
+                    </section>
+                  )
+                })}
+              </div>
+            </DndContext>
           ) : (
             <ReassignStep
               conflicts={conflicts}
@@ -572,38 +819,37 @@ export function WorkBoardConfigPanel({
           )}
         </div>
 
-        {error && <p className="px-5 pb-2 text-xs text-red-400">{error}</p>}
+        {error ? (
+          <p className="border-t border-zinc-800/80 bg-red-950/20 px-5 py-2.5 text-sm text-red-400">{error}</p>
+        ) : null}
 
-        <div className="flex items-center justify-end gap-2 border-t border-zinc-800 px-5 py-4">
-          {step === 'reassign' && (
-            <button
+        <DialogFooter className="flex flex-row flex-wrap items-center justify-end gap-2 border-t border-zinc-800 bg-zinc-950/30 px-5 py-4 sm:space-x-0">
+          {step === 'reassign' ? (
+            <Button
               type="button"
+              variant="ghost"
+              className="mr-auto text-zinc-400 hover:text-zinc-200"
               onClick={() => { setStep('edit'); setError(null) }}
-              className="mr-auto rounded-lg border border-zinc-700 px-3 py-2 text-sm font-medium text-zinc-400 hover:bg-zinc-700/60 transition-colors"
             >
               ← Volver
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-300 hover:bg-zinc-700/60 transition-colors"
-          >
+            </Button>
+          ) : null}
+          <Button type="button" variant="outline" onClick={onClose} className="border-zinc-600 bg-transparent">
             Cancelar
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
+            className="bg-brand text-white hover:bg-brand-hover"
             onClick={step === 'edit' ? handleApplyClick : handleConfirmReassign}
             disabled={saving || (step === 'reassign' && !allReassigned)}
-            className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand-hover transition-colors disabled:opacity-50"
           >
             {saving
               ? 'Guardando…'
               : step === 'reassign'
                 ? 'Confirmar y guardar'
                 : 'Aplicar cambios'}
-          </button>
-        </div>
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   )

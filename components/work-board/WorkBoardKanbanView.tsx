@@ -2,24 +2,50 @@
 
 import React, { useMemo, useCallback, useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Check, Pencil, Plus, Flag, CornerDownLeft, User, Search, Users, Ban, X, Wrench, Loader2 } from 'lucide-react'
+import {
+  Calendar,
+  Check,
+  Pencil,
+  Plus,
+  Flag,
+  CornerDownLeft,
+  User,
+  Search,
+  Users,
+  Ban,
+  X,
+  Wrench,
+  Loader2,
+} from 'lucide-react'
 import { toast } from 'sonner'
-import { format } from 'date-fns'
+import { format, parseISO } from 'date-fns'
 import { es as esLocale } from 'date-fns/locale'
 import {
   DndContext,
+  DragOverlay,
   PointerSensor,
   useSensor,
   useSensors,
   closestCorners,
   type DragEndEvent,
+  type DragOverEvent,
+  type DragStartEvent,
+  type UniqueIdentifier,
 } from '@dnd-kit/core'
-import { useDroppable, useDraggable } from '@dnd-kit/core'
+import { useDroppable } from '@dnd-kit/core'
+import {
+  SortableContext,
+  arrayMove,
+  verticalListSortingStrategy,
+  useSortable,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 import type { WorkItemCard, WorkBoardStaffOption } from '@/lib/work-items/types'
 import type { PipelineStageRow } from '@/lib/work-items/types'
-import { WorkBoardCard } from './WorkBoardCard'
+import { WorkBoardCard, type WorkBoardCardKanbanActions } from './WorkBoardCard'
+import type { WorkBoardCardQuickEditContext } from './workBoardCardFields'
 import {
   KanbanQuickDatePicker,
   combineDateAndOptionalTime,
@@ -29,212 +55,120 @@ import {
   KANBAN_QUICK_ADD_ROW_MUTED,
   KANBAN_QUICK_ADD_ROW_TAP,
 } from './kanbanTypography'
-import { canMoveWorkItemByStageSlug } from '@/lib/work-items/canMoveWorkItem'
+import { isTerminalWorkItemStage } from '@/lib/work-items/canMoveWorkItem'
+import { kanbanCardAccentFromStageColor, stageColorClassForSlug } from '@/lib/work-items/stageColors'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+
+function buildColumnOrderMap(items: WorkItemCard[], stageIds: string[]): Record<string, string[]> {
+  const map: Record<string, string[]> = Object.fromEntries(stageIds.map((id) => [id, []]))
+  const byStage = new Map<string, WorkItemCard[]>()
+  for (const sid of stageIds) byStage.set(sid, [])
+  for (const it of items) {
+    if (byStage.has(it.pipeline_stage_id)) {
+      byStage.get(it.pipeline_stage_id)!.push(it)
+    }
+  }
+  for (const sid of stageIds) {
+    const list = [...(byStage.get(sid) ?? [])]
+    list.sort((a, b) => {
+      const ao = a.board_sort_order
+      const bo = b.board_sort_order
+      if (ao != null && bo != null && ao !== bo) return ao - bo
+      if (ao != null && bo == null) return -1
+      if (ao == null && bo != null) return 1
+      return (a.start_time ?? '').localeCompare(b.start_time ?? '')
+    })
+    map[sid] = list.map((i) => i.id)
+  }
+  return map
+}
+
+function findColumnForItemId(
+  orderMap: Record<string, string[]>,
+  stageIds: string[],
+  id: UniqueIdentifier
+): string | undefined {
+  const s = String(id)
+  if (stageIds.includes(s)) return s
+  for (const sid of stageIds) {
+    if (orderMap[sid]?.includes(s)) return sid
+  }
+  return undefined
+}
+
+function cloneOrderMap(m: Record<string, string[]>): Record<string, string[]> {
+  return Object.fromEntries(Object.entries(m).map(([k, v]) => [k, [...v]]))
+}
+
+function applyColumnMapToItems(
+  items: WorkItemCard[],
+  orderMap: Record<string, string[]>,
+  stages: PipelineStageRow[]
+): WorkItemCard[] {
+  const byId = new Map(items.map((i) => [i.id, { ...i }]))
+  for (const st of stages) {
+    const ids = orderMap[st.id] ?? []
+    ids.forEach((id, index) => {
+      const row = byId.get(id)
+      if (row) {
+        row.pipeline_stage_id = st.id
+        row.stage_slug = st.slug
+        row.stage_label = st.label
+        row.stage_category = st.stage_category
+        row.board_sort_order = index
+      }
+    })
+  }
+  return Array.from(byId.values())
+}
 
 function KanbanColumnHeader({
   stage,
   count,
-  canManageStages,
   canCreateAppointments,
   onQuickAdd,
-  onLabelSaved,
 }: {
   stage: PipelineStageRow
   count: number
-  canManageStages: boolean
   canCreateAppointments: boolean
   onQuickAdd: () => void
-  onLabelSaved: (stageId: string, label: string) => void
 }) {
-  const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState(stage.label)
-  const [saving, setSaving] = useState(false)
-  const [saveError, setSaveError] = useState<string | null>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
-  const editRootRef = useRef<HTMLDivElement>(null)
-  const draftRef = useRef(draft)
-  draftRef.current = draft
-
-  useEffect(() => {
-    if (editing) {
-      setDraft(stage.label)
-      setSaveError(null)
-      queueMicrotask(() => {
-        const el = inputRef.current
-        if (!el) return
-        el.focus()
-        el.select()
-      })
-    }
-  }, [editing, stage.label])
-
-  const cancelEdit = useCallback(() => {
-    setDraft(stage.label)
-    setSaveError(null)
-    setEditing(false)
-  }, [stage.label])
-
-  const handleSave = useCallback(async () => {
-    setSaveError(null)
-    const trimmed = draftRef.current.trim()
-    if (!trimmed) {
-      setSaveError('El nombre no puede estar vacío.')
-      return
-    }
-    if (trimmed === stage.label.trim()) {
-      cancelEdit()
-      return
-    }
-    setSaving(true)
-    try {
-      const res = await fetch(`/api/pipeline-stages/${stage.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ label: trimmed }),
-      })
-      const body = await res.json().catch(() => ({}))
-      if (res.status === 409) {
-        const msg =
-          typeof body.message === 'string' ? body.message : 'Ese nombre ya está en uso en otra columna.'
-        cancelEdit()
-        toast.error(msg)
-        return
-      }
-      if (!res.ok) {
-        setSaveError(typeof body.error === 'string' ? body.error : 'No se pudo guardar.')
-        return
-      }
-      const nextLabel = body?.stage?.label ?? trimmed
-      onLabelSaved(stage.id, nextLabel)
-      setEditing(false)
-      toast.success('Columna actualizada')
-    } finally {
-      setSaving(false)
-    }
-  }, [cancelEdit, onLabelSaved, stage.id, stage.label])
-
-  useEffect(() => {
-    if (!editing || saving) return
-    const onPointerDown = (e: PointerEvent) => {
-      const root = editRootRef.current
-      if (!root || root.contains(e.target as Node)) return
-      const t = draftRef.current.trim()
-      if (!t || t === stage.label.trim()) {
-        cancelEdit()
-        return
-      }
-      void handleSave()
-    }
-    document.addEventListener('pointerdown', onPointerDown, true)
-    return () => document.removeEventListener('pointerdown', onPointerDown, true)
-  }, [editing, saving, cancelEdit, handleSave, stage.label])
-
   return (
     <div className="border-b border-zinc-800 px-3 py-1.5 shrink-0 rounded-t-xl">
-      {!editing ? (
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex min-w-0 flex-1 items-center gap-1.5">
-            {stage.color && (
-              <span
-                className="h-2.5 w-2.5 shrink-0 rounded-full"
-                style={{ backgroundColor: stage.color }}
-              />
-            )}
-            {canManageStages ? (
-              <button
-                type="button"
-                className="min-w-0 flex-1 truncate text-left transition-colors hover:text-zinc-50"
-                onClick={() => setEditing(true)}
-              >
-                <h2 className="truncate text-sm font-semibold uppercase tracking-wide leading-tight text-zinc-200">
-                  {stage.label}
-                </h2>
-              </button>
-            ) : (
-              <h2 className="min-w-0 flex-1 truncate text-sm font-semibold uppercase tracking-wide leading-tight text-zinc-200">
-                {stage.label}
-              </h2>
-            )}
-            <span className="shrink-0 text-xs font-medium tabular-nums leading-none text-zinc-500">
-              {count}
-            </span>
-          </div>
-          {(canManageStages || canCreateAppointments) ? (
-            <div className="flex items-center gap-1">
-              {canManageStages ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="h-8 w-8 shrink-0 rounded-md p-0 text-zinc-400 hover:bg-zinc-800/90 hover:text-zinc-100"
-                  aria-label="Renombrar columna"
-                  onClick={() => setEditing(true)}
-                >
-                  <Pencil className="h-3.5 w-3.5" />
-                </Button>
-              ) : null}
-              {canCreateAppointments ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="h-8 w-8 shrink-0 rounded-md p-0 text-zinc-400 hover:bg-zinc-800/90 hover:text-zinc-100"
-                  aria-label="Añadir tarea en esta columna"
-                  onClick={onQuickAdd}
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                </Button>
-              ) : null}
-            </div>
-          ) : null}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex min-w-0 flex-1 items-center gap-1.5">
+          <span
+            className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-zinc-700/80"
+            style={{ backgroundColor: stage.color?.trim() || '#6366f1' }}
+          />
+          <h2 className="min-w-0 flex-1 truncate text-sm font-semibold uppercase tracking-wide leading-tight text-zinc-200">
+            {stage.label}
+          </h2>
+          <span className="shrink-0 text-xs font-medium tabular-nums leading-none text-zinc-500">
+            {count}
+          </span>
         </div>
-      ) : (
-        <div ref={editRootRef} className="flex min-w-0 flex-col gap-1">
-          <div
-            className={cn(
-              'flex min-w-0 w-full items-center gap-1 rounded-md border border-zinc-500/90 bg-zinc-900/85 py-0.5 pl-3 pr-1 shadow-inner focus-within:border-zinc-400/90 focus-within:ring-1 focus-within:ring-brand/35',
-              saveError && 'border-red-500/50'
-            )}
+        {canCreateAppointments ? (
+          <Button
+            type="button"
+            variant="ghost"
+            className="h-8 w-8 shrink-0 rounded-md p-0 text-zinc-400 hover:bg-zinc-800/90 hover:text-zinc-100"
+            aria-label="Añadir tarea en esta columna"
+            onClick={onQuickAdd}
           >
-            <Input
-              ref={inputRef}
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              maxLength={120}
-              disabled={saving}
-              placeholder="Nombre de la columna…"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault()
-                  void handleSave()
-                }
-                if (e.key === 'Escape') {
-                  e.preventDefault()
-                  cancelEdit()
-                }
-              }}
-              className="h-8 min-w-0 flex-1 border-0 bg-transparent px-0 text-sm font-semibold uppercase tracking-wide text-zinc-100 caret-brand shadow-none placeholder:text-zinc-500 placeholder:normal-case focus-visible:ring-0 focus-visible:ring-offset-0"
-              aria-label="Nombre de la columna"
-            />
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={saving}
-              className="h-8 w-8 shrink-0 rounded-md border border-zinc-600/80 bg-zinc-800 p-0 text-zinc-200 hover:bg-zinc-700 hover:text-white disabled:opacity-50"
-              aria-label="Guardar nombre"
-              onClick={() => void handleSave()}
-            >
-              {saving ? (
-                <span className="text-[10px] font-semibold tabular-nums">…</span>
-              ) : (
-                <Check className="h-4 w-4" aria-hidden />
-              )}
-            </Button>
-          </div>
-          {saveError ? <p className="text-xs leading-snug text-red-400">{saveError}</p> : null}
-        </div>
-      )}
+            <Plus className="h-3.5 w-3.5" />
+          </Button>
+        ) : null}
+      </div>
     </div>
   )
 }
@@ -279,6 +213,26 @@ export type KanbanService = { id: string; name: string; duration: number; price:
 type ClientOption = { id: string; name: string; phone?: string | null; email?: string | null }
 type KanbanStaffAvail = Record<string, boolean>
 
+function staffIdsFromWorkItem(item: WorkItemCard): string[] {
+  const m = item.metadata
+  const raw =
+    m && typeof m === 'object' && !Array.isArray(m)
+      ? (m as Record<string, unknown>).kanban_assignees
+      : undefined
+  if (Array.isArray(raw)) {
+    const ids: string[] = []
+    for (const e of raw) {
+      if (e && typeof e === 'object' && 'id' in e) {
+        const id = (e as { id: unknown }).id
+        if (typeof id === 'string' && id) ids.push(id)
+      }
+    }
+    if (ids.length > 0) return ids
+  }
+  if (item.staff_id) return [item.staff_id]
+  return []
+}
+
 export function KanbanQuickAddAppointment({
   stageId,
   businessId,
@@ -295,6 +249,9 @@ export function KanbanQuickAddAppointment({
   onToast,
   wrapperClassName,
   wrapperStyle,
+  editItem,
+  onEditClose,
+  variant = 'default',
 }: {
   stageId?: string
   businessId: string
@@ -311,8 +268,15 @@ export function KanbanQuickAddAppointment({
   onToast?: (message: string, type: 'success' | 'error') => void
   wrapperClassName?: string
   wrapperStyle?: React.CSSProperties
+  /** Si está definido, el panel es edición inline (misma UI que crear). */
+  editItem?: WorkItemCard | null
+  onEditClose?: () => void
+  /** `modal`: solo el formulario; el padre envuelve en Dialog (sin botón colapsable). */
+  variant?: 'default' | 'modal'
 }) {
+  const isEditMode = Boolean(editItem)
   const isCalendarMode = !!(defaultOpen && onClose)
+  const isModalSurface = variant === 'modal'
   const supabase = createClient()
   const panelRef = useRef<HTMLDivElement>(null)
   const assignPopoverRef = useRef<HTMLDivElement>(null)
@@ -372,10 +336,11 @@ export function KanbanQuickAddAppointment({
 
   /** Título vacío + servicio: mostrar el nombre del servicio en el input al momento (y si borra el título, volver a reflejarlo). */
   useEffect(() => {
+    if (isEditMode) return
     if (!selectedService?.name?.trim()) return
     if (title.trim() !== '') return
     setTitle(selectedService.name)
-  }, [selectedService?.id, selectedService?.name, title])
+  }, [isEditMode, selectedService?.id, selectedService?.name, title])
 
   // Búsqueda de cliente con debounce
   useEffect(() => {
@@ -473,37 +438,112 @@ export function KanbanQuickAddAppointment({
     return null
   }, [clientMode, selectedClient, newClientName])
 
+  const resetNewTaskDraft = useCallback(() => {
+    const d = calcInitialDate()
+    const t = calcInitialTime()
+    setTitle('')
+    setStartDate(d)
+    setStartTime(t)
+    setEndLocal(calcInitialEnd(d, t))
+    setPriority('none')
+    setStaffIds([])
+    setStaffAvail({})
+    setAssignOpen(false)
+    setAssignSearch('')
+    setPriorityMenuOpen(false)
+    setDateMenuOpen(false)
+    setError(null)
+    resetClientState()
+    setSelectedService(null)
+    setServicePopoverOpen(false)
+  }, [])
+
+  /** Modal / apertura del panel: reinicio sin atar a `stageId` (el usuario puede cambiar columna sin perder el borrador). */
   useEffect(() => {
-    if (open) {
-      const d = calcInitialDate()
-      const t = calcInitialTime()
-      setTitle('')
-      setStartDate(d)
-      setStartTime(t)
-      setEndLocal(calcInitialEnd(d, t))
-      setPriority('none')
-      setStaffIds([])
-      setStaffAvail({})
-      setAssignOpen(false)
-      setAssignSearch('')
-      setPriorityMenuOpen(false)
-      setDateMenuOpen(false)
-      setError(null)
-      resetClientState()
-      setSelectedService(null)
-      setServicePopoverOpen(false)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, stageId])
+    if (isEditMode) return
+    if (!open && !isModalSurface) return
+    resetNewTaskDraft()
+  }, [open, isEditMode, isModalSurface, resetNewTaskDraft])
+
+  /** Solo en columna Kanban: al cambiar `stageId` con panel abierto, reiniciar. */
+  useEffect(() => {
+    if (isEditMode || isModalSurface) return
+    if (!open) return
+    resetNewTaskDraft()
+  }, [stageId, isEditMode, isModalSurface, open, resetNewTaskDraft])
 
   useEffect(() => {
+    if (!editItem) return
+    const titleVal = editItem.title?.trim() || editItem.displayTitle?.trim() || ''
+    setTitle(titleVal)
+    if (editItem.start_time) {
+      const s = parseISO(editItem.start_time)
+      if (!Number.isNaN(s.getTime())) {
+        setStartDate(format(s, 'yyyy-MM-dd'))
+        setStartTime(format(s, 'HH:mm'))
+      } else {
+        setStartDate('')
+        setStartTime('')
+      }
+    } else {
+      setStartDate('')
+      setStartTime('')
+    }
+    setEndLocal(editItem.end_time ?? null)
+    setPriority(editItem.kanban_priority ?? 'none')
+    setStaffIds(staffIdsFromWorkItem(editItem))
+    setStaffAvail({})
+    setAssignOpen(false)
+    setAssignSearch('')
+    setPriorityMenuOpen(false)
+    setDateMenuOpen(false)
+    setError(null)
+    setServicePopoverOpen(false)
+    setClientPopoverOpen(false)
+    if (editItem.client_id) {
+      setClientMode('existing')
+      setSelectedClient({
+        id: editItem.client_id,
+        name: (editItem.client_name ?? '').trim() || 'Cliente',
+        phone: null,
+        email: null,
+      })
+      setIsEditingClient(false)
+      setEditClientPhone('')
+      setEditClientEmail('')
+      setClientQuery('')
+      setClientResults([])
+    } else {
+      setClientMode('search')
+      setSelectedClient(null)
+      setIsEditingClient(false)
+      setClientQuery('')
+      setClientResults([])
+    }
+    // Servicio: efecto aparte cuando carga la lista de servicios.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- rehidratar solo al cambiar de cita (id)
+  }, [editItem?.id ?? ''])
+
+  useEffect(() => {
+    if (!isEditMode || !editItem) return
+    if (!editItem.service_id) {
+      setSelectedService(null)
+      return
+    }
+    const svc = services.find((s) => s.id === editItem.service_id) ?? null
+    if (svc) setSelectedService(svc)
+  }, [isEditMode, editItem?.id, editItem?.service_id, services])
+
+  useEffect(() => {
+    if (isEditMode) return
     if (!forceOpenSignal) return
     setOpenAtTop(true)
     setOpen(true)
-  }, [forceOpenSignal])
+  }, [forceOpenSignal, isEditMode])
 
   useEffect(() => {
-    if (!open && !isCalendarMode) return
+    if (isModalSurface) return
+    if (!isEditMode && !open && !isCalendarMode) return
     const onPointerDown = (e: PointerEvent) => {
       const t = e.target as Node
       if (assignPopoverRef.current?.contains(t)) return
@@ -513,11 +553,17 @@ export function KanbanQuickAddAppointment({
       if (servicePopoverRef.current?.contains(t)) return
       const node = panelRef.current
       if (!node || node.contains(t)) return
-      if (isCalendarMode) { onClose?.() } else { setOpen(false) }
+      if (isCalendarMode) {
+        onClose?.()
+      } else if (isEditMode) {
+        onEditClose?.()
+      } else {
+        setOpen(false)
+      }
     }
     document.addEventListener('pointerdown', onPointerDown, true)
     return () => document.removeEventListener('pointerdown', onPointerDown, true)
-  }, [open, isCalendarMode, onClose])
+  }, [open, isCalendarMode, onClose, isEditMode, onEditClose, isModalSurface])
 
   /** Si inicio (fecha + hora) es igual o posterior al fin, el fin deja de ser válido. */
   useEffect(() => {
@@ -559,15 +605,36 @@ export function KanbanQuickAddAppointment({
       end = new Date(start.getTime() + slotDurationMin * 60_000)
     }
 
-    const meta: Record<string, unknown> = {}
-    if (priority !== 'none') meta.kanban_priority = priority
-    if (staffIds.length > 0) {
-      meta.kanban_assignees = staffIds
-        .map((id) => staffOptions.find((s) => s.id === id))
-        .filter((s): s is WorkBoardStaffOption => !!s)
-        .map((s) => ({ id: s.id, name: s.name }))
+    let metadata: Record<string, unknown> | null = null
+    if (editItem) {
+      const base =
+        editItem.metadata &&
+        typeof editItem.metadata === 'object' &&
+        !Array.isArray(editItem.metadata)
+          ? { ...(editItem.metadata as Record<string, unknown>) }
+          : {}
+      if (priority !== 'none') base.kanban_priority = priority
+      else delete base.kanban_priority
+      if (staffIds.length > 0) {
+        base.kanban_assignees = staffIds
+          .map((id) => staffOptions.find((s) => s.id === id))
+          .filter((s): s is WorkBoardStaffOption => !!s)
+          .map((s) => ({ id: s.id, name: s.name }))
+      } else {
+        delete base.kanban_assignees
+      }
+      metadata = Object.keys(base).length > 0 ? base : null
+    } else {
+      const meta: Record<string, unknown> = {}
+      if (priority !== 'none') meta.kanban_priority = priority
+      if (staffIds.length > 0) {
+        meta.kanban_assignees = staffIds
+          .map((id) => staffOptions.find((s) => s.id === id))
+          .filter((s): s is WorkBoardStaffOption => !!s)
+          .map((s) => ({ id: s.id, name: s.name }))
+      }
+      metadata = Object.keys(meta).length > 0 ? meta : null
     }
-    const metadata = Object.keys(meta).length > 0 ? meta : null
     const primaryStaffId = staffIds.length > 0 ? staffIds[0]! : null
 
     // Resolver client_id
@@ -593,12 +660,59 @@ export function KanbanQuickAddAppointment({
 
     setSaving(true)
     try {
+      if (editItem) {
+        const priceNext =
+          selectedService?.price ?? editItem.price_total ?? null
+        const { error: upErr } = await supabase
+          .from('appointments')
+          .update({
+            title: titleTrim,
+            start_time: start?.toISOString() ?? null,
+            end_time: end?.toISOString() ?? null,
+            client_id: clientId,
+            service_id: selectedService?.id ?? null,
+            staff_id: primaryStaffId,
+            price_total: priceNext,
+            metadata,
+            pipeline_stage_id: editItem.pipeline_stage_id,
+          })
+          .eq('id', editItem.id)
+          .eq('business_id', businessId)
+
+        if (upErr) {
+          setError(upErr.message)
+          return
+        }
+
+        onSaved?.()
+        toast.success('Tarea actualizada')
+        onEditClose?.()
+        onCreated?.()
+        return
+      }
+
+      let nextBoardSort: number | undefined
+      if (stageId) {
+        const { data: maxRows } = await supabase
+          .from('appointments')
+          .select('board_sort_order')
+          .eq('business_id', businessId)
+          .eq('pipeline_stage_id', stageId)
+          .order('board_sort_order', { ascending: false, nullsFirst: false })
+          .limit(1)
+        const max = maxRows?.[0]?.board_sort_order
+        nextBoardSort = typeof max === 'number' && !Number.isNaN(max) ? max + 1 : 0
+      }
+
       const { data: inserted, error: insErr } = await supabase
         .from('appointments')
         .insert({
           business_id: businessId,
           title: titleTrim,
           ...(stageId ? { pipeline_stage_id: stageId } : {}),
+          ...(stageId !== undefined && nextBoardSort !== undefined
+            ? { board_sort_order: nextBoardSort }
+            : {}),
           start_time: start?.toISOString() ?? null,
           end_time: end?.toISOString() ?? null,
           client_id: clientId,
@@ -714,14 +828,22 @@ export function KanbanQuickAddAppointment({
 
   const cardBody = (
     <>
-      <div className="flex min-w-0 items-center gap-1 rounded-lg border border-zinc-600/80 bg-zinc-900/60 py-0.5 pl-2 pr-1">
+      <div
+        className={cn(
+          'flex min-w-0 items-center gap-1 rounded-lg border border-zinc-600/80 bg-zinc-900/60 py-0.5 pl-2 pr-1',
+          isModalSurface && 'gap-2 py-1.5 pl-3 pr-2'
+        )}
+      >
         <Input
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           placeholder="Nombre de la tarea…"
           maxLength={200}
           disabled={saving}
-          className="h-9 min-h-0 min-w-0 flex-1 border-0 bg-transparent px-0 shadow-none placeholder:text-zinc-500 focus-visible:ring-0 focus-visible:ring-offset-0"
+          className={cn(
+            'min-h-0 min-w-0 flex-1 border-0 bg-transparent px-0 shadow-none placeholder:text-zinc-500 focus-visible:ring-0 focus-visible:ring-offset-0',
+            isModalSurface ? 'h-11 text-base' : 'h-9'
+          )}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault()
@@ -733,16 +855,21 @@ export function KanbanQuickAddAppointment({
           type="button"
           variant="secondary"
           disabled={saveDisabled}
-          className="h-7 min-h-0 shrink-0 gap-0.5 rounded-full px-2 py-0 text-[11px] font-semibold leading-none"
+          className={cn(
+            'min-h-0 shrink-0 gap-0.5 rounded-full font-semibold leading-none',
+            isModalSurface
+              ? 'h-9 px-4 text-xs'
+              : 'h-7 px-2 py-0 text-[11px]'
+          )}
           onClick={() => void handleSave()}
         >
           {saving ? '…' : 'Guardar'}
-          <CornerDownLeft className="h-3 w-3 shrink-0 opacity-80" aria-hidden />
+          <CornerDownLeft className={cn('shrink-0 opacity-80', isModalSurface ? 'h-3.5 w-3.5' : 'h-3 w-3')} aria-hidden />
         </Button>
-        {isCalendarMode && (
+        {(isCalendarMode || isEditMode || (isModalSurface && onClose)) && (
           <button
             type="button"
-            onClick={() => onClose?.()}
+            onClick={() => (isEditMode ? onEditClose?.() : onClose?.())}
             className="shrink-0 rounded p-1 text-zinc-500 hover:text-zinc-300"
             aria-label="Cerrar"
           >
@@ -751,12 +878,14 @@ export function KanbanQuickAddAppointment({
         )}
       </div>
 
+          {!isModalSurface ? (
           <div className="mt-2 flex min-w-0 flex-col gap-1">
             {/* ── FECHA ─────────────────────────────────────────────────── */}
             <div className="min-w-0">
             <KanbanQuickDatePicker
               open={dateMenuOpen}
               onOpenChange={setDateMenuOpen}
+              popoverModal={false}
               triggerSummary={dateTriggerSummary}
               contentRef={datePopoverRef}
               startDate={startDate}
@@ -1338,8 +1467,471 @@ export function KanbanQuickAddAppointment({
               </p>
             ) : null}
           </div>
+          ) : (
+          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="sm:col-span-2 rounded-xl border border-zinc-800/90 bg-zinc-950/60 p-4">
+              <div className="mb-3 flex items-center gap-2">
+                <Calendar className="h-4 w-4 shrink-0 text-brand" aria-hidden />
+                <span
+                  className={cn(
+                    KANBAN_QUICK_ADD_ROW_MUTED,
+                    'text-[11px] font-semibold uppercase tracking-wide text-zinc-400'
+                  )}
+                >
+                  Fechas
+                </span>
+              </div>
+              <KanbanQuickDatePicker
+                layout="inline"
+                className="rounded-lg border-0 bg-transparent p-0"
+                open
+                onOpenChange={() => {}}
+                popoverModal={false}
+                triggerSummary={dateTriggerSummary}
+                contentRef={datePopoverRef}
+                startDate={startDate}
+                startTime={startTime}
+                onStartDateChange={setStartDate}
+                onStartTimeChange={setStartTime}
+                endLocal={endLocal}
+                onEndChange={setEndLocal}
+                disabled={saving}
+              />
+            </div>
+
+            <div className="rounded-xl border border-zinc-800/90 bg-zinc-950/60 p-4">
+              <div className="mb-3 flex items-center gap-2">
+                <Flag className="h-4 w-4 shrink-0 text-zinc-500" aria-hidden />
+                <span
+                  className={cn(
+                    KANBAN_QUICK_ADD_ROW_MUTED,
+                    'text-[11px] font-semibold uppercase tracking-wide text-zinc-400'
+                  )}
+                >
+                  Prioridad
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => setPriority('none')}
+                  className={cn(
+                    'rounded-lg border px-3 py-2 text-xs font-medium transition-colors disabled:opacity-50',
+                    priority === 'none'
+                      ? 'border-brand bg-brand/15 text-brand ring-1 ring-brand/30'
+                      : 'border-zinc-700 bg-zinc-900/80 text-zinc-400 hover:border-zinc-600 hover:text-zinc-200'
+                  )}
+                >
+                  Sin prioridad
+                </button>
+                {PRIORITY_MENU.map((row) => {
+                  const selected = priority === row.id
+                  return (
+                    <button
+                      key={row.id}
+                      type="button"
+                      disabled={saving}
+                      onClick={() => setPriority(row.id)}
+                      className={cn(
+                        'rounded-lg border px-3 py-2 text-xs font-medium transition-colors disabled:opacity-50',
+                        selected
+                          ? 'border-brand bg-brand/15 text-zinc-100 ring-1 ring-brand/30'
+                          : 'border-zinc-700 bg-zinc-900/80 text-zinc-300 hover:border-zinc-600'
+                      )}
+                    >
+                      <span className="flex items-center gap-1.5">
+                        <Flag className={cn('h-3.5 w-3.5', row.flagClass)} aria-hidden />
+                        {row.label}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {services.length > 0 ? (
+              <div className="rounded-xl border border-zinc-800/90 bg-zinc-950/60 p-4">
+                <div className="mb-3 flex items-center gap-2">
+                  <Wrench className="h-4 w-4 shrink-0 text-zinc-500" aria-hidden />
+                  <span
+                    className={cn(
+                      KANBAN_QUICK_ADD_ROW_MUTED,
+                      'text-[11px] font-semibold uppercase tracking-wide text-zinc-400'
+                    )}
+                  >
+                    Servicio
+                  </span>
+                </div>
+                <select
+                  value={selectedService?.id ?? ''}
+                  disabled={saving}
+                  onChange={(e) => {
+                    const id = e.target.value
+                    handleSelectService(id ? (services.find((s) => s.id === id) ?? null) : null)
+                  }}
+                  className="h-10 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 text-sm text-zinc-100 outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand/25"
+                >
+                  <option value="">Sin servicio</option>
+                  {services.map((svc) => (
+                    <option key={svc.id} value={svc.id}>
+                      {svc.name} · {svc.duration} min
+                      {svc.price > 0 ? ` · ${svc.price}€` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
+
+            {staffOptions.length > 0 ? (
+              <div className="sm:col-span-2 rounded-xl border border-zinc-800/90 bg-zinc-950/60 p-4">
+                <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-2">
+                    <User className="h-4 w-4 shrink-0 text-zinc-500" aria-hidden />
+                    <span
+                      className={cn(
+                        KANBAN_QUICK_ADD_ROW_MUTED,
+                        'text-[11px] font-semibold uppercase tracking-wide text-zinc-400'
+                      )}
+                    >
+                      Equipo
+                    </span>
+                    {checkingAvail ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-zinc-500" aria-hidden />
+                    ) : null}
+                  </div>
+                  {staffOptions.length > 5 ? (
+                    <div className="relative w-full sm:max-w-xs">
+                      <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500" />
+                      <Input
+                        value={assignSearch}
+                        onChange={(e) => setAssignSearch(e.target.value)}
+                        placeholder="Filtrar personas…"
+                        disabled={saving}
+                        className="h-9 border-zinc-700 bg-zinc-900 pl-8 text-sm"
+                      />
+                    </div>
+                  ) : null}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={() => setStaffIds([])}
+                    className={cn(
+                      'rounded-full border px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50',
+                      staffIds.length === 0
+                        ? 'border-brand bg-brand/15 text-brand'
+                        : 'border-zinc-700 bg-zinc-900/80 text-zinc-400 hover:border-zinc-600'
+                    )}
+                  >
+                    Nadie
+                  </button>
+                  {filteredStaff.map((s) => {
+                    const isMe = s.id === currentUserId
+                    const selected = staffIds.includes(s.id)
+                    const isOccupied =
+                      !!selectedClient &&
+                      startDate.trim().length > 0 &&
+                      staffAvail[s.id] === false
+                    return (
+                      <button
+                        key={s.id}
+                        type="button"
+                        disabled={saving}
+                        onClick={() => {
+                          setStaffIds((prev) =>
+                            prev.includes(s.id) ? prev.filter((id) => id !== s.id) : [...prev, s.id]
+                          )
+                        }}
+                        className={cn(
+                          'flex items-center gap-2 rounded-full border px-2 py-1 pr-3 text-xs font-medium transition-colors disabled:opacity-50',
+                          selected
+                            ? 'border-brand bg-brand/15 text-zinc-100'
+                            : 'border-zinc-700 bg-zinc-900/80 text-zinc-300 hover:border-zinc-600',
+                          isOccupied && 'opacity-70'
+                        )}
+                      >
+                        <span
+                          className="relative inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold text-white"
+                          style={{ backgroundColor: staffAvatarBackground(s.color) }}
+                        >
+                          {staffInitials(s.name)}
+                          {isMe ? (
+                            <span
+                              className="absolute bottom-0 right-0 h-1.5 w-1.5 rounded-full bg-emerald-500 ring-2 ring-zinc-900"
+                              aria-hidden
+                            />
+                          ) : null}
+                        </span>
+                        <span className="max-w-[10rem] truncate">{isMe ? 'Yo' : s.name}</span>
+                        {isOccupied ? (
+                          <span className="rounded bg-amber-900/50 px-1 text-[9px] text-amber-400">
+                            Ocup.
+                          </span>
+                        ) : null}
+                        {selected ? <Check className="h-3.5 w-3.5 shrink-0 text-brand" /> : null}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            ) : (
+              <div
+                className={cn(
+                  KANBAN_QUICK_ADD_ROW_MUTED,
+                  'sm:col-span-2 flex min-h-10 items-center gap-2 rounded-xl border border-zinc-800/90 bg-zinc-950/40 px-3 py-2 text-sm'
+                )}
+              >
+                <User className="h-4 w-4 shrink-0" aria-hidden />
+                Sin empleados activos
+              </div>
+            )}
+
+            <div className="sm:col-span-2 rounded-xl border border-zinc-800/90 bg-zinc-950/60 p-4">
+              <div className="mb-3 flex items-center gap-2">
+                <User className="h-4 w-4 shrink-0 text-zinc-500" aria-hidden />
+                <span
+                  className={cn(
+                    KANBAN_QUICK_ADD_ROW_MUTED,
+                    'text-[11px] font-semibold uppercase tracking-wide text-zinc-400'
+                  )}
+                >
+                  Cliente
+                </span>
+              </div>
+              {clientMode === 'existing' && selectedClient ? (
+                <div className="space-y-3 rounded-lg border border-zinc-800 bg-zinc-900/80 p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="min-w-0 truncate text-sm font-semibold text-zinc-100">
+                      {selectedClient.name}
+                    </p>
+                    <div className="flex shrink-0 items-center gap-0.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditClientPhone(selectedClient.phone ?? '')
+                          setEditClientEmail(selectedClient.email ?? '')
+                          setIsEditingClient(true)
+                        }}
+                        className="rounded p-1 text-zinc-500 hover:text-zinc-300"
+                        title="Editar datos"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedClient(null)
+                          setClientMode('search')
+                          setClientQuery('')
+                        }}
+                        className="rounded p-1 text-zinc-500 hover:text-zinc-300"
+                        title="Quitar cliente"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                  {isEditingClient ? (
+                    <div className="space-y-2">
+                      <Input
+                        value={editClientPhone}
+                        onChange={(e) => setEditClientPhone(e.target.value)}
+                        placeholder="Teléfono"
+                        className="h-8 border-zinc-700 bg-zinc-800 text-sm"
+                      />
+                      <Input
+                        value={editClientEmail}
+                        onChange={(e) => setEditClientEmail(e.target.value)}
+                        placeholder="Email"
+                        className="h-8 border-zinc-700 bg-zinc-800 text-sm"
+                      />
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="h-8 w-full text-xs"
+                        onClick={async () => {
+                          await supabase
+                            .from('clients')
+                            .update({ phone: editClientPhone || null, email: editClientEmail || null })
+                            .eq('id', selectedClient.id)
+                            .eq('business_id', businessId)
+                          setSelectedClient({
+                            ...selectedClient,
+                            phone: editClientPhone,
+                            email: editClientEmail,
+                          })
+                          setIsEditingClient(false)
+                          toast.success('Cliente actualizado')
+                        }}
+                      >
+                        Guardar cambios
+                      </Button>
+                      <button
+                        type="button"
+                        onClick={() => setIsEditingClient(false)}
+                        className="w-full text-center text-xs text-zinc-500 hover:text-zinc-300"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-0.5">
+                      {selectedClient.phone && (
+                        <p className="text-xs text-zinc-400">{selectedClient.phone}</p>
+                      )}
+                      {selectedClient.email && (
+                        <p className="truncate text-xs text-zinc-400">{selectedClient.email}</p>
+                      )}
+                      {!selectedClient.phone && !selectedClient.email && (
+                        <p className="text-xs text-zinc-600">
+                          Sin datos de contacto · pulsa ✏️ para añadir
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : clientMode === 'new' ? (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p
+                      className={cn(KANBAN_QUICK_ADD_ROW_MUTED, 'text-[11px] uppercase tracking-wide')}
+                    >
+                      Nuevo cliente
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setClientMode('search')
+                        setNewClientName('')
+                        setNewClientPhone('')
+                        setNewClientEmail('')
+                      }}
+                      className="rounded p-1 text-zinc-500 hover:text-zinc-300"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                  <Input
+                    value={newClientName}
+                    onChange={(e) => setNewClientName(e.target.value)}
+                    placeholder="Nombre *"
+                    className="h-9 border-zinc-700 bg-zinc-800 text-sm"
+                  />
+                  <Input
+                    value={newClientPhone}
+                    onChange={(e) => setNewClientPhone(e.target.value)}
+                    placeholder="Teléfono"
+                    className="h-9 border-zinc-700 bg-zinc-800 text-sm"
+                  />
+                  <Input
+                    value={newClientEmail}
+                    onChange={(e) => setNewClientEmail(e.target.value)}
+                    placeholder="Email"
+                    className="h-9 border-zinc-700 bg-zinc-800 text-sm"
+                  />
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+                    <Input
+                      type="search"
+                      value={clientQuery}
+                      onChange={(e) => setClientQuery(e.target.value)}
+                      placeholder="Buscar por nombre o teléfono…"
+                      disabled={saving}
+                      className="h-10 border-zinc-700 bg-zinc-900 pl-10 text-sm"
+                    />
+                    {clientSearchLoading ? (
+                      <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-zinc-500" />
+                    ) : null}
+                  </div>
+                  <div className="max-h-44 overflow-y-auto rounded-lg border border-zinc-800/80">
+                    {!clientQuery.trim() && (
+                      <p className="px-3 py-3 text-xs text-zinc-600">
+                        Escribe al menos 2 caracteres para buscar o elige crear uno nuevo abajo.
+                      </p>
+                    )}
+                    {clientQuery.trim().length >= 2 &&
+                      !clientSearchLoading &&
+                      clientResults.length === 0 && (
+                        <p className="px-3 py-2 text-xs text-zinc-500">
+                          Sin resultados para &ldquo;{clientQuery.trim()}&rdquo;
+                        </p>
+                      )}
+                    {clientResults.map((c) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        className={cn(
+                          KANBAN_COLUMN_TITLE_TYPO,
+                          'flex w-full flex-col items-start border-b border-zinc-800/60 px-3 py-2.5 text-left last:border-0 hover:bg-zinc-800/90'
+                        )}
+                        onClick={() => {
+                          setSelectedClient(c)
+                          setClientMode('existing')
+                          setIsEditingClient(false)
+                          setClientQuery('')
+                          setClientResults([])
+                        }}
+                      >
+                        <span className="text-sm font-medium text-zinc-100">{c.name}</span>
+                        {c.phone && <span className="text-xs text-zinc-500">{c.phone}</span>}
+                      </button>
+                    ))}
+                    {clientQuery.trim().length >= 2 &&
+                      !clientResults.some(
+                        (r) => r.name.toLowerCase() === clientQuery.trim().toLowerCase()
+                      ) && (
+                        <button
+                          type="button"
+                          className={cn(
+                            KANBAN_COLUMN_TITLE_TYPO,
+                            'flex w-full items-center gap-2 border-t border-zinc-800 px-3 py-2.5 text-left text-brand hover:bg-brand/10'
+                          )}
+                          onClick={() => {
+                            setNewClientName(clientQuery.trim())
+                            setClientMode('new')
+                            setClientQuery('')
+                          }}
+                        >
+                          <Plus className="h-4 w-4 shrink-0" />
+                          Crear &ldquo;{clientQuery.trim()}&rdquo;
+                        </button>
+                      )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {error ? (
+              <p
+                className={cn(
+                  KANBAN_COLUMN_TITLE_TYPO,
+                  'sm:col-span-2 text-xs leading-normal text-red-400'
+                )}
+              >
+                {error}
+              </p>
+            ) : null}
+          </div>
+          )}
     </>
   )
+
+  if (isModalSurface && !isEditMode) {
+    return (
+      <div
+        ref={panelRef}
+        className={cn('w-full min-w-0 space-y-0 font-sans', wrapperClassName)}
+        style={wrapperStyle}
+      >
+        {cardBody}
+      </div>
+    )
+  }
 
   if (isCalendarMode) {
     return (
@@ -1351,6 +1943,20 @@ export function KanbanQuickAddAppointment({
           wrapperClassName
         )}
         style={wrapperStyle}
+      >
+        {cardBody}
+      </div>
+    )
+  }
+
+  if (isEditMode && editItem) {
+    return (
+      <div
+        ref={panelRef}
+        className={cn(
+          'w-full max-w-full min-w-0 space-y-0 overflow-hidden rounded-lg border border-zinc-500/90 bg-zinc-950/80 p-3 font-sans shadow-inner transition-[box-shadow,border-color] duration-200',
+          dateMenuOpen && 'border-brand/40 ring-1 ring-brand/25 ring-inset'
+        )}
       >
         {cardBody}
       </div>
@@ -1395,25 +2001,21 @@ function KanbanColumn({
   stage,
   children,
   count,
-  canManageStages,
   canCreateAppointments,
   businessId,
   currentUserId,
   staffOptions,
   services,
-  onLabelSaved,
   onAppointmentCreated,
 }: {
   stage: PipelineStageRow
   children: React.ReactNode
   count: number
-  canManageStages: boolean
   canCreateAppointments: boolean
   businessId: string
   currentUserId: string
   staffOptions: WorkBoardStaffOption[]
   services: KanbanService[]
-  onLabelSaved: (stageId: string, label: string) => void
   onAppointmentCreated: () => void
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: stage.id })
@@ -1434,10 +2036,8 @@ function KanbanColumn({
       <KanbanColumnHeader
         stage={stage}
         count={count}
-        canManageStages={canManageStages}
         canCreateAppointments={canCreateAppointments}
         onQuickAdd={openQuickAdd}
-        onLabelSaved={onLabelSaved}
       />
       <div className="flex min-w-0 flex-col gap-2 p-2">
         {children}
@@ -1457,30 +2057,84 @@ function KanbanColumn({
   )
 }
 
-function DraggableCard({
+function SortableKanbanCard({
   item,
+  columnColor,
+  sortDisabled,
   onOpen,
+  quickEdit,
+  kanbanActions,
+  inlineEditing,
+  onCloseInlineEdit,
+  businessId,
+  currentUserId,
+  staffOptions,
+  services,
+  onAppointmentUpdated,
 }: {
   item: WorkItemCard
+  /** `pipeline_stages.color` de la columna actual. */
+  columnColor?: string | null
+  sortDisabled?: boolean
   onOpen?: (item: WorkItemCard) => void
+  quickEdit?: WorkBoardCardQuickEditContext
+  kanbanActions?: WorkBoardCardKanbanActions
+  inlineEditing?: boolean
+  onCloseInlineEdit?: () => void
+  businessId: string
+  currentUserId: string
+  staffOptions: WorkBoardStaffOption[]
+  services: KanbanService[]
+  onAppointmentUpdated?: () => void
 }) {
-  const canDrag = canMoveWorkItemByStageSlug(item.stage_slug)
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: item.id,
-    disabled: !canDrag,
+    disabled: Boolean(sortDisabled || inlineEditing),
   })
-  const style = transform
-    ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` }
-    : undefined
+  const sortStyle: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0 : 1,
+  }
+
+  const accentStyle = kanbanCardAccentFromStageColor(columnColor)
 
   return (
     <div
       ref={setNodeRef}
-      style={style}
-      className={cn(isDragging && 'opacity-60 z-50 relative')}
-      {...(canDrag ? { ...listeners, ...attributes } : {})}
+      style={sortStyle}
+      className={cn('relative z-0')}
+      {...(sortDisabled || inlineEditing ? {} : { ...listeners, ...attributes })}
     >
-      <WorkBoardCard item={item} compact onOpen={onOpen} />
+      {inlineEditing ? (
+        <div
+          className={cn(
+            'w-full rounded-lg border-l-4 text-left font-sans transition-shadow',
+            !accentStyle && stageColorClassForSlug(item.stage_slug)
+          )}
+          style={accentStyle}
+        >
+          <KanbanQuickAddAppointment
+            key={item.id}
+            editItem={item}
+            businessId={businessId}
+            currentUserId={currentUserId}
+            staffOptions={staffOptions}
+            services={services}
+            onEditClose={onCloseInlineEdit}
+            onCreated={onAppointmentUpdated}
+          />
+        </div>
+      ) : (
+        <WorkBoardCard
+          item={item}
+          compact
+          columnColor={columnColor}
+          onOpen={onOpen}
+          quickEdit={quickEdit}
+          kanbanActions={kanbanActions}
+        />
+      )}
     </div>
   )
 }
@@ -1492,8 +2146,11 @@ export function WorkBoardKanbanView({
   items,
   staffOptions,
   services = [],
-  canManageStages = false,
+  kanbanClients = [],
   canCreateAppointments = false,
+  canEditAppointments = false,
+  canMoveAppointments = false,
+  canDeleteAppointments = false,
   onItemOpen,
   onStageUpdated,
 }: {
@@ -1503,23 +2160,49 @@ export function WorkBoardKanbanView({
   items: WorkItemCard[]
   staffOptions: WorkBoardStaffOption[]
   services?: KanbanService[]
-  canManageStages?: boolean
+  /** Clientes del negocio (búsqueda en chip de cliente). */
+  kanbanClients?: WorkBoardCardQuickEditContext['clients']
   canCreateAppointments?: boolean
+  /** Si es true, al pulsar la tarjeta se abre el mismo panel que al crear (sin ir a otra página). */
+  canEditAppointments?: boolean
+  canMoveAppointments?: boolean
+  canDeleteAppointments?: boolean
   onItemOpen?: (item: WorkItemCard) => void
   onStageUpdated?: () => void
 }) {
   const router = useRouter()
   const [localItems, setLocalItems] = useState(items)
   const [localStages, setLocalStages] = useState(stages)
+  const [inlineEditId, setInlineEditId] = useState<string | null>(null)
+  const [deleteConfirmItem, setDeleteConfirmItem] = useState<WorkItemCard | null>(null)
+  const [deleteInProgress, setDeleteInProgress] = useState(false)
 
   const itemsSig = useMemo(
-    () => items.map((i) => `${i.id}:${i.pipeline_stage_id}`).join('|'),
+    () =>
+      items.map((i) => `${i.id}:${i.pipeline_stage_id}:${i.board_sort_order ?? 'n'}`).join('|'),
     [items]
   )
   const stagesSig = useMemo(
-    () => stages.map((s) => `${s.id}:${s.label}`).join('|'),
+    () => stages.map((s) => `${s.id}:${s.label}:${s.color}`).join('|'),
     [stages]
   )
+
+  const stageIds = useMemo(() => localStages.map((s) => s.id), [localStages])
+
+  const [columnOrderMap, setColumnOrderMap] = useState<Record<string, string[]>>(() =>
+    buildColumnOrderMap(items, stages.map((s) => s.id))
+  )
+  const columnOrderMapRef = useRef(columnOrderMap)
+  useEffect(() => {
+    columnOrderMapRef.current = columnOrderMap
+  }, [columnOrderMap])
+
+  useEffect(() => {
+    setColumnOrderMap(buildColumnOrderMap(localItems, stageIds))
+  }, [localItems, stageIds])
+
+  const [activeId, setActiveId] = useState<string | null>(null)
+  const dragSnapshotRef = useRef<Record<string, string[]> | null>(null)
 
   useEffect(() => {
     setLocalItems(items)
@@ -1529,25 +2212,97 @@ export function WorkBoardKanbanView({
     setLocalStages(stages)
   }, [stagesSig, stages])
 
-  const handleStageLabelSaved = useCallback(
-    (stageId: string, label: string) => {
-      setLocalStages((prev) => prev.map((s) => (s.id === stageId ? { ...s, label } : s)))
-      setLocalItems((prev) =>
-        prev.map((i) => (i.pipeline_stage_id === stageId ? { ...i, stage_label: label } : i))
-      )
+  const handleAppointmentCreated = useCallback(() => {
+    onStageUpdated?.()
+    router.refresh()
+  }, [onStageUpdated, router])
+
+  const handleCardOpen = useCallback(
+    (item: WorkItemCard) => {
+      if (canEditAppointments) {
+        setInlineEditId(item.id)
+        return
+      }
+      onItemOpen?.(item)
+    },
+    [canEditAppointments, onItemOpen]
+  )
+
+  const canMarkTaskDone = canMoveAppointments || canEditAppointments
+
+  const handleCardMarkDone = useCallback(
+    async (item: WorkItemCard) => {
+      const res = await fetch(`/api/work-items/${item.id}/stage`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'completed' }),
+      })
+      if (!res.ok) {
+        const t = await res.text()
+        toast.error(t || 'No se pudo marcar como hecha')
+        return
+      }
+      toast.success('Marcada como hecha')
       onStageUpdated?.()
       router.refresh()
     },
     [onStageUpdated, router]
   )
 
-  const handleAppointmentCreated = useCallback(() => {
+  const handleCardDeleteRequest = useCallback(
+    (item: WorkItemCard) => {
+      if (!canDeleteAppointments) return
+      setDeleteConfirmItem(item)
+    },
+    [canDeleteAppointments]
+  )
+
+  const handleCardDeleteConfirm = useCallback(async () => {
+    const item = deleteConfirmItem
+    if (!item || !canDeleteAppointments) return
+    setDeleteInProgress(true)
+    const supabase = createClient()
+    const { error } = await supabase.from('appointments').delete().eq('id', item.id)
+    setDeleteInProgress(false)
+    if (error) {
+      toast.error(error.message)
+      return
+    }
+    setDeleteConfirmItem(null)
+    toast.success('Tarea eliminada')
     onStageUpdated?.()
     router.refresh()
-  }, [onStageUpdated, router])
+  }, [deleteConfirmItem, canDeleteAppointments, onStageUpdated, router])
 
-  const byStage = useCallback(
-    (stageId: string) => localItems.filter((i) => i.pipeline_stage_id === stageId),
+  const closeInlineEdit = useCallback(() => {
+    setInlineEditId(null)
+  }, [])
+
+  const cardQuickEdit = useMemo<WorkBoardCardQuickEditContext>(
+    () => ({
+      businessId,
+      currentUserId,
+      staffOptions,
+      services,
+      clients: kanbanClients,
+      onUpdated: () => {
+        onStageUpdated?.()
+        router.refresh()
+      },
+    }),
+    [
+      businessId,
+      currentUserId,
+      staffOptions,
+      services,
+      kanbanClients,
+      onStageUpdated,
+      router,
+    ]
+  )
+
+  const itemById = useMemo(
+    () => new Map(localItems.map((i) => [i.id, i] as const)),
     [localItems]
   )
 
@@ -1557,203 +2312,258 @@ export function WorkBoardKanbanView({
     })
   )
 
-  const handleDragEnd = async (event: DragEndEvent) => {
-    const { active, over } = event
-    if (!over) return
-    const itemId = String(active.id)
-    const newStageId = String(over.id)
-    const item = localItems.find((i) => i.id === itemId)
-    if (!item || item.pipeline_stage_id === newStageId) return
-    if (!localStages.some((s) => s.id === newStageId)) return
+  const handleDragStart = useCallback((event: DragStartEvent) => {
+    setActiveId(String(event.active.id))
+    dragSnapshotRef.current = cloneOrderMap(columnOrderMapRef.current)
+  }, [])
 
-    const prev = localItems
-    const targetStage = localStages.find((s) => s.id === newStageId)
-    setLocalItems((xs) =>
-      xs.map((x) =>
-        x.id === itemId && targetStage
-          ? {
-              ...x,
-              pipeline_stage_id: newStageId,
-              stage_slug: targetStage.slug,
-              stage_label: targetStage.label,
-            }
-          : x
-      )
-    )
-
-    const res = await fetch(`/api/work-items/${itemId}/stage`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pipeline_stage_id: newStageId }),
-    })
-
-    if (!res.ok) {
-      setLocalItems(prev)
-      return
+  const handleDragCancel = useCallback(() => {
+    setActiveId(null)
+    if (dragSnapshotRef.current) {
+      setColumnOrderMap(dragSnapshotRef.current)
+      dragSnapshotRef.current = null
     }
-    onStageUpdated?.()
-    router.refresh()
-  }
+  }, [])
 
-  const [addingCol, setAddingCol] = useState(false)
-  const [newColLabel, setNewColLabel] = useState('')
-  const [newColColor, setNewColColor] = useState('#6366f1')
-  const [savingCol, setSavingCol] = useState(false)
-  const newColInputRef = useRef<HTMLInputElement>(null)
+  const handleDragOver = useCallback(
+    (event: DragOverEvent) => {
+      if (!canMoveAppointments) return
+      const { active, over } = event
+      if (!over || active.id === over.id) return
+      const activeIdStr = String(active.id)
+      const overIdStr = String(over.id)
 
-  const KANBAN_COLORS = [
-    '#6366f1', '#3b82f6', '#06b6d4', '#14b8a6', '#22c55e',
-    '#eab308', '#f97316', '#ef4444', '#ec4899', '#8b5cf6',
-    '#6b7280', '#a16207',
-  ]
+      setColumnOrderMap((prev) => {
+        const activeCol = findColumnForItemId(prev, stageIds, activeIdStr)
+        const overCol = findColumnForItemId(prev, stageIds, overIdStr)
+        if (!activeCol || !overCol) return prev
 
-  function openAddCol() {
-    setNewColLabel('')
-    setNewColColor('#6366f1')
-    setAddingCol(true)
-    setTimeout(() => newColInputRef.current?.focus(), 0)
-  }
+        if (activeCol !== overCol) {
+          const next: Record<string, string[]> = {}
+          for (const sid of stageIds) {
+            next[sid] = prev[sid].filter((id) => id !== activeIdStr)
+          }
+          const b = [...next[overCol]]
+          const oi = b.indexOf(overIdStr)
+          if (oi === -1) {
+            b.push(activeIdStr)
+          } else {
+            b.splice(oi, 0, activeIdStr)
+          }
+          next[overCol] = b
+          return next
+        }
 
-  function cancelAddCol() {
-    setAddingCol(false)
-    setNewColLabel('')
-  }
+        const c = [...prev[activeCol]]
+        const oldI = c.indexOf(activeIdStr)
+        const newI = c.indexOf(overIdStr)
+        if (oldI === -1 || newI === -1 || oldI === newI) return prev
+        return { ...prev, [activeCol]: arrayMove(c, oldI, newI) }
+      })
+    },
+    [canMoveAppointments, stageIds]
+  )
 
-  async function confirmAddCol() {
-    const label = newColLabel.trim()
-    if (!label) return
-    setSavingCol(true)
-    const maxOrder = localStages.reduce((m, s) => Math.max(m, s.sort_order ?? 0), -1)
-    try {
-      const res = await fetch('/api/pipeline-stages/batch', {
-        method: 'POST',
+  const handleDragEnd = useCallback(
+    async (event: DragEndEvent) => {
+      const { active, over } = event
+      const mapAtEnd = columnOrderMapRef.current
+      const activeIdStr = String(active.id)
+      setActiveId(null)
+
+      if (!canMoveAppointments) {
+        dragSnapshotRef.current = null
+        return
+      }
+
+      if (!over) {
+        if (dragSnapshotRef.current) {
+          setColumnOrderMap(dragSnapshotRef.current)
+          dragSnapshotRef.current = null
+        }
+        return
+      }
+
+      const targetCol = findColumnForItemId(mapAtEnd, stageIds, activeIdStr)
+      if (!targetCol) {
+        dragSnapshotRef.current = null
+        return
+      }
+
+      const orderedIds = mapAtEnd[targetCol] ?? []
+      if (!orderedIds.includes(activeIdStr)) {
+        dragSnapshotRef.current = null
+        return
+      }
+
+      const nextItems = applyColumnMapToItems(localItems, mapAtEnd, localStages)
+      const prevItems = localItems
+      const prevSig = prevItems
+        .map((i) => `${i.id}:${i.pipeline_stage_id}:${i.board_sort_order ?? 'n'}`)
+        .join('|')
+      const nextSig = nextItems
+        .map((i) => `${i.id}:${i.pipeline_stage_id}:${i.board_sort_order ?? 'n'}`)
+        .join('|')
+
+      dragSnapshotRef.current = null
+
+      if (prevSig === nextSig) return
+
+      setLocalItems(nextItems)
+
+      const res = await fetch(`/api/work-items/${activeIdStr}/stage`, {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          stages: [
-            ...localStages.map((s, i) => ({ id: s.id, label: s.label, color: s.color, sort_order: i })),
-            { label, color: newColColor, sort_order: maxOrder + 1 },
-          ],
-          deleted_ids: [],
-          reassignments: [],
+          pipeline_stage_id: targetCol,
+          column_item_ids: orderedIds,
         }),
       })
-      const json = await res.json()
-      if (res.ok && json.stages) {
-        setLocalStages(json.stages as PipelineStageRow[])
-        onStageUpdated?.()
-        router.refresh()
-      } else {
-        toast.error(json.message ?? json.error ?? 'No se pudo crear el grupo')
+
+      if (!res.ok) {
+        setLocalItems(prevItems)
+        setColumnOrderMap(buildColumnOrderMap(prevItems, stageIds))
+        return
       }
-    } catch {
-      toast.error('Error de red')
-    } finally {
-      setSavingCol(false)
-      setAddingCol(false)
-      setNewColLabel('')
-    }
-  }
+      onStageUpdated?.()
+      router.refresh()
+    },
+    [
+      canMoveAppointments,
+      localItems,
+      localStages,
+      onStageUpdated,
+      router,
+      stageIds,
+    ]
+  )
+
+  const activeItem = activeId ? (itemById.get(activeId) ?? null) : null
+  const activeColForOverlay =
+    activeId && activeItem
+      ? findColumnForItemId(columnOrderMap, stageIds, activeId)
+      : undefined
+  const overlayColumnColor = activeColForOverlay
+    ? localStages.find((s) => s.id === activeColForOverlay)?.color
+    : undefined
 
   return (
     <div className="min-h-0 min-w-0 flex-1 overflow-x-auto overflow-y-auto pb-4">
-      <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={handleDragEnd}>
+      <Dialog
+        open={!!deleteConfirmItem}
+        onOpenChange={(open) => {
+          if (!open && !deleteInProgress) setDeleteConfirmItem(null)
+        }}
+      >
+        <DialogContent className="max-w-md" showClose={!deleteInProgress}>
+          <DialogHeader>
+            <DialogTitle className="font-display text-xl font-semibold text-zinc-100 text-left">
+              ¿Eliminar esta tarea?
+            </DialogTitle>
+            <DialogDescription className="text-left mt-2 text-zinc-400">
+              Se eliminará <span className="text-zinc-200">{deleteConfirmItem?.displayTitle ?? 'la tarea'}</span>.
+              Esta acción es <strong className="text-red-400">permanente</strong> y no se puede deshacer.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col-reverse sm:flex-row gap-2 justify-end mt-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setDeleteConfirmItem(null)}
+              disabled={deleteInProgress}
+              className="cursor-pointer border-zinc-600"
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => void handleCardDeleteConfirm()}
+              disabled={deleteInProgress}
+              className="cursor-pointer gap-2 bg-red-700 hover:bg-red-600 text-white"
+            >
+              {deleteInProgress ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
+                  Eliminando…
+                </>
+              ) : (
+                'Sí, eliminar'
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCorners}
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
+        onDragEnd={(e) => void handleDragEnd(e)}
+        onDragCancel={handleDragCancel}
+      >
         <div className="flex items-start gap-3">
           {localStages.map((stage) => {
-            const col = byStage(stage.id)
+            const colIds = columnOrderMap[stage.id] ?? []
             return (
               <KanbanColumn
                 key={stage.id}
                 stage={stage}
-                count={col.length}
-                canManageStages={canManageStages}
+                count={colIds.length}
                 canCreateAppointments={canCreateAppointments}
                 businessId={businessId}
                 currentUserId={currentUserId}
                 staffOptions={staffOptions}
                 services={services}
-                onLabelSaved={handleStageLabelSaved}
                 onAppointmentCreated={handleAppointmentCreated}
               >
-                {col.map((item) => (
-                  <DraggableCard key={item.id} item={item} onOpen={onItemOpen} />
-                ))}
+                <SortableContext items={colIds} strategy={verticalListSortingStrategy}>
+                  {colIds.map((itemId) => {
+                    const item = itemById.get(itemId)
+                    if (!item) return null
+                    const showMarkDone =
+                      canMarkTaskDone &&
+                      !isTerminalWorkItemStage(item.stage_slug, item.stage_category)
+                    const showEdit = canEditAppointments || Boolean(onItemOpen)
+                    const kanbanActions: WorkBoardCardKanbanActions = {
+                      showMarkDone,
+                      showEdit,
+                      showDelete: canDeleteAppointments,
+                      onMarkDone: () => void handleCardMarkDone(item),
+                      onEdit: () => handleCardOpen(item),
+                      onDelete: () => handleCardDeleteRequest(item),
+                    }
+                    return (
+                      <SortableKanbanCard
+                        key={itemId}
+                        item={item}
+                        columnColor={stage.color}
+                        sortDisabled={!canMoveAppointments}
+                        onOpen={handleCardOpen}
+                        quickEdit={cardQuickEdit}
+                        kanbanActions={kanbanActions}
+                        inlineEditing={inlineEditId === item.id}
+                        onCloseInlineEdit={closeInlineEdit}
+                        businessId={businessId}
+                        currentUserId={currentUserId}
+                        staffOptions={staffOptions}
+                        services={services}
+                        onAppointmentUpdated={handleAppointmentCreated}
+                      />
+                    )
+                  })}
+                </SortableContext>
               </KanbanColumn>
             )
           })}
-
-          {/* Añadir nuevo grupo — inline después de la última columna */}
-          {canManageStages && (
-            addingCol ? (
-              <div className="flex w-[280px] min-w-[280px] shrink-0 flex-col gap-2 rounded-xl border border-zinc-700 bg-zinc-900/80 p-3">
-                {/* Input con icono de color + confirmar */}
-                <div className="flex items-center gap-2 rounded-lg border border-zinc-600 bg-zinc-800 px-2.5 py-1.5 focus-within:border-brand/60 focus-within:ring-1 focus-within:ring-brand/30">
-                  <button
-                    type="button"
-                    className="h-5 w-5 shrink-0 rounded"
-                    style={{ backgroundColor: newColColor }}
-                    onClick={() => {/* color picker se muestra abajo */}}
-                  />
-                  <input
-                    ref={newColInputRef}
-                    value={newColLabel}
-                    onChange={(e) => setNewColLabel(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') void confirmAddCol()
-                      if (e.key === 'Escape') cancelAddCol()
-                    }}
-                    placeholder="Nombre del grupo…"
-                    className="flex-1 bg-transparent text-sm text-zinc-100 placeholder:text-zinc-500 outline-none"
-                    disabled={savingCol}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => void confirmAddCol()}
-                    disabled={savingCol || !newColLabel.trim()}
-                    className="text-brand disabled:opacity-40"
-                  >
-                    <Check className="h-4 w-4" />
-                  </button>
-                </div>
-
-                {/* Selector de color */}
-                <div className="rounded-lg border border-zinc-700/60 bg-zinc-800/60 p-2.5">
-                  <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-zinc-500">Color</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {KANBAN_COLORS.map((c) => (
-                      <button
-                        key={c}
-                        type="button"
-                        onClick={() => setNewColColor(c)}
-                        className={cn(
-                          'h-6 w-6 rounded-full transition-transform hover:scale-110 ring-2 ring-transparent ring-offset-1 ring-offset-zinc-800',
-                          newColColor === c && 'ring-white/80'
-                        )}
-                        style={{ backgroundColor: c }}
-                      />
-                    ))}
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={cancelAddCol}
-                  className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors text-center"
-                >
-                  Cancelar
-                </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={openAddCol}
-                className="flex h-10 w-[200px] min-w-[200px] shrink-0 items-center gap-2 self-start rounded-xl border border-dashed border-zinc-700 bg-transparent px-3 text-sm text-zinc-500 transition-colors hover:border-zinc-500 hover:text-zinc-300"
-              >
-                <Plus className="h-4 w-4" />
-                Añadir grupo
-              </button>
-            )
-          )}
         </div>
+        <DragOverlay dropAnimation={null}>
+          {activeItem ? (
+            <div className="pointer-events-none w-[264px] max-w-[264px] rotate-1 cursor-grabbing shadow-2xl">
+              <WorkBoardCard item={activeItem} compact columnColor={overlayColumnColor} />
+            </div>
+          ) : null}
+        </DragOverlay>
       </DndContext>
     </div>
   )

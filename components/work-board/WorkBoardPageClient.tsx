@@ -1,12 +1,21 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
 import { usePermissions } from '@/hooks/usePermissions'
 import type { WorkItemCard, WorkBoardStaffOption, PipelineStageRow } from '@/lib/work-items/types'
+import { normalizeStageCategoryRow } from '@/lib/work-items/seedPipelineStages'
 import { WorkBoardToolbar, type WorkBoardViewMode } from './WorkBoardToolbar'
 import { WorkBoardActionBar } from './WorkBoardActionBar'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { KanbanQuickAddAppointment } from './WorkBoardKanbanView'
 
 const WorkBoardKanbanView = dynamic(
   () => import('./WorkBoardKanbanView').then((m) => m.WorkBoardKanbanView),
@@ -121,6 +130,9 @@ export function WorkBoardPageClient({
   const canView = hasPermission('work_board_view')
   const canManageStages = hasPermission('pipeline_stages_manage')
   const canCreateAppointments = hasPermission('appointments_create')
+  const canEditAppointments = hasPermission('appointments_edit')
+  const canMoveAppointments = hasPermission('appointments_move')
+  const canDeleteAppointments = hasPermission('appointments_delete')
 
   const [viewMode, setViewMode] = useState<WorkBoardViewMode>(initialView)
   const [calendarDefaultPeriod] = useState<CalendarPeriod>(() =>
@@ -130,6 +142,8 @@ export function WorkBoardPageClient({
   const [stages, setStages] = useState<PipelineStageRow[]>(initialStages)
   const [calendarNewPanel, setCalendarNewPanel] = useState(initialNewPanel)
   const [calendarStaffFilter, setCalendarStaffFilter] = useState('')
+  const [addTaskDialogOpen, setAddTaskDialogOpen] = useState(false)
+  const [addTaskFormKey, setAddTaskFormKey] = useState(0)
 
   const initialStagesSig = useMemo(
     () => initialStages.map((s) => `${s.id}:${s.label}:${s.sort_order}:${s.color}`).join('|'),
@@ -139,16 +153,21 @@ export function WorkBoardPageClient({
     setStages(initialStages)
   }, [initialStagesSig, initialStages])
 
-  const openItem = (item: WorkItemCard) => {
+  const addTaskStageId = stages[0]?.id
+
+  const openItemInFullPage = (item: WorkItemCard) => {
     router.push(`/dashboard/appointments/${item.id}/edit`)
   }
 
-  const handleAddTask = () => {
+  const handleAddTask = useCallback(() => {
     if (!canCreateAppointments) return
-    setViewMode('calendar')
-    setCalendarNewPanel(true)
-    router.replace('/dashboard/work-board?view=calendar&period=week&new=1', { scroll: false })
-  }
+    setAddTaskFormKey((k) => k + 1)
+    setAddTaskDialogOpen(true)
+  }, [canCreateAppointments])
+
+  const closeAddTaskDialog = useCallback(() => {
+    setAddTaskDialogOpen(false)
+  }, [])
 
   if (loading) {
     return (
@@ -182,7 +201,7 @@ export function WorkBoardPageClient({
             viewMode={viewMode}
             onViewModeChange={setViewMode}
             onAddTask={handleAddTask}
-            addTaskDisabled={!canCreateAppointments}
+            addTaskDisabled={!canCreateAppointments || stages.length === 0}
             onSettingsClick={canManageStages ? () => setConfigOpen(true) : undefined}
             showSettings={canManageStages}
           />
@@ -190,18 +209,66 @@ export function WorkBoardPageClient({
       )}
 
       {viewMode === 'kanban' && (
-        <WorkBoardKanbanView
-          businessId={businessId}
-          currentUserId={currentUserId}
-          stages={stages}
-          items={initialItems}
-          staffOptions={initialStaffOptions}
-          services={calendarServices}
-          canManageStages={canManageStages}
-          canCreateAppointments={canCreateAppointments}
-          onItemOpen={openItem}
-          onStageUpdated={() => router.refresh()}
-        />
+        <>
+          <Dialog
+            open={addTaskDialogOpen}
+            onOpenChange={(open) => {
+              if (!open) closeAddTaskDialog()
+            }}
+          >
+            <DialogContent
+              showClose
+              className="max-h-[min(92vh,880px)] w-[min(100vw-1.5rem,760px)] max-w-[760px] gap-0 overflow-hidden border-zinc-700 bg-zinc-900 p-0 text-zinc-100 shadow-2xl"
+            >
+              <DialogHeader className="border-b border-zinc-800 px-6 py-5 pr-14 text-left">
+                <DialogTitle className="font-display text-xl font-semibold text-zinc-100">
+                  Nueva tarea
+                </DialogTitle>
+                <DialogDescription className="text-sm text-zinc-400">
+                  La tarea se crea en la primera columna del tablero (estado inicial del flujo). Campos visibles: fechas,
+                  prioridad, servicio, equipo y cliente.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="max-h-[min(72vh,720px)] overflow-y-auto overflow-x-hidden px-6 py-5">
+                {addTaskStageId ? (
+                  <KanbanQuickAddAppointment
+                    key={addTaskFormKey}
+                    variant="modal"
+                    stageId={addTaskStageId}
+                    businessId={businessId}
+                    currentUserId={currentUserId}
+                    staffOptions={initialStaffOptions}
+                    services={calendarServices}
+                    onClose={closeAddTaskDialog}
+                    onCreated={() => {
+                      closeAddTaskDialog()
+                      router.refresh()
+                    }}
+                  />
+                ) : (
+                  <p className="text-sm text-zinc-500">No hay columnas configuradas.</p>
+                )}
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          <WorkBoardKanbanView
+            businessId={businessId}
+            currentUserId={currentUserId}
+            stages={stages}
+            items={initialItems}
+            staffOptions={initialStaffOptions}
+            services={calendarServices}
+            kanbanClients={calendarClients}
+            canCreateAppointments={canCreateAppointments}
+            canEditAppointments={canEditAppointments}
+            canMoveAppointments={canMoveAppointments}
+            canDeleteAppointments={canDeleteAppointments}
+            onItemOpen={openItemInFullPage}
+            onStageUpdated={() => router.refresh()}
+          />
+        </>
       )}
 
       {isCalendar && (
@@ -245,7 +312,13 @@ export function WorkBoardPageClient({
           stages={stages}
           items={initialItems}
           onStagesUpdated={(newStages) => {
-            setStages(newStages)
+            setStages(
+              newStages.map((s) => ({
+                ...s,
+                color: s.color?.trim() || '#6366f1',
+                stage_category: normalizeStageCategoryRow(s.slug, s.stage_category),
+              }))
+            )
             router.refresh()
           }}
         />

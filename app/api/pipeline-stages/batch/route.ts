@@ -2,12 +2,19 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { z } from 'zod'
 import { resolveUserBusinessAndPermissions, hasServerPermission } from '@/lib/user-permissions.server'
+import {
+  enforcedCategoryForSlug,
+  isImmutableStageSlug,
+} from '@/lib/work-items/pipelineStageDefinitions'
+
+const StageCategorySchema = z.enum(['not_started', 'active', 'done', 'closed'])
 
 const StageSchema = z.object({
-  id: z.string().optional(),
+  id: z.string().uuid().optional(),
   label: z.string().trim().min(1).max(120),
   color: z.string().trim().max(30),
   sort_order: z.number().int(),
+  stage_category: StageCategorySchema,
 })
 
 const ReassignmentSchema = z.object({
@@ -23,6 +30,20 @@ const BatchBodySchema = z.object({
 
 function normalizeLabel(s: string) {
   return s.trim().toLowerCase()
+}
+
+function makeUniqueSlug(label: string, taken: Set<string>): string {
+  const base =
+    normalizeLabel(label)
+      .replace(/\s+/g, '_')
+      .replace(/[^a-z0-9_]/g, '')
+      .slice(0, 48) || 'estado'
+  let slug = `${base}_${Date.now().toString(36)}`
+  while (taken.has(slug)) {
+    slug = `${base}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`
+  }
+  taken.add(slug)
+  return slug
 }
 
 export async function POST(request: NextRequest) {
@@ -48,7 +69,6 @@ export async function POST(request: NextRequest) {
   const { stages, deleted_ids, reassignments } = parsed.data
   const businessId = access.businessId
 
-  // Validate no duplicate labels within batch
   const labels = stages.map((s) => normalizeLabel(s.label))
   const uniqueLabels = new Set(labels)
   if (uniqueLabels.size !== labels.length) {
@@ -58,20 +78,56 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  // Validate reassignment targets exist in the surviving stages
+  const { data: dbStages, error: dbErr } = await supabase
+    .from('pipeline_stages')
+    .select('id, slug')
+    .eq('business_id', businessId)
+
+  if (dbErr) {
+    return NextResponse.json({ error: dbErr.message }, { status: 500 })
+  }
+
+  const dbById = new Map((dbStages ?? []).map((r) => [r.id, r.slug]))
+  const dbSlugSet = new Set((dbStages ?? []).map((r) => r.slug))
+
+  for (const delId of deleted_ids) {
+    const slug = dbById.get(delId)
+    if (slug && isImmutableStageSlug(slug)) {
+      return NextResponse.json(
+        {
+          error: 'protected_stage',
+          message: 'No se pueden eliminar los estados Pendiente ni Completada.',
+        },
+        { status: 400 }
+      )
+    }
+  }
+
+  const payloadIds = new Set(stages.filter((s) => s.id).map((s) => s.id!))
+  for (const id of payloadIds) {
+    if (!dbById.has(id)) {
+      return NextResponse.json(
+        { error: 'invalid_stages', message: 'Hay estados con id desconocido.' },
+        { status: 400 }
+      )
+    }
+  }
+
   if (reassignments.length > 0) {
     const survivingIds = new Set(stages.filter((s) => s.id).map((s) => s.id!))
     for (const r of reassignments) {
       if (!survivingIds.has(r.to_id)) {
         return NextResponse.json(
-          { error: 'invalid_reassignment', message: `El estado destino ${r.to_id} no existe o va a ser eliminado.` },
+          {
+            error: 'invalid_reassignment',
+            message: `El estado destino no existe o va a ser eliminado.`,
+          },
           { status: 400 }
         )
       }
     }
   }
 
-  // 1. Reasignar citas antes de borrar los estados
   for (const { from_id, to_id } of reassignments) {
     const { error: moveErr } = await supabase
       .from('appointments')
@@ -87,7 +143,6 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // 2. Eliminar estados (ahora sin citas vinculadas gracias al paso anterior)
   if (deleted_ids.length > 0) {
     const { error: delErr } = await supabase
       .from('pipeline_stages')
@@ -100,50 +155,67 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // 3. Actualizar etapas existentes y crear las nuevas
-  const existingStages = stages.filter((s) => !!s.id)
-  const newStages = stages.filter((s) => !s.id)
   const errors: string[] = []
-
-  // UPDATE individual por cada etapa existente — nunca toca slug
-  for (const s of existingStages) {
-    const { error: upErr } = await supabase
-      .from('pipeline_stages')
-      .update({ label: s.label, color: s.color, sort_order: s.sort_order })
-      .eq('id', s.id!)
-      .eq('business_id', businessId)
-
-    if (upErr) errors.push(upErr.message)
+  const slugTaken = new Set(dbSlugSet)
+  for (const delId of deleted_ids) {
+    const slug = dbById.get(delId)
+    if (slug) slugTaken.delete(slug)
   }
 
-  // INSERT para etapas nuevas (generamos slug a partir del label)
-  if (newStages.length > 0) {
-    const { error: crErr } = await supabase.from('pipeline_stages').insert(
-      newStages.map((s) => ({
+  for (const s of stages) {
+    if (s.id) {
+      const slug = dbById.get(s.id)
+      if (!slug) continue
+      const category = enforcedCategoryForSlug(slug, s.stage_category)
+      const { error: upErr } = await supabase
+        .from('pipeline_stages')
+        .update({
+          label: s.label,
+          color: s.color,
+          sort_order: s.sort_order,
+          stage_category: category,
+        })
+        .eq('id', s.id)
+        .eq('business_id', businessId)
+
+      if (upErr) errors.push(upErr.message)
+    } else {
+      const slug = makeUniqueSlug(s.label, slugTaken)
+      const { error: crErr } = await supabase.from('pipeline_stages').insert({
         business_id: businessId,
-        slug:
-          normalizeLabel(s.label)
-            .replace(/\s+/g, '_')
-            .replace(/[^a-z0-9_]/g, '') +
-          '_' +
-          Date.now(),
+        slug,
         label: s.label,
         color: s.color,
         sort_order: s.sort_order,
-      }))
-    )
-
-    if (crErr) errors.push(crErr.message)
+        stage_category: s.stage_category,
+      })
+      if (crErr) errors.push(crErr.message)
+    }
   }
 
   if (errors.length > 0) {
     return NextResponse.json({ error: errors.join('; ') }, { status: 500 })
   }
 
-  // 4. Devolver lista actualizada
+  const { data: checkRows } = await supabase
+    .from('pipeline_stages')
+    .select('slug')
+    .eq('business_id', businessId)
+
+  const slugs = new Set((checkRows ?? []).map((r) => r.slug))
+  if (!slugs.has('pending') || !slugs.has('completed')) {
+    return NextResponse.json(
+      {
+        error: 'missing_required_stages',
+        message: 'Deben existir siempre los estados Pendiente y Completada.',
+      },
+      { status: 500 }
+    )
+  }
+
   const { data: finalStages, error: fetchErr } = await supabase
     .from('pipeline_stages')
-    .select('id, business_id, slug, label, sort_order, color')
+    .select('id, business_id, slug, label, sort_order, color, stage_category')
     .eq('business_id', businessId)
     .order('sort_order', { ascending: true })
 

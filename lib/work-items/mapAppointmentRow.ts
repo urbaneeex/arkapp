@@ -1,4 +1,6 @@
 import { parseKanbanPriorityFromMetadata } from './kanbanPriority'
+import type { PipelineStageCategory } from './pipelineStageDefinitions'
+import { normalizeStageCategoryRow } from './seedPipelineStages'
 import type { WorkItemCard } from './types'
 
 type NestedName = { name: string } | { name: string }[] | null
@@ -26,6 +28,7 @@ function staffNamesFromKanbanAssignees(metadata: unknown): string | null {
 export type AppointmentRowInput = {
   id: string
   business_id: string
+  board_sort_order?: number | null
   title?: string | null
   start_time: string | null
   end_time: string | null
@@ -40,23 +43,32 @@ export type AppointmentRowInput = {
   services?: NestedName
   staff?: NestedName
   pipeline_stages?:
-    | { id: string; slug: string; label: string; sort_order: number }
-    | { id: string; slug: string; label: string; sort_order: number }[]
+    | { id: string; slug: string; label: string; sort_order: number; stage_category?: string | null }
+    | { id: string; slug: string; label: string; sort_order: number; stage_category?: string | null }[]
     | null
 }
 
 function pickStage(
   row: AppointmentRowInput
-): { id: string; slug: string; label: string } {
+): { id: string; slug: string; label: string; category: PipelineStageCategory } {
   const ps = row.pipeline_stages
   if (ps) {
     const one = Array.isArray(ps) ? ps[0] : ps
-    if (one?.id && one.slug) return { id: one.id, slug: one.slug, label: one.label ?? one.slug }
+    if (one?.id && one.slug) {
+      return {
+        id: one.id,
+        slug: one.slug,
+        label: one.label ?? one.slug,
+        category: normalizeStageCategoryRow(one.slug, one.stage_category ?? null),
+      }
+    }
   }
+  const slug = row.status ?? 'pending'
   return {
     id: row.pipeline_stage_id,
-    slug: row.status ?? 'pending',
-    label: row.status ?? 'pending',
+    slug,
+    label: slug,
+    category: normalizeStageCategoryRow(slug, null),
   }
 }
 
@@ -73,6 +85,12 @@ export function mapAppointmentRowToWorkItem(row: AppointmentRowInput): WorkItemC
   const displayTitle =
     title || serviceName || clientName || 'Cita'
 
+  const rawMeta = row.metadata
+  const metadata =
+    rawMeta && typeof rawMeta === 'object' && !Array.isArray(rawMeta)
+      ? { ...(rawMeta as Record<string, unknown>) }
+      : null
+
   return {
     id: row.id,
     business_id: row.business_id,
@@ -87,10 +105,13 @@ export function mapAppointmentRowToWorkItem(row: AppointmentRowInput): WorkItemC
     service_id: row.service_id ?? null,
     service_name: serviceName,
     pipeline_stage_id: stage.id,
+    board_sort_order: row.board_sort_order ?? null,
     stage_slug: stage.slug,
     stage_label: stage.label,
+    stage_category: stage.category,
     status: row.status ?? null,
     price_total: row.price_total ?? null,
     kanban_priority: parseKanbanPriorityFromMetadata(row.metadata ?? null),
+    metadata,
   }
 }

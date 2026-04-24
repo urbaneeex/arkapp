@@ -1,4 +1,5 @@
 import type { KanbanPriorityLevel } from './kanbanPriority'
+import type { PipelineStageCategory } from './pipelineStageDefinitions'
 
 export type PipelineStageRow = {
   id: string
@@ -7,6 +8,7 @@ export type PipelineStageRow = {
   label: string
   sort_order: number
   color: string
+  stage_category: PipelineStageCategory
 }
 
 /** Opciones de empleado para creación rápida en el tablero (id = fila staff, suele coincidir con auth uid). */
@@ -31,10 +33,16 @@ export type WorkItemCard = {
   service_id: string | null
   service_name: string | null
   pipeline_stage_id: string
+  /** Orden en columna Kanban (null = detrás de los que tienen orden, por start_time). */
+  board_sort_order?: number | null
   stage_slug: string
   stage_label: string
+  /** Categoría de la etapa (bloquea drag si es done/closed). */
+  stage_category: PipelineStageCategory
   status: string | null
   price_total: number | null
   /** Desde `metadata.kanban_priority` en citas del tablero. */
   kanban_priority?: KanbanPriorityLevel | null
+  /** Copia de `appointments.metadata` para edición en tarjeta (asignaciones, etc.). */
+  metadata?: Record<string, unknown> | null
 }

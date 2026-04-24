@@ -1,6 +1,6 @@
 'use client'
 
-import type { RefObject } from 'react'
+import type { ReactElement, RefObject } from 'react'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   addMinutes,
@@ -296,26 +296,39 @@ type CalendarTarget = 'start' | 'end'
 const chipShell =
   'rounded-md border border-zinc-600/70 bg-zinc-900/80 px-1.5 py-1.5 transition-[border-color,box-shadow]'
 
+/** Origen del cambio: día en calendario vs rueda de hora vs limpiar. */
+export type KanbanDateChangeSource = 'calendar-day' | 'time-wheel' | 'clear'
+
 export type KanbanQuickDatePickerProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
+  /** Radix modal: cierre fiable al clic fuera con DnD del tablero. */
+  popoverModal?: boolean
+  /** `inline`: mismo panel (chips + calendario + ruedas) siempre visible, sin botón disparador. */
+  layout?: 'popover' | 'inline'
+  className?: string
   triggerSummary: string
   contentRef: RefObject<HTMLDivElement | null>
   startDate: string
   startTime: string
-  onStartDateChange: (v: string) => void
-  onStartTimeChange: (v: string) => void
+  onStartDateChange: (v: string, source?: KanbanDateChangeSource) => void
+  onStartTimeChange: (v: string, source?: KanbanDateChangeSource) => void
   endLocal: string | null
-  onEndChange: (v: string | null) => void
+  onEndChange: (v: string | null, source?: KanbanDateChangeSource) => void
   disabled?: boolean
   /** Panel flotante respecto al botón (portal). En Kanban conviene `right` para no tapar la tarjeta. */
   popoverSide?: 'top' | 'right' | 'bottom' | 'left'
   popoverAlign?: 'start' | 'center' | 'end'
+  /** Sustituye el botón disparador (un solo elemento; p. ej. chip de tarjeta guardada). */
+  trigger?: ReactElement
 }
 
 export function KanbanQuickDatePicker({
   open,
   onOpenChange,
+  popoverModal = true,
+  layout = 'popover',
+  className,
   triggerSummary,
   contentRef,
   startDate,
@@ -327,10 +340,12 @@ export function KanbanQuickDatePicker({
   disabled,
   popoverSide = 'bottom',
   popoverAlign = 'start',
+  trigger: customTrigger,
 }: KanbanQuickDatePickerProps) {
   const [calendarTarget, setCalendarTarget] = useState<CalendarTarget>('end')
   const [timePanel, setTimePanel] = useState<'start' | 'end' | null>(null)
   const wasPopoverOpenRef = useRef(false)
+  const effectiveOpen = layout === 'inline' ? true : open
 
   const startCombined = useMemo(() => {
     if (!startDate.trim()) return startOfDay(new Date())
@@ -343,15 +358,18 @@ export function KanbanQuickDatePicker({
 
   useEffect(() => {
     const wasOpen = wasPopoverOpenRef.current
-    wasPopoverOpenRef.current = open
-    if (open && !wasOpen) {
-      setCalendarTarget('end')
+    wasPopoverOpenRef.current = effectiveOpen
+    if (effectiveOpen && !wasOpen) {
+      setCalendarTarget(layout === 'inline' ? 'start' : 'end')
       setTimePanel(null)
-      const anchor = endDate ?? startCombined
+      const anchor =
+        layout === 'inline'
+          ? startCombined
+          : (endDate ?? startCombined)
       setViewMonth(startOfMonth(anchor))
     }
-    if (!open) setTimePanel(null)
-  }, [open, endDate, startCombined])
+    if (!effectiveOpen) setTimePanel(null)
+  }, [effectiveOpen, endDate, startCombined, layout])
 
   const gridDays = useMemo(() => {
     const mStart = startOfMonth(viewMonth)
@@ -368,20 +386,21 @@ export function KanbanQuickDatePicker({
   }
 
   const applyEndDay = (day: Date) => {
-    onEndChange(toDatetimeLocalValue(startOfDay(day)))
+    onEndChange(toDatetimeLocalValue(startOfDay(day)), 'calendar-day')
   }
 
   const pickDay = (day: Date) => {
     setTimePanel(null)
     if (calendarTarget === 'start') {
-      onStartDateChange(format(day, 'yyyy-MM-dd'))
+      onStartDateChange(format(day, 'yyyy-MM-dd'), 'calendar-day')
+      if (layout !== 'inline') setCalendarTarget('end')
       return
     }
     applyEndDay(day)
   }
 
   const clearEnd = () => {
-    onEndChange(null)
+    onEndChange(null, 'clear')
   }
 
   const endTimeStr = endDate ? format(endDate, 'HH:mm') : ''
@@ -405,7 +424,7 @@ export function KanbanQuickDatePicker({
       : combineDateAndOptionalTime(startDate, startTime)
     let next = base
     if (next <= start) next = addMinutes(start, 1)
-    onEndChange(toDatetimeLocalValue(next))
+    onEndChange(toDatetimeLocalValue(next), 'time-wheel')
   }
 
   const startHasTime = !!startTime.trim()
@@ -425,13 +444,313 @@ export function KanbanQuickDatePicker({
       ? 'Elige el día de inicio en el calendario'
       : 'Elige el día de fin en el calendario'
 
-  const body = (
+  const calendarPanel = (
+    <div className="flex min-h-0 min-w-0 flex-col rounded-md border border-zinc-800/90 bg-zinc-950/40 p-1.5">
+      <p className="mb-1.5 px-0.5 text-center text-[10px] leading-snug text-zinc-500">
+        {calendarHint}
+      </p>
+      <div className="mb-1 flex items-center justify-between gap-1 px-0.5">
+        <span className="text-xs font-medium capitalize leading-tight text-zinc-100">
+          {format(viewMonth, 'LLLL yyyy', { locale: es })}
+        </span>
+        <div className="flex shrink-0 items-center gap-0.5">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-6 px-1.5 text-[10px] text-zinc-400 hover:text-zinc-100"
+            disabled={disabled}
+            onClick={() => {
+              const t = new Date()
+              setViewMonth(startOfMonth(t))
+            }}
+          >
+            Hoy
+          </Button>
+          <button
+            type="button"
+            disabled={disabled}
+            className="rounded p-0.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200 disabled:opacity-50"
+            aria-label="Mes anterior"
+            onClick={() => goMonth(-1)}
+          >
+            <ChevronLeft className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            disabled={disabled}
+            className="rounded p-0.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200 disabled:opacity-50"
+            aria-label="Mes siguiente"
+            onClick={() => goMonth(1)}
+          >
+            <ChevronRight className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-7 gap-px px-0.5 text-center text-[10px] font-medium uppercase text-zinc-500">
+        {weekLabels.map((d) => (
+          <div key={d} className="py-0.5">
+            {d}
+          </div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-7 gap-px px-0.5 pt-0.5">
+        {gridDays.map((day) => {
+          const inMonth = isSameMonth(day, viewMonth)
+          const isStartDay = !!(startDayParsed && isSameDay(day, startDayParsed))
+          const isEndDay = !!(endDate && isSameDay(day, endDate))
+          const primarySel =
+            (calendarTarget === 'start' && isStartDay) ||
+            (calendarTarget === 'end' && isEndDay)
+          const secondaryMark =
+            !primarySel &&
+            ((calendarTarget === 'start' && isEndDay) ||
+              (calendarTarget === 'end' && isStartDay && !!startDate.trim()))
+          const today = isToday(day)
+          return (
+            <button
+              key={format(day, 'yyyy-MM-dd')}
+              type="button"
+              disabled={disabled}
+              className={cn(
+                'flex aspect-square max-h-9 min-h-[2rem] items-center justify-center rounded p-0 text-xs tabular-nums leading-none transition-colors disabled:opacity-50',
+                !inMonth && 'text-zinc-600',
+                inMonth && !primarySel && !secondaryMark && 'text-zinc-200 hover:bg-zinc-800/90',
+                primarySel && 'bg-white font-semibold text-zinc-900',
+                secondaryMark &&
+                  'bg-zinc-800/60 font-medium text-zinc-200 ring-1 ring-zinc-600/80',
+                today &&
+                  !primarySel &&
+                  !secondaryMark &&
+                  'bg-brand/15 font-medium text-brand ring-1 ring-brand/70'
+              )}
+              onClick={() => pickDay(day)}
+            >
+              {format(day, 'd')}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+
+  const inlineTimeColumn = (
+    <div className="flex min-h-[min(280px,50vw)] min-w-0 flex-col justify-center rounded-md border border-zinc-800/90 bg-zinc-950/40 p-1.5">
+      {calendarTarget === 'start' && !startDate.trim() ? (
+        <p className="px-2 text-center text-[11px] leading-snug text-zinc-500">
+          Selecciona <span className="font-medium text-zinc-400">Inicio</span> arriba y elige el día en el calendario.
+        </p>
+      ) : calendarTarget === 'start' && startDate.trim() ? (
+        <KanbanBrandWheelTime
+          title="Hora de inicio"
+          valueHHmm={startTime.trim()}
+          disabled={disabled}
+          onAccept={(hhmm) => {
+            onStartTimeChange(hhmm, 'time-wheel')
+          }}
+        />
+      ) : calendarTarget === 'end' && !endLocal ? (
+        <p className="px-2 text-center text-[11px] leading-snug text-zinc-500">
+          Selecciona <span className="font-medium text-zinc-400">Fin</span> arriba y elige el día en el calendario.
+        </p>
+      ) : calendarTarget === 'end' && endLocal && endDate ? (
+        <KanbanBrandWheelTime
+          title="Hora de fin"
+          valueHHmm={endTimeStr}
+          disabled={disabled}
+          onAccept={(hhmm) => {
+            applyEndTimeFromHHmm(hhmm)
+          }}
+        />
+      ) : null}
+    </div>
+  )
+
+  const inlineBody = (
+    <div className={cn('min-w-0 space-y-2 p-1.5', KANBAN_COLUMN_TITLE_TYPO)}>
+      <div className="grid min-w-0 grid-cols-2 gap-2">
+        <div
+          className={cn(
+            chipShell,
+            'flex min-h-[2.35rem] min-w-0 items-center justify-between gap-1 rounded-xl px-2 py-2 sm:px-3',
+            calendarTarget === 'start' && 'border-brand/50 ring-1 ring-brand/30',
+          )}
+          role="group"
+          aria-label="Fecha de inicio"
+        >
+          <div className="flex min-w-0 flex-1 items-center gap-1">
+            {!startDate.trim() ? (
+              <button
+                type="button"
+                disabled={disabled}
+                className={cn(
+                  'min-w-0 flex-1 truncate text-left text-sm transition-colors disabled:opacity-50',
+                  calendarTarget === 'start' ? 'text-brand' : 'text-zinc-500 hover:text-zinc-400',
+                )}
+                onClick={() => setCalendarTarget('start')}
+              >
+                Fecha de inicio
+              </button>
+            ) : startHasTime && startChipLine ? (
+              <div className="flex min-w-0 flex-1 items-center gap-1">
+                <button
+                  type="button"
+                  disabled={disabled}
+                  className="min-w-0 flex-1 truncate text-left text-sm font-medium text-zinc-100 transition-colors hover:text-white disabled:opacity-50"
+                  onClick={() => setCalendarTarget('start')}
+                >
+                  {startChipLine}
+                </button>
+                <button
+                  type="button"
+                  disabled={disabled}
+                  className="shrink-0 rounded-full bg-zinc-800/90 p-0.5 text-zinc-400 transition-colors hover:bg-zinc-700 hover:text-zinc-200 disabled:opacity-50"
+                  aria-label="Quitar fecha de inicio"
+                  onClick={() => {
+                    onStartDateChange('', 'clear')
+                    onStartTimeChange('', 'clear')
+                  }}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ) : (
+              <div className="flex min-w-0 flex-1 items-center gap-1">
+                <button
+                  type="button"
+                  disabled={disabled}
+                  className={cn(
+                    'min-w-0 truncate text-left text-sm font-medium tabular-nums transition-colors disabled:opacity-50',
+                    calendarTarget === 'start' ? 'text-brand' : 'text-zinc-100 hover:text-white',
+                  )}
+                  onClick={() => setCalendarTarget('start')}
+                >
+                  {startDateShort}
+                </button>
+                <button
+                  type="button"
+                  disabled={disabled}
+                  className="shrink-0 rounded-full bg-zinc-800/90 p-0.5 text-zinc-400 transition-colors hover:bg-zinc-700 hover:text-zinc-200 disabled:opacity-50"
+                  aria-label="Quitar fecha de inicio"
+                  onClick={() => {
+                    onStartDateChange('', 'clear')
+                    onStartTimeChange('', 'clear')
+                  }}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            )}
+          </div>
+          {startDate.trim() && !startHasTime ? (
+            <button
+              type="button"
+              disabled={disabled}
+              className="shrink-0 rounded-lg px-1.5 py-1 text-[11px] font-medium text-brand transition-colors hover:bg-brand/15 hover:text-brand disabled:opacity-50 sm:px-2 sm:text-sm"
+              onClick={() => setCalendarTarget('start')}
+            >
+              Añadir hora
+            </button>
+          ) : null}
+        </div>
+
+        <div
+          className={cn(
+            chipShell,
+            'flex min-h-[2.35rem] min-w-0 items-center justify-between gap-1 rounded-xl px-2 py-2 sm:px-3',
+            !endLocal && 'border-zinc-600/50',
+            calendarTarget === 'end' && 'border-brand/50 ring-1 ring-brand/30',
+          )}
+          role="group"
+          aria-label="Fecha de fin"
+        >
+          <div className="flex min-w-0 flex-1 items-center gap-1">
+            {!endLocal ? (
+              <button
+                type="button"
+                disabled={disabled}
+                className={cn(
+                  'min-w-0 flex-1 truncate text-left text-sm transition-colors disabled:opacity-50',
+                  calendarTarget === 'end' ? 'text-brand' : 'text-zinc-500 hover:text-zinc-400',
+                )}
+                onClick={() => setCalendarTarget('end')}
+              >
+                Fecha de fin
+              </button>
+            ) : endShowsTimeChip && endChipLine ? (
+              <div className="flex min-w-0 flex-1 items-center gap-1">
+                <button
+                  type="button"
+                  disabled={disabled}
+                  className="min-w-0 flex-1 truncate text-left text-sm font-medium text-zinc-100 transition-colors hover:text-white disabled:opacity-50"
+                  onClick={() => setCalendarTarget('end')}
+                >
+                  {endChipLine}
+                </button>
+                <button
+                  type="button"
+                  disabled={disabled}
+                  className="shrink-0 rounded-full bg-zinc-800/90 p-0.5 text-zinc-400 transition-colors hover:bg-zinc-700 hover:text-zinc-200 disabled:opacity-50"
+                  aria-label="Quitar fecha de fin"
+                  onClick={clearEnd}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ) : (
+              <div className="flex min-w-0 flex-1 items-center gap-1">
+                <button
+                  type="button"
+                  disabled={disabled}
+                  className={cn(
+                    'min-w-0 truncate text-left text-sm font-medium tabular-nums transition-colors disabled:opacity-50',
+                    calendarTarget === 'end' ? 'text-brand' : 'text-zinc-100 hover:text-white',
+                  )}
+                  onClick={() => setCalendarTarget('end')}
+                >
+                  {endDateShort}
+                </button>
+                <button
+                  type="button"
+                  disabled={disabled}
+                  className="shrink-0 rounded-full bg-zinc-800/90 p-0.5 text-zinc-400 transition-colors hover:bg-zinc-700 hover:text-zinc-200 disabled:opacity-50"
+                  aria-label="Quitar fecha de fin"
+                  onClick={clearEnd}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            )}
+          </div>
+          {endLocal && endDate && !endShowsTimeChip ? (
+            <button
+              type="button"
+              disabled={disabled}
+              className="shrink-0 rounded-lg px-1.5 py-1 text-[11px] font-medium text-brand transition-colors hover:bg-brand/15 hover:text-brand disabled:opacity-50 sm:px-2 sm:text-sm"
+              onClick={() => setCalendarTarget('end')}
+            >
+              Añadir hora
+            </button>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="grid min-w-0 grid-cols-2 items-stretch gap-2">
+        <div className="min-w-0">{calendarPanel}</div>
+        <div className="min-w-0">{inlineTimeColumn}</div>
+      </div>
+    </div>
+  )
+
+  const popoverBody = (
     <div className={cn('min-w-0 space-y-1.5 p-1.5', KANBAN_COLUMN_TITLE_TYPO)}>
       <div
         className={cn(
           chipShell,
           'flex min-h-[2.35rem] items-center justify-between gap-2 rounded-xl px-3 py-2',
-          calendarTarget === 'start' && 'border-brand/50 ring-1 ring-brand/30'
+          calendarTarget === 'start' && 'border-brand/50 ring-1 ring-brand/30',
         )}
         role="group"
         aria-label="Fecha de inicio"
@@ -452,7 +771,7 @@ export function KanbanQuickDatePicker({
               disabled={disabled}
               className={cn(
                 'min-w-0 flex-1 truncate text-left text-sm transition-colors disabled:opacity-50',
-                calendarTarget === 'start' ? 'text-brand' : 'text-zinc-500 hover:text-zinc-400'
+                calendarTarget === 'start' ? 'text-brand' : 'text-zinc-500 hover:text-zinc-400',
               )}
               onClick={() => setCalendarTarget('start')}
             >
@@ -474,9 +793,8 @@ export function KanbanQuickDatePicker({
                 className="shrink-0 rounded-full bg-zinc-800/90 p-0.5 text-zinc-400 transition-colors hover:bg-zinc-700 hover:text-zinc-200 disabled:opacity-50"
                 aria-label="Quitar fecha de inicio"
                 onClick={() => {
-                  onStartDateChange('')
-                  onStartTimeChange('')
-                  onEndChange(null)
+                  onStartDateChange('', 'clear')
+                  onStartTimeChange('', 'clear')
                 }}
               >
                 <X className="h-3 w-3" />
@@ -489,7 +807,7 @@ export function KanbanQuickDatePicker({
                 disabled={disabled}
                 className={cn(
                   'min-w-0 truncate text-left text-sm font-medium tabular-nums transition-colors disabled:opacity-50',
-                  calendarTarget === 'start' ? 'text-brand' : 'text-zinc-100 hover:text-white'
+                  calendarTarget === 'start' ? 'text-brand' : 'text-zinc-100 hover:text-white',
                 )}
                 onClick={() => setCalendarTarget('start')}
               >
@@ -501,9 +819,8 @@ export function KanbanQuickDatePicker({
                 className="shrink-0 rounded-full bg-zinc-800/90 p-0.5 text-zinc-400 transition-colors hover:bg-zinc-700 hover:text-zinc-200 disabled:opacity-50"
                 aria-label="Quitar fecha de inicio"
                 onClick={() => {
-                  onStartDateChange('')
-                  onStartTimeChange('')
-                  onEndChange(null)
+                  onStartDateChange('', 'clear')
+                  onStartTimeChange('', 'clear')
                 }}
               >
                 <X className="h-3 w-3" />
@@ -529,7 +846,7 @@ export function KanbanQuickDatePicker({
           valueHHmm={startTime.trim()}
           disabled={disabled}
           onAccept={(hhmm) => {
-            onStartTimeChange(hhmm)
+            onStartTimeChange(hhmm, 'time-wheel')
             setTimePanel(null)
           }}
         />
@@ -540,7 +857,7 @@ export function KanbanQuickDatePicker({
           chipShell,
           'flex min-h-[2.35rem] items-center justify-between gap-2 rounded-xl px-3 py-2',
           !endLocal && 'border-zinc-600/50',
-          calendarTarget === 'end' && 'border-brand/50 ring-1 ring-brand/30'
+          calendarTarget === 'end' && 'border-brand/50 ring-1 ring-brand/30',
         )}
         role="group"
         aria-label="Fecha de fin"
@@ -561,7 +878,7 @@ export function KanbanQuickDatePicker({
               disabled={disabled}
               className={cn(
                 'min-w-0 flex-1 truncate text-left text-sm transition-colors disabled:opacity-50',
-                calendarTarget === 'end' ? 'text-brand' : 'text-zinc-500 hover:text-zinc-400'
+                calendarTarget === 'end' ? 'text-brand' : 'text-zinc-500 hover:text-zinc-400',
               )}
               onClick={() => setCalendarTarget('end')}
             >
@@ -594,7 +911,7 @@ export function KanbanQuickDatePicker({
                 disabled={disabled}
                 className={cn(
                   'min-w-0 truncate text-left text-sm font-medium tabular-nums transition-colors disabled:opacity-50',
-                  calendarTarget === 'end' ? 'text-brand' : 'text-zinc-100 hover:text-white'
+                  calendarTarget === 'end' ? 'text-brand' : 'text-zinc-100 hover:text-white',
                 )}
                 onClick={() => setCalendarTarget('end')}
               >
@@ -636,118 +953,49 @@ export function KanbanQuickDatePicker({
         />
       ) : null}
 
-      <div className="rounded-md border border-zinc-800/90 bg-zinc-950/40 p-1.5">
-        <p className="mb-1.5 px-0.5 text-center text-[10px] leading-snug text-zinc-500">
-          {calendarHint}
-        </p>
-        <div className="mb-1 flex items-center justify-between gap-1 px-0.5">
-          <span className="text-xs font-medium capitalize leading-tight text-zinc-100">
-            {format(viewMonth, 'LLLL yyyy', { locale: es })}
-          </span>
-          <div className="flex shrink-0 items-center gap-0.5">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-6 px-1.5 text-[10px] text-zinc-400 hover:text-zinc-100"
-              disabled={disabled}
-              onClick={() => {
-                const t = new Date()
-                setViewMonth(startOfMonth(t))
-              }}
-            >
-              Hoy
-            </Button>
-            <button
-              type="button"
-              disabled={disabled}
-              className="rounded p-0.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200 disabled:opacity-50"
-              aria-label="Mes anterior"
-              onClick={() => goMonth(-1)}
-            >
-              <ChevronLeft className="h-3.5 w-3.5" />
-            </button>
-            <button
-              type="button"
-              disabled={disabled}
-              className="rounded p-0.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200 disabled:opacity-50"
-              aria-label="Mes siguiente"
-              onClick={() => goMonth(1)}
-            >
-              <ChevronRight className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-7 gap-px px-0.5 text-center text-[10px] font-medium uppercase text-zinc-500">
-          {weekLabels.map((d) => (
-            <div key={d} className="py-0.5">
-              {d}
-            </div>
-          ))}
-        </div>
-
-        <div className="grid grid-cols-7 gap-px px-0.5 pt-0.5">
-          {gridDays.map((day) => {
-            const inMonth = isSameMonth(day, viewMonth)
-            const isStartDay = !!(startDayParsed && isSameDay(day, startDayParsed))
-            const isEndDay = !!(endDate && isSameDay(day, endDate))
-            const primarySel =
-              (calendarTarget === 'start' && isStartDay) ||
-              (calendarTarget === 'end' && isEndDay)
-            const secondaryMark =
-              !primarySel &&
-              ((calendarTarget === 'start' && isEndDay) ||
-                (calendarTarget === 'end' && isStartDay && !!startDate.trim()))
-            const today = isToday(day)
-            return (
-              <button
-                key={format(day, 'yyyy-MM-dd')}
-                type="button"
-                disabled={disabled}
-                className={cn(
-                  'flex aspect-square max-h-9 min-h-[2rem] items-center justify-center rounded p-0 text-xs tabular-nums leading-none transition-colors disabled:opacity-50',
-                  !inMonth && 'text-zinc-600',
-                  inMonth && !primarySel && !secondaryMark && 'text-zinc-200 hover:bg-zinc-800/90',
-                  primarySel && 'bg-white font-semibold text-zinc-900',
-                  secondaryMark &&
-                    'bg-zinc-800/60 font-medium text-zinc-200 ring-1 ring-zinc-600/80',
-                  today &&
-                    !primarySel &&
-                    !secondaryMark &&
-                    'bg-brand/15 font-medium text-brand ring-1 ring-brand/70'
-                )}
-                onClick={() => pickDay(day)}
-              >
-                {format(day, 'd')}
-              </button>
-            )
-          })}
-        </div>
-      </div>
+      {calendarPanel}
     </div>
   )
 
+  const body = layout === 'inline' ? inlineBody : popoverBody
+
+  if (layout === 'inline') {
+    return (
+      <div
+        ref={contentRef}
+        className={cn(
+          'min-w-0 w-full max-w-none overflow-x-hidden border-zinc-700 bg-zinc-950 text-zinc-100',
+          KANBAN_COLUMN_TITLE_TYPO,
+          className,
+        )}
+      >
+        {body}
+      </div>
+    )
+  }
+
   return (
-    <Popover open={open} onOpenChange={onOpenChange}>
+    <Popover modal={popoverModal} open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger asChild>
-        <button
-          type="button"
-          disabled={disabled}
-          className={cn(
-            KANBAN_QUICK_ADD_ROW_MUTED,
-            KANBAN_QUICK_ADD_ROW_TAP,
-            'group flex min-h-10 min-w-0 items-center gap-2 text-left leading-normal disabled:opacity-50'
-          )}
-        >
-          <Calendar
-            className="h-4 w-4 shrink-0 text-zinc-500 transition-colors group-hover:text-zinc-400 group-data-[state=open]:text-zinc-300"
-            aria-hidden
-          />
-          <span className="min-w-0 flex-1 truncate text-left">
-            {triggerSummary}
-          </span>
-        </button>
+        {customTrigger ?? (
+          <button
+            type="button"
+            disabled={disabled}
+            className={cn(
+              KANBAN_QUICK_ADD_ROW_MUTED,
+              KANBAN_QUICK_ADD_ROW_TAP,
+              'group flex min-h-10 min-w-0 items-center gap-2 text-left leading-normal disabled:opacity-50'
+            )}
+          >
+            <Calendar
+              className="h-4 w-4 shrink-0 text-zinc-500 transition-colors group-hover:text-zinc-400 group-data-[state=open]:text-zinc-300"
+              aria-hidden
+            />
+            <span className="min-w-0 flex-1 truncate text-left">
+              {triggerSummary}
+            </span>
+          </button>
+        )}
       </PopoverTrigger>
       <PopoverContent
         ref={contentRef}

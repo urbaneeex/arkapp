@@ -16,7 +16,6 @@ import { Button } from '@/components/ui/button'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { compactStageCardClassForSlug } from '@/lib/work-items/stageColors'
-import { canMoveWorkItemByStageSlug } from '@/lib/work-items/canMoveWorkItem'
 
 type AppointmentRow = {
   id: string
@@ -205,7 +204,7 @@ function DraggableAppointmentCard({
     id: appointment.id,
   })
   const stageSlug = stageSlugForAppointment(appointment)
-  const canDrag = canMoveWorkItemByStageSlug(stageSlug)
+  const canDrag = true
   const clientName = Array.isArray(appointment.clients) ? appointment.clients[0]?.name : appointment.clients?.name
   const serviceName = Array.isArray(appointment.services) ? appointment.services[0]?.name : appointment.services?.name
   const startTime = format(parseISO(appointment.start_time), 'HH:mm')

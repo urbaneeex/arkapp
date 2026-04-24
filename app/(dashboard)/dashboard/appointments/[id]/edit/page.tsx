@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import { createClient } from '@/lib/supabase/server'
 import { redirect, notFound } from 'next/navigation'
 import { PageHeader } from '@/components/layout/PageHeader'
@@ -59,13 +60,15 @@ export default async function EditAppointmentPage({
   return (
     <div className="max-w-xl">
       <PageHeader title="Editar cita" />
-      <AppointmentForm
-        businessId={business.id}
-        clients={clients ?? []}
-        services={services ?? []}
-        staff={staff ?? []}
-        appointment={appointment}
-      />
+      <Suspense fallback={<p className="text-sm text-zinc-400">Cargando formulario…</p>}>
+        <AppointmentForm
+          businessId={business.id}
+          clients={clients ?? []}
+          services={services ?? []}
+          staff={staff ?? []}
+          appointment={appointment}
+        />
+      </Suspense>
     </div>
   )
 }

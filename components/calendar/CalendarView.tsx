@@ -36,14 +36,13 @@ import {
   useDndMonitor,
   type DragEndEvent,
 } from '@dnd-kit/core'
-import { Ban, Check, ChevronLeft, ChevronRight, Loader2, Pencil, Plus, Search, User, Wrench, X } from 'lucide-react'
+import { Ban, ChevronLeft, ChevronRight, Loader2, Plus, Search, User, Wrench, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
 import { ClientOnlyDnd } from '@/components/calendar/ClientOnlyDnd'
 import { AppointmentPopover, type AppointmentForPopover } from '@/components/calendar/AppointmentPopover'
-import { MoveAppointmentDialog } from '@/components/calendar/MoveAppointmentDialog'
 import { AppointmentEditModal } from '@/components/calendar/AppointmentEditModal'
 import { ToastSimple } from '@/components/ui/toast-simple'
 import { getDayOfWeek, getOpenRangesForDay, minutesToTime, timeToMinutes } from '@/lib/availability'
@@ -54,7 +53,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { usePermissions } from '@/hooks/usePermissions'
 import { mapAppointmentRowToWorkItem, type AppointmentRowInput } from '@/lib/work-items/mapAppointmentRow'
 import { stageColorClassForSlug } from '@/lib/work-items/stageColors'
-import { canMoveWorkItemByStageSlug } from '@/lib/work-items/canMoveWorkItem'
+import type { PipelineStageCategory } from '@/lib/work-items/pipelineStageDefinitions'
 import {
   KanbanQuickDatePicker,
   combineDateAndOptionalTime,
@@ -91,12 +90,13 @@ type AppointmentRow = {
   service_id: string | null
   staff_id: string | null
   pipeline_stage_id: string
+  metadata?: unknown | null
   clients: { name: string; phone?: string } | { name: string; phone?: string }[] | null
   services: { name: string; duration: number; price: number } | { name: string; duration: number; price: number }[] | null
   staff: { name: string } | { name: string }[] | null
   pipeline_stages?:
-    | { id: string; slug: string; label: string; sort_order: number }
-    | { id: string; slug: string; label: string; sort_order: number }[]
+    | { id: string; slug: string; label: string; sort_order: number; stage_category?: string | null }
+    | { id: string; slug: string; label: string; sort_order: number; stage_category?: string | null }[]
     | null
 }
 
@@ -109,12 +109,34 @@ interface AppointmentNormalized {
   end_time: string
   status: string
   stage_slug: string
+  stage_category: PipelineStageCategory
   display_title: string
   staff_id: string | null
   client_name: string | null
   service_name: string | null
   staff_name: string | null
+  /** Citas con solo fecha en UI; ver `metadata.calendar_time_unspecified`. */
+  time_unspecified?: boolean
 }
+
+const CALENDAR_TIME_UNSPECIFIED_KEY = 'calendar_time_unspecified'
+
+function isCalendarTimeUnspecifiedMeta(metadata: unknown): boolean {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return false
+  return (metadata as Record<string, unknown>)[CALENDAR_TIME_UNSPECIFIED_KEY] === true
+}
+
+function mergeMetadataTimeUnspecified(metadata: unknown): Record<string, unknown> {
+  const base =
+    metadata && typeof metadata === 'object' && !Array.isArray(metadata)
+      ? { ...(metadata as Record<string, unknown>) }
+      : {}
+  base[CALENDAR_TIME_UNSPECIFIED_KEY] = true
+  return base
+}
+
+/** Arrastre HTML5 desde el panel lateral (no anida otro DndContext). */
+const ARKAPT_SIDEBAR_SCHEDULE_MIME = 'application/x-arkapt-sidebar-schedule'
 
 function normalizeAppointment(a: AppointmentRow): AppointmentNormalized {
   if (!a.start_time || !a.end_time) {
@@ -127,11 +149,13 @@ function normalizeAppointment(a: AppointmentRow): AppointmentNormalized {
     end_time: a.end_time,
     status: a.status ?? 'pending',
     stage_slug: w.stage_slug,
+    stage_category: w.stage_category,
     display_title: w.displayTitle,
     staff_id: a.staff_id,
     client_name: Array.isArray(a.clients) ? a.clients[0]?.name ?? null : a.clients?.name ?? null,
     service_name: Array.isArray(a.services) ? a.services[0]?.name ?? null : a.services?.name ?? null,
     staff_name: Array.isArray(a.staff) ? a.staff[0]?.name ?? null : a.staff?.name ?? null,
+    time_unspecified: isCalendarTimeUnspecifiedMeta(a.metadata ?? null),
   }
 }
 
@@ -231,6 +255,186 @@ function ViewDropdown({
   )
 }
 
+type CalendarTasksTab = 'unscheduled' | 'overdue'
+
+function stageDotClass(slug: string | null | undefined): string {
+  if (!slug || slug === 'pending') return 'bg-amber-500'
+  if (slug === 'confirmed') return 'bg-brand'
+  if (slug === 'in_progress') return 'bg-violet-500'
+  if (slug === 'completed') return 'bg-emerald-500'
+  if (slug === 'cancelled') return 'bg-zinc-500'
+  if (slug === 'no_show') return 'bg-red-500'
+  return 'bg-zinc-400'
+}
+
+function CalendarTasksSidebar({
+  unscheduled,
+  overdue,
+  canDrag,
+  panelOpen,
+  onTogglePanel,
+}: {
+  unscheduled: AppointmentRow[]
+  overdue: AppointmentRow[]
+  canDrag: boolean
+  panelOpen: boolean
+  onTogglePanel: () => void
+}) {
+  const [tab, setTab] = useState<CalendarTasksTab>('unscheduled')
+  const [search, setSearch] = useState('')
+  const [sortAsc, setSortAsc] = useState(true)
+
+  const source = tab === 'unscheduled' ? unscheduled : overdue
+  const rows = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    let list = source
+    if (q) {
+      list = source.filter((r) => {
+        const w = mapAppointmentRowToWorkItem(r as unknown as AppointmentRowInput)
+        const hay = `${w.displayTitle} ${w.client_name ?? ''} ${w.service_name ?? ''} ${w.stage_slug}`.toLowerCase()
+        return hay.includes(q)
+      })
+    }
+    return [...list].sort((a, b) => {
+      const wa = mapAppointmentRowToWorkItem(a as unknown as AppointmentRowInput)
+      const wb = mapAppointmentRowToWorkItem(b as unknown as AppointmentRowInput)
+      const byStage = wa.stage_slug.localeCompare(wb.stage_slug)
+      if (byStage !== 0) return sortAsc ? byStage : -byStage
+      const byTitle = wa.displayTitle.localeCompare(wb.displayTitle, 'es')
+      return sortAsc ? byTitle : -byTitle
+    })
+  }, [source, search, sortAsc])
+
+  if (!panelOpen) {
+    return (
+      <div className="flex shrink-0 flex-col border-l border-zinc-800 bg-zinc-950">
+        <button
+          type="button"
+          onClick={onTogglePanel}
+          className="flex h-full min-h-[120px] w-9 flex-col items-center justify-center gap-2 border-0 bg-zinc-950 py-3 text-zinc-400 transition-colors hover:bg-zinc-900 hover:text-zinc-100"
+          aria-label="Mostrar tareas"
+        >
+          <ChevronLeft className="h-4 w-4" />
+          <span className="max-w-[10px] text-[10px] font-medium uppercase leading-tight tracking-wide break-words text-center">
+            Tareas
+          </span>
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <aside className="flex w-[min(100%,18rem)] shrink-0 flex-col border-l border-zinc-800 bg-zinc-950">
+      <div className="flex items-center justify-between gap-2 border-b border-zinc-800 px-3 py-2.5">
+        <h3 className="font-display text-sm font-semibold text-zinc-100">Tareas</h3>
+        <div className="flex items-center gap-0.5">
+          <span className="sr-only">Buscar en la lista</span>
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar…"
+              className="h-8 w-36 border-zinc-700 bg-zinc-900 pl-7 text-xs text-zinc-200 placeholder:text-zinc-500"
+              aria-label="Buscar tareas"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={onTogglePanel}
+            className="rounded p-1.5 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-100"
+            aria-label="Ocultar panel de tareas"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+
+      <div className="flex border-b border-zinc-800 px-2">
+        <button
+          type="button"
+          onClick={() => setTab('unscheduled')}
+          className={cn(
+            'flex-1 border-b-2 py-2 text-center text-xs font-medium transition-colors',
+            tab === 'unscheduled'
+              ? 'border-zinc-100 text-zinc-100'
+              : 'border-transparent text-zinc-500 hover:text-zinc-300'
+          )}
+        >
+          Sin programar
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab('overdue')}
+          className={cn(
+            'flex-1 border-b-2 py-2 text-center text-xs font-medium transition-colors',
+            tab === 'overdue'
+              ? 'border-zinc-100 text-zinc-100'
+              : 'border-transparent text-zinc-500 hover:text-zinc-300'
+          )}
+        >
+          Vencidas
+        </button>
+      </div>
+
+      <div className="flex items-center justify-between gap-2 px-3 py-2 text-[11px] text-zinc-500">
+        <button
+          type="button"
+          onClick={() => setSortAsc((v) => !v)}
+          className="flex items-center gap-1 text-zinc-400 transition-colors hover:text-zinc-200"
+        >
+          Orden: etapa
+          <span className="tabular-nums text-zinc-500">{sortAsc ? '↑' : '↓'}</span>
+        </button>
+        <span className="tabular-nums text-zinc-400">
+          {rows.length} {rows.length === 1 ? 'tarea' : 'tareas'}
+        </span>
+      </div>
+
+      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-2 pb-3">
+        {rows.length === 0 ? (
+          <p className="px-2 py-6 text-center text-xs text-zinc-500">
+            {tab === 'unscheduled' ? 'No hay tareas sin fecha.' : 'No hay tareas vencidas.'}
+          </p>
+        ) : (
+          <ul className="space-y-1">
+            {rows.map((r) => {
+              const w = mapAppointmentRowToWorkItem(r as unknown as AppointmentRowInput)
+              const draggable = canDrag
+              return (
+                <li key={r.id}>
+                  <div
+                    role="listitem"
+                    draggable={draggable}
+                    onDragStart={(e) => {
+                      if (!draggable) {
+                        e.preventDefault()
+                        return
+                      }
+                      e.dataTransfer.setData(ARKAPT_SIDEBAR_SCHEDULE_MIME, r.id)
+                      e.dataTransfer.effectAllowed = 'move'
+                    }}
+                    className={cn(
+                      'flex gap-2 rounded-md px-2 py-2.5 text-left transition-colors',
+                      draggable ? 'cursor-grab active:cursor-grabbing hover:bg-zinc-900' : 'cursor-default opacity-80'
+                    )}
+                  >
+                    <span
+                      className={cn('mt-1 h-2 w-2 shrink-0 rounded-full ring-2 ring-zinc-950', stageDotClass(w.stage_slug))}
+                      aria-hidden
+                    />
+                    <span className="min-w-0 flex-1 text-sm leading-snug text-zinc-200">{w.displayTitle}</span>
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </div>
+    </aside>
+  )
+}
+
 export function CalendarView({
   appointments,
   clients,
@@ -267,6 +471,7 @@ export function CalendarView({
   const { hasPermission } = usePermissions()
   const canMoveAppointments = hasPermission('appointments_move')
   const canEditAppointments = hasPermission('appointments_edit')
+  const canDeleteAppointments = hasPermission('appointments_delete')
   const [current, setCurrent] = useState(new Date())
   const [view, setView] = useState<ViewType>(defaultPeriod ?? 'day')
   const [staffFilter, setStaffFilterInternal] = useState<string>(externalStaffFilter ?? '')
@@ -280,16 +485,10 @@ export function CalendarView({
   const [popoverAppointment, setPopoverAppointment] = useState<AppointmentForPopover | null>(null)
   const [anchorPosition, setAnchorPosition] = useState<{ x: number; y: number } | null>(null)
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
-  const [moveDialog, setMoveDialog] = useState<{
-    apt: AppointmentNormalized
-    fromDate: Date
-    toDate: Date
-    conflictWarning: string | null
-  } | null>(null)
-  const [moveLoading, setMoveLoading] = useState(false)
   const [editModalAppointmentId, setEditModalAppointmentId] = useState<string | null>(null)
   const [externalPanelOpen, setExternalPanelOpen] = useState(false)
   const [selectedMonthDay, setSelectedMonthDay] = useState<Date | null>(null)
+  const [tasksPanelOpen, setTasksPanelOpen] = useState(true)
 
   useEffect(() => {
     if (openNewPanel) {
@@ -320,6 +519,34 @@ export function CalendarView({
     if (!staffFilter_) return appointmentsScheduled
     return appointmentsScheduled.filter((a) => a.staff_id === staffFilter_)
   }, [appointmentsScheduled, staffFilter_])
+
+  const appointmentsUnscheduledBase = useMemo(() => {
+    return appointments.filter((a) => {
+      if (a.status === 'completed' || a.status === 'cancelled') return false
+      if (a.start_time && a.end_time) return false
+      return true
+    })
+  }, [appointments])
+
+  const appointmentsOverdueBase = useMemo(() => {
+    const today = startOfDay(new Date())
+    return appointments.filter((a) => {
+      if (a.status === 'completed' || a.status === 'cancelled') return false
+      if (!a.start_time || !a.end_time) return false
+      const d = startOfDay(parseISO(a.start_time))
+      return isBefore(d, today)
+    })
+  }, [appointments])
+
+  const unscheduledForPanel = useMemo(() => {
+    if (!staffFilter_) return appointmentsUnscheduledBase
+    return appointmentsUnscheduledBase.filter((a) => a.staff_id === staffFilter_)
+  }, [appointmentsUnscheduledBase, staffFilter_])
+
+  const overdueForPanel = useMemo(() => {
+    if (!staffFilter_) return appointmentsOverdueBase
+    return appointmentsOverdueBase.filter((a) => a.staff_id === staffFilter_)
+  }, [appointmentsOverdueBase, staffFilter_])
 
   const goPrev = () => {
     if (view === 'day') setCurrent((d) => subDays(d, 1))
@@ -395,67 +622,119 @@ export function CalendarView({
     setEditModalAppointmentId(id)
   }, [])
 
-  const handleDropAppointment = useCallback((apt: AppointmentNormalized, toDate: Date) => {
-    if (!apt.start_time || !apt.end_time) return
-    const fromDate = parseISO(apt.start_time)
-    const today = startOfDay(new Date())
-    if (toDate < today) {
-      setToast({ message: 'No se puede mover la cita a una fecha pasada', type: 'error' })
-      return
-    }
-    const start = parseISO(apt.start_time)
-    const end = parseISO(apt.end_time)
-    const durationMs = end.getTime() - start.getTime()
-    const newStart = new Date(toDate)
-    newStart.setSeconds(0, 0)
-    const newEnd = addMinutes(newStart, Math.round(durationMs / 60000))
-    const newStartMs = newStart.getTime()
-    const newEndMs = newEnd.getTime()
-    const sameDayStaff = filteredAppointments.filter(
-      (a) =>
-        a.id !== apt.id &&
-        a.staff_id === apt.staff_id &&
-        !!a.start_time &&
-        !!a.end_time &&
-        isSameDay(parseISO(a.start_time), toDate)
-    )
-    const conflict = sameDayStaff.find((a) => {
-      const aStart = parseISO(a.start_time!).getTime()
-      const aEnd = parseISO(a.end_time!).getTime()
-      return newStartMs < aEnd && newEndMs > aStart
-    })
-    const conflictWarning = conflict
-      ? `Atención: hay solapamiento con otra cita (${conflict.client_name ?? 'cliente'}). Puedes continuar bajo tu responsabilidad.`
-      : null
-    setMoveDialog({ apt, fromDate, toDate, conflictWarning })
-  }, [filteredAppointments])
-
-  const handleConfirmMove = useCallback(async () => {
-    if (!moveDialog) return
-    if (!moveDialog.apt.start_time || !moveDialog.apt.end_time) return
-    setMoveLoading(true)
-    const start = parseISO(moveDialog.apt.start_time)
-    const end = parseISO(moveDialog.apt.end_time)
-    const durationMs = end.getTime() - start.getTime()
-    const newStart = new Date(moveDialog.toDate)
-    newStart.setSeconds(0, 0)
-    const newEnd = addMinutes(newStart, Math.round(durationMs / 60000))
-    const { error } = await supabase
-      .from('appointments')
-      .update({
-        start_time: newStart.toISOString(),
-        end_time: newEnd.toISOString(),
+  const handleDropAppointment = useCallback(
+    async (apt: AppointmentNormalized, toDate: Date) => {
+      if (!apt.start_time || !apt.end_time) return
+      const today = startOfDay(new Date())
+      if (toDate < today) {
+        setToast({ message: 'No se puede mover la cita a una fecha pasada', type: 'error' })
+        return
+      }
+      const start = parseISO(apt.start_time)
+      const end = parseISO(apt.end_time)
+      const durationMs = end.getTime() - start.getTime()
+      const newStart = new Date(toDate)
+      newStart.setSeconds(0, 0)
+      const newEnd = addMinutes(newStart, Math.round(durationMs / 60000))
+      const newStartMs = newStart.getTime()
+      const newEndMs = newEnd.getTime()
+      const sameDayStaff = filteredAppointments.filter(
+        (a) =>
+          a.id !== apt.id &&
+          a.staff_id === apt.staff_id &&
+          !!a.start_time &&
+          !!a.end_time &&
+          isSameDay(parseISO(a.start_time), toDate)
+      )
+      const conflict = sameDayStaff.find((a) => {
+        const aStart = parseISO(a.start_time!).getTime()
+        const aEnd = parseISO(a.end_time!).getTime()
+        return newStartMs < aEnd && newEndMs > aStart
       })
-      .eq('id', moveDialog.apt.id)
-    setMoveLoading(false)
-    setMoveDialog(null)
-    if (error) {
-      setToast({ message: error.message, type: 'error' })
-      return
-    }
-    setToast({ message: 'Cita movida', type: 'success' })
-    router.refresh()
-  }, [moveDialog, supabase, router])
+      const { error } = await supabase
+        .from('appointments')
+        .update({
+          start_time: newStart.toISOString(),
+          end_time: newEnd.toISOString(),
+        })
+        .eq('id', apt.id)
+      if (error) {
+        setToast({ message: error.message, type: 'error' })
+        return
+      }
+      setToast({
+        message: conflict
+          ? `Cita movida. Solapamiento con otra cita (${conflict.client_name ?? 'cliente'}).`
+          : 'Cita movida',
+        type: 'success',
+      })
+      router.refresh()
+    },
+    [filteredAppointments, supabase, router]
+  )
+
+  const handleSidebarScheduleOnDay = useCallback(
+    async (appointmentId: string, targetDay: Date) => {
+      if (!canMoveAppointments) return
+      const row = appointments.find((a) => a.id === appointmentId)
+      if (!row) return
+      const today = startOfDay(new Date())
+      if (isBefore(startOfDay(targetDay), today)) {
+        setToast({ message: 'No se puede asignar a una fecha pasada', type: 'error' })
+        return
+      }
+      const hasSchedule = Boolean(row.start_time && row.end_time)
+      const isUnscheduled = !hasSchedule
+      let isOverdue = false
+      if (hasSchedule && row.start_time) {
+        isOverdue = isBefore(startOfDay(parseISO(row.start_time)), today)
+      }
+      if (!isUnscheduled && !isOverdue) {
+        setToast({ message: 'Esta tarea ya tiene fecha futura', type: 'error' })
+        return
+      }
+      const newStart = startOfDay(targetDay)
+      const newEnd = addMinutes(newStart, 60)
+      const newStartMs = newStart.getTime()
+      const newEndMs = newEnd.getTime()
+      const staffId = row.staff_id
+      const sameDayStaff = filteredAppointments.filter(
+        (a) =>
+          a.id !== appointmentId &&
+          a.staff_id === staffId &&
+          !!a.start_time &&
+          !!a.end_time &&
+          isSameDay(parseISO(a.start_time), targetDay)
+      )
+      const conflict = sameDayStaff.find((a) => {
+        const aStart = parseISO(a.start_time).getTime()
+        const aEnd = parseISO(a.end_time).getTime()
+        return newStartMs < aEnd && newEndMs > aStart
+      })
+      if (conflict) {
+        const ok = window.confirm(
+          `Atención: hay solapamiento con otra cita (${conflict.client_name ?? 'cliente'}). ¿Continuar?`
+        )
+        if (!ok) return
+      }
+      const metadata = mergeMetadataTimeUnspecified(row.metadata ?? null)
+      const { error } = await supabase
+        .from('appointments')
+        .update({
+          start_time: newStart.toISOString(),
+          end_time: newEnd.toISOString(),
+          metadata,
+        })
+        .eq('id', appointmentId)
+      if (error) {
+        setToast({ message: error.message, type: 'error' })
+        return
+      }
+      setToast({ message: 'Tarea asignada al día', type: 'success' })
+      router.refresh()
+    },
+    [canMoveAppointments, appointments, filteredAppointments, supabase, router]
+  )
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
@@ -516,7 +795,8 @@ export function CalendarView({
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 flex flex-col">
+      <div className="flex flex-1 min-h-0 min-w-0 flex-row">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <ClientOnlyDnd
         fallback={
           <div className="border border-zinc-800 bg-zinc-900 overflow-hidden flex-1 min-h-[400px]" aria-hidden />
@@ -545,6 +825,7 @@ export function CalendarView({
             }}
             onNavigateToDate={(date) => { setCurrent(date); setView('day') }}
             onDropInDay={canMoveAppointments ? (apt, toDate) => handleDropAppointment(normalizeAppointment(apt), toDate) : undefined}
+            onSidebarScheduleDrop={canMoveAppointments ? handleSidebarScheduleOnDay : undefined}
             businessId={businessId}
             services={services}
             staff={staff}
@@ -563,6 +844,7 @@ export function CalendarView({
                 shiftsByDay={shiftsByDay}
                 onAppointmentClick={handleAppointmentClick}
                 onDropInDay={canMoveAppointments ? handleDropAppointment : undefined}
+                onSidebarScheduleDrop={canMoveAppointments ? handleSidebarScheduleOnDay : undefined}
                 businessId={businessId}
                 services={services}
                 staff={staff}
@@ -577,6 +859,7 @@ export function CalendarView({
                 shiftsByDay={shiftsByDay}
                 onAppointmentClick={handleAppointmentClick}
                 onDropAppointment={canMoveAppointments ? handleDropAppointment : undefined}
+                onSidebarScheduleDrop={canMoveAppointments ? handleSidebarScheduleOnDay : undefined}
                 onDayClick={(day) => setSelectedMonthDay(day)}
               />
             )}
@@ -585,6 +868,15 @@ export function CalendarView({
           </div>
         )}
       </ClientOnlyDnd>
+      </div>
+
+      <CalendarTasksSidebar
+        unscheduled={unscheduledForPanel}
+        overdue={overdueForPanel}
+        canDrag={canMoveAppointments}
+        panelOpen={tasksPanelOpen}
+        onTogglePanel={() => setTasksPanelOpen((o) => !o)}
+      />
       </div>
 
       <AppointmentPopover
@@ -605,17 +897,6 @@ export function CalendarView({
         />
       )}
 
-      <MoveAppointmentDialog
-        open={!!moveDialog}
-        onOpenChange={(open) => !open && setMoveDialog(null)}
-        appointment={moveDialog ? { id: moveDialog.apt.id, client_name: moveDialog.apt.client_name, service_name: moveDialog.apt.service_name, start_time: moveDialog.apt.start_time } : null}
-        fromDate={moveDialog?.fromDate ?? null}
-        toDate={moveDialog?.toDate ?? null}
-        conflictWarning={moveDialog?.conflictWarning ?? null}
-        onConfirm={handleConfirmMove}
-        loading={moveLoading}
-      />
-
       <AppointmentEditModal
         open={!!editModalAppointmentId}
         onOpenChange={(open) => !open && setEditModalAppointmentId(null)}
@@ -625,7 +906,7 @@ export function CalendarView({
         services={services}
         staff={staff}
         onToast={(message, type) => setToast({ message, type })}
-        canDelete={hasPermission('appointments_delete')}
+        canDelete={canDeleteAppointments}
       />
 
       {externalPanelOpen && (
@@ -669,28 +950,7 @@ const CALENDAR_QUICK_ADD_CARD_EST_PX = 400
 const HOUR_HEIGHT_PX = SLOTS_PER_HOUR * SLOT_HEIGHT_PX
 const MINUTES_PER_DAY = 24 * 60
 
-/** Rango horario de la semana: mínima apertura y máxima cierre según shifts de los 7 días */
-function getWeekTimeRangeFromShifts(
-  days: Date[],
-  shiftsByDay: Record<number, Shift[]>
-): { weekViewStartMin: number; weekViewEndMin: number } {
-  let weekViewStartMin = MINUTES_PER_DAY
-  let weekViewEndMin = 0
-  for (const d of days) {
-    const openRanges = getOpenRangesForDay(shiftsByDay, getDayOfWeek(d))
-    for (const r of openRanges) {
-      weekViewStartMin = Math.min(weekViewStartMin, r.start)
-      weekViewEndMin = Math.max(weekViewEndMin, r.end)
-    }
-  }
-  if (weekViewEndMin <= weekViewStartMin) {
-    weekViewStartMin = 8 * 60
-    weekViewEndMin = 20 * 60
-  }
-  return { weekViewStartMin, weekViewEndMin }
-}
-
-/** Vista semana: réplica de DayView (slots 15 min, rango dinámico, sticky, línea “ahora” solo en hoy) */
+/** Vista semana: réplica de DayView (slots 15 min, 00:00–24:00; cerrado según horarios) */
 function WeekView({
   weekStart,
   appointments,
@@ -698,6 +958,7 @@ function WeekView({
   onAppointmentClick,
   onNavigateToDate,
   onDropInDay,
+  onSidebarScheduleDrop,
   businessId,
   services,
   staff,
@@ -710,6 +971,8 @@ function WeekView({
   onAppointmentClick: (apt: AppointmentRowScheduled, e: React.MouseEvent) => void
   onNavigateToDate?: (date: Date) => void
   onDropInDay?: (apt: AppointmentRowScheduled, toDate: Date) => void
+  /** Soltar tarea del panel lateral: solo fecha (inicio del día). */
+  onSidebarScheduleDrop?: (appointmentId: string, day: Date) => void
   businessId?: string
   services?: KanbanService[]
   staff?: WorkBoardStaffOption[]
@@ -722,10 +985,8 @@ function WeekView({
     [weekStart]
   )
 
-  const { weekViewStartMin, weekViewEndMin } = useMemo(
-    () => getWeekTimeRangeFromShifts(days, shiftsByDay),
-    [days, shiftsByDay]
-  )
+  const weekViewStartMin = 0
+  const weekViewEndMin = MINUTES_PER_DAY
 
   const totalSlots = Math.max(0, Math.round((weekViewEndMin - weekViewStartMin) / MINUTES_PER_SLOT))
 
@@ -784,6 +1045,12 @@ function WeekView({
   const [currentTimeTop, setCurrentTimeTop] = useState<number | null>(null)
   const todayIndex = days.findIndex((d) => isSameDay(d, new Date()))
   const isTodayInWeek = todayIndex >= 0
+  const weekNowLineRef = useRef<HTMLDivElement>(null)
+  const hasWeekScrolledToNowRef = useRef(false)
+
+  useEffect(() => {
+    hasWeekScrolledToNowRef.current = false
+  }, [weekStart])
 
   useEffect(() => {
     if (!isTodayInWeek) {
@@ -793,10 +1060,6 @@ function WeekView({
     const update = () => {
       const now = new Date()
       const nowMin = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60
-      if (nowMin < weekViewStartMin || nowMin >= weekViewEndMin) {
-        setCurrentTimeTop(null)
-        return
-      }
       const minutesIntoView = nowMin - weekViewStartMin
       const currentSlotIndex = Math.floor(minutesIntoView / MINUTES_PER_SLOT)
       const slotBoundaryNext = (currentSlotIndex + 1) * SLOT_HEIGHT_PX
@@ -808,7 +1071,18 @@ function WeekView({
     update()
     const id = setInterval(update, 60000)
     return () => clearInterval(id)
-  }, [isTodayInWeek, weekViewStartMin, weekViewEndMin])
+  }, [isTodayInWeek, weekViewStartMin])
+
+  useEffect(() => {
+    if (!isTodayInWeek || currentTimeTop == null || hasWeekScrolledToNowRef.current) return
+    hasWeekScrolledToNowRef.current = true
+    const el = weekNowLineRef.current
+    if (!el) return
+    const raf = requestAnimationFrame(() => {
+      el.scrollIntoView({ block: 'center', behavior: 'instant' as ScrollBehavior })
+    })
+    return () => cancelAnimationFrame(raf)
+  }, [isTodayInWeek, currentTimeTop, weekStart])
 
   const headerRowHeightPx = 40
 
@@ -937,7 +1211,8 @@ function WeekView({
                 isHourStart={isHourStart}
                 isClosed={closed}
                 hasAppointment={slotHasAppointment}
-                  onSlotClick={() => !slotHasAppointment && setSelectedWeekSlot({ dayIndex, timeMin })}
+                onSlotClick={() => !slotHasAppointment && setSelectedWeekSlot({ dayIndex, timeMin })}
+                onSidebarScheduleDrop={onSidebarScheduleDrop}
               />
             )
           })
@@ -989,6 +1264,7 @@ function WeekView({
           const serviceName = Array.isArray(apt.services) ? apt.services[0]?.name : apt.services?.name
           const colWidth = 100 / 7
           const leftPct = dayIndex * colWidth
+          const norm = normalizeAppointment(apt)
           return (
             <WeekDraggableAppointment
               key={apt.id}
@@ -999,7 +1275,7 @@ function WeekView({
               leftPct={leftPct}
               colWidth={colWidth}
               onAppointmentClick={onAppointmentClick}
-              canDrag={!!onDropInDay && canMoveWorkItemByStageSlug(normalizeAppointment(apt).stage_slug)}
+              canDrag={!!onDropInDay}
             />
           )
         })}
@@ -1020,22 +1296,26 @@ function WeekView({
         )}
       </div>
 
-      {/* Línea “ahora” solo en la columna de hoy, sin pastilla */}
+      {/* Línea “ahora” en la columna de hoy (misma pastilla HH:mm que vista día) */}
       {isTodayInWeek && currentTimeTop != null && (
         <div
-          className="absolute left-0 right-0 z-10 pointer-events-none flex items-start"
-          style={{ top: headerRowHeightPx + currentTimeTop }}
+          ref={weekNowLineRef}
+          className="absolute left-0 right-0 z-50 pointer-events-none flex items-center"
+          style={{ top: headerRowHeightPx + currentTimeTop, transform: 'translateY(-50%)' }}
         >
-          <div className="w-[56px] shrink-0" />
-          <div className="flex-1 flex min-w-0">
+          <div className="w-[56px] flex justify-end shrink-0 pr-0.5">
+            <span className="bg-red-500 text-white text-[10px] font-medium px-2 py-0.5 rounded-full">
+              {format(new Date(), 'HH:mm')}
+            </span>
+          </div>
+          <div className="flex min-h-0 min-w-0 flex-1 items-center">
             {days.map((day, dayIndex) => (
               <div
                 key={dayIndex}
-                className="flex-1 border-r border-zinc-800 first:border-l-0"
-                style={{ minWidth: 0 }}
+                className="flex min-w-0 flex-1 items-center border-r border-zinc-800 first:border-l-0"
               >
                 {dayIndex === todayIndex ? (
-                  <span className="block border-t-2 border-red-500 h-0 -translate-y-1/2 w-full" />
+                  <div className="h-0.5 min-h-[2px] w-full bg-red-500" aria-hidden />
                 ) : null}
               </div>
             ))}
@@ -1087,6 +1367,9 @@ function WeekViewDndContent({
       <DragOverlay dropAnimation={null}>
         {activeApt ? (() => {
           const n = normalizeAppointment(activeApt)
+          const clientLabel = Array.isArray(activeApt.clients)
+            ? activeApt.clients[0]?.name
+            : activeApt.clients?.name
           return (
           <div
             className={cn(
@@ -1095,10 +1378,14 @@ function WeekViewDndContent({
             )}
           >
             <span className="font-semibold leading-tight">
-              {format(parseISO(activeApt.start_time), 'HH:mm')} – {format(parseISO(activeApt.end_time), 'HH:mm')}
-              {Array.isArray(activeApt.clients) ? activeApt.clients[0]?.name : activeApt.clients?.name
-                ? ` ${Array.isArray(activeApt.clients) ? activeApt.clients[0]?.name : activeApt.clients?.name}`
-                : ''}
+              {n.time_unspecified ? (
+                <>Sin hora{clientLabel ? ` ${clientLabel}` : ''}</>
+              ) : (
+                <>
+                  {format(parseISO(activeApt.start_time), 'HH:mm')} – {format(parseISO(activeApt.end_time), 'HH:mm')}
+                  {clientLabel ? ` ${clientLabel}` : ''}
+                </>
+              )}
             </span>
             {(Array.isArray(activeApt.services) ? activeApt.services[0]?.name : activeApt.services?.name) && (
               <span className="leading-tight opacity-75">
@@ -1139,6 +1426,7 @@ function WeekDraggableAppointment({
   })
   const clientName = Array.isArray(apt.clients) ? apt.clients[0]?.name : apt.clients?.name
   const w = mapAppointmentRowToWorkItem(apt as unknown as AppointmentRowInput)
+  const norm = normalizeAppointment(apt)
 
   return (
     <button
@@ -1146,7 +1434,7 @@ function WeekDraggableAppointment({
       type="button"
       onClick={(e) => onAppointmentClick(apt, e)}
       {...(canDrag ? { ...attributes, ...listeners } : {})}
-      title={!canDrag ? 'No se pueden mover citas completadas o canceladas' : undefined}
+      title={!canDrag ? 'No se pueden mover citas en etapa terminada o cerrada' : undefined}
       className={cn(
         'absolute rounded border-l-4 p-1.5 text-xs text-left transition-shadow cursor-pointer pointer-events-auto overflow-hidden flex flex-col items-start justify-start',
         canDrag ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer opacity-90',
@@ -1161,8 +1449,11 @@ function WeekDraggableAppointment({
       }}
     >
       <span className="font-semibold leading-tight truncate w-full">
-        {format(parseISO(apt.start_time), 'HH:mm')} – {format(parseISO(apt.end_time), 'HH:mm')}
-        {clientName ? ` ${clientName}` : ''}
+        {norm.time_unspecified
+          ? `Sin hora${clientName ? ` ${clientName}` : ''}`
+          : `${format(parseISO(apt.start_time), 'HH:mm')} – ${format(parseISO(apt.end_time), 'HH:mm')}${
+              clientName ? ` ${clientName}` : ''
+            }`}
       </span>
       <span className="leading-tight truncate w-full opacity-75">{w.displayTitle}</span>
     </button>
@@ -1179,6 +1470,7 @@ function WeekSlot({
   isClosed,
   hasAppointment,
   onSlotClick,
+  onSidebarScheduleDrop,
 }: {
   day: Date
   dayIndex: number
@@ -1188,6 +1480,7 @@ function WeekSlot({
   isClosed: boolean
   hasAppointment: boolean
   onSlotClick: () => void
+  onSidebarScheduleDrop?: (appointmentId: string, day: Date) => void
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `week-slot-${dayIndex}-${slotIndex}` })
   const [isHovered, setIsHovered] = useState(false)
@@ -1213,6 +1506,27 @@ function WeekSlot({
       onClick={onSlotClick}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
+      onDragOver={
+        onSidebarScheduleDrop
+          ? (e) => {
+              if ([...e.dataTransfer.types].includes(ARKAPT_SIDEBAR_SCHEDULE_MIME)) {
+                e.preventDefault()
+                e.dataTransfer.dropEffect = 'move'
+              }
+            }
+          : undefined
+      }
+      onDrop={
+        onSidebarScheduleDrop
+          ? (e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              if (![...e.dataTransfer.types].includes(ARKAPT_SIDEBAR_SCHEDULE_MIME)) return
+              const id = e.dataTransfer.getData(ARKAPT_SIDEBAR_SCHEDULE_MIME)
+              if (id) onSidebarScheduleDrop(id, startOfDay(day))
+            }
+          : undefined
+      }
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault()
@@ -1238,6 +1552,7 @@ function DayView({
   shiftsByDay,
   onAppointmentClick,
   onDropInDay,
+  onSidebarScheduleDrop,
   businessId,
   services,
   staff,
@@ -1249,6 +1564,7 @@ function DayView({
   shiftsByDay: Record<number, Shift[]>
   onAppointmentClick: (apt: AppointmentNormalized, e: React.MouseEvent) => void
   onDropInDay?: (apt: AppointmentNormalized, toDate: Date) => void
+  onSidebarScheduleDrop?: (appointmentId: string, day: Date) => void
   businessId?: string
   services?: KanbanService[]
   staff?: WorkBoardStaffOption[]
@@ -1256,42 +1572,14 @@ function DayView({
   onSaved?: () => void
 }) {
   const dayOfWeek = getDayOfWeek(day)
-  const openRanges = useMemo(
-    () => getOpenRangesForDay(shiftsByDay, dayOfWeek),
-    [shiftsByDay, dayOfWeek]
-  )
   const closedRanges = useMemo(
     () => getClosedRangesForDay(shiftsByDay, dayOfWeek),
     [shiftsByDay, dayOfWeek]
   )
 
-  const { dayViewStartMin, dayViewEndMin, totalSlots, isClosed } = useMemo(() => {
-    if (openRanges.length === 0) {
-      return { dayViewStartMin: 0, dayViewEndMin: MINUTES_PER_DAY, totalSlots: 0, isClosed: true }
-    }
-    const businessStartMin = Math.min(...openRanges.map((r) => r.start))
-    const businessEndMin = Math.max(...openRanges.map((r) => r.end))
-    let overallStartMin = businessStartMin
-    let overallEndMin = businessEndMin
-    appointments.forEach((apt) => {
-      const start = parseISO(apt.start_time)
-      if (!isSameDay(start, day)) return
-      const startMin = start.getHours() * 60 + start.getMinutes()
-      const end = parseISO(apt.end_time)
-      const endMin = end.getHours() * 60 + end.getMinutes()
-      overallStartMin = Math.min(overallStartMin, startMin)
-      overallEndMin = Math.max(overallEndMin, endMin)
-    })
-    overallStartMin = Math.max(0, Math.floor(overallStartMin / MINUTES_PER_SLOT) * MINUTES_PER_SLOT)
-    overallEndMin = Math.min(MINUTES_PER_DAY, Math.ceil(overallEndMin / MINUTES_PER_SLOT) * MINUTES_PER_SLOT)
-    const totalSlots = Math.max(0, Math.round((overallEndMin - overallStartMin) / MINUTES_PER_SLOT))
-    return {
-      dayViewStartMin: overallStartMin,
-      dayViewEndMin: overallEndMin,
-      totalSlots,
-      isClosed: false,
-    }
-  }, [openRanges, appointments, day])
+  const dayViewStartMin = 0
+  const dayViewEndMin = MINUTES_PER_DAY
+  const totalSlots = Math.round((dayViewEndMin - dayViewStartMin) / MINUTES_PER_SLOT)
 
   const isSlotClosed = useCallback(
     (slotIndex: number) => {
@@ -1331,10 +1619,6 @@ function DayView({
     const update = () => {
       const now = new Date()
       const minSinceMidnight = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60
-      if (minSinceMidnight < dayViewStartMin || minSinceMidnight >= dayViewEndMin) {
-        setCurrentTimeTop(null)
-        return
-      }
       const minutesIntoView = minSinceMidnight - dayViewStartMin
       const currentSlotIndex = Math.floor(minutesIntoView / MINUTES_PER_SLOT)
       const slotBoundaryNext = (currentSlotIndex + 1) * SLOT_HEIGHT_PX
@@ -1347,7 +1631,7 @@ function DayView({
     update()
     const id = setInterval(update, 60000)
     return () => clearInterval(id)
-  }, [isToday, dayViewStartMin, dayViewEndMin])
+  }, [isToday, dayViewStartMin])
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
   const [overSlot, setOverSlot] = useState<number | null>(null)
@@ -1381,14 +1665,6 @@ function DayView({
     return out
   }, [dayViewStartMin, dayViewEndMin])
 
-  if (isClosed) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[320px] border border-zinc-800 bg-zinc-900 p-8 text-center">
-        <p className="text-zinc-400 font-medium">El negocio está cerrado este día</p>
-      </div>
-    )
-  }
-
   return (
     <DndContext
       sensors={sensors}
@@ -1413,6 +1689,7 @@ function DayView({
         timeLabels={timeLabels}
         onAppointmentClick={onAppointmentClick}
         isSlotClosed={isSlotClosed}
+        onSidebarScheduleDrop={onSidebarScheduleDrop}
         businessId={businessId}
         services={services}
         staff={staff}
@@ -1437,6 +1714,7 @@ function DayViewContent({
   timeLabels,
   onAppointmentClick,
   isSlotClosed,
+  onSidebarScheduleDrop,
   businessId,
   services,
   staff,
@@ -1455,6 +1733,7 @@ function DayViewContent({
   timeLabels: { min: number; label: string }[]
   onAppointmentClick: (apt: AppointmentNormalized, e: React.MouseEvent) => void
   isSlotClosed: (slotIndex: number) => boolean
+  onSidebarScheduleDrop?: (appointmentId: string, day: Date) => void
   businessId?: string
   services?: KanbanService[]
   staff?: WorkBoardStaffOption[]
@@ -1516,16 +1795,19 @@ function DayViewContent({
   }, [isToday])
 
   useEffect(() => {
+    hasScrolledToTimeRef.current = false
+  }, [day])
+
+  useEffect(() => {
     if (!isToday || currentTimeTop == null || hasScrolledToTimeRef.current) return
     hasScrolledToTimeRef.current = true
     const el = currentTimeLineRef.current
-    if (el) {
-      const t = setTimeout(() => {
-        el.scrollIntoView({ behavior: 'auto', block: 'center' })
-      }, 100)
-      return () => clearTimeout(t)
-    }
-  }, [isToday, currentTimeTop])
+    if (!el) return
+    const raf = requestAnimationFrame(() => {
+      el.scrollIntoView({ block: 'center', behavior: 'instant' as ScrollBehavior })
+    })
+    return () => cancelAnimationFrame(raf)
+  }, [isToday, currentTimeTop, day])
 
   const calendarQuickAddSlotStyle = useMemo((): React.CSSProperties | undefined => {
     if (!selectedSlotTime) return undefined
@@ -1590,6 +1872,8 @@ function DayViewContent({
                   dayStartMin={dayViewStartMin}
                   onSlotClick={!hasAppointment ? (idx, timeMin) => setSelectedSlotTime({ slotIndex: idx, timeMin }) : undefined}
                   isClosed={closed}
+                  calendarDay={day}
+                  onSidebarScheduleDrop={onSidebarScheduleDrop}
                 />
               )
             })}
@@ -1641,15 +1925,15 @@ function DayViewContent({
         {isToday && currentTimeTop != null && (
           <div
             ref={currentTimeLineRef}
-            className="absolute left-0 right-0 z-10 pointer-events-none flex items-start"
-            style={{ top: currentTimeTop }}
+            className="absolute left-0 right-0 z-50 pointer-events-none flex items-center"
+            style={{ top: currentTimeTop, transform: 'translateY(-50%)' }}
           >
-            <div className="w-[56px] flex justify-end shrink-0">
-              <span className="bg-red-500 text-white text-[10px] font-medium px-2 py-0.5 rounded-full -translate-y-1/2">
+            <div className="w-[56px] flex shrink-0 justify-end pr-0.5">
+              <span className="rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-medium text-white">
                 {format(new Date(), 'HH:mm')}
               </span>
             </div>
-            <span className="border-t-2 border-red-500 flex-1 h-0 -translate-y-1/2 min-w-0" />
+            <div className="h-0.5 min-h-[2px] min-w-0 flex-1 bg-red-500" aria-hidden />
           </div>
         )}
       </div>
@@ -1663,7 +1947,14 @@ function DayViewContent({
             )}
           >
             <span className="font-semibold leading-tight">
-              {format(parseISO(activeApt.start_time), 'HH:mm')} – {format(parseISO(activeApt.end_time), 'HH:mm')}{activeApt.client_name ? ` ${activeApt.client_name}` : ''}
+              {activeApt.time_unspecified ? (
+                <span className="text-zinc-300">Sin hora{activeApt.client_name ? ` · ${activeApt.client_name}` : ''}</span>
+              ) : (
+                <>
+                  {format(parseISO(activeApt.start_time), 'HH:mm')} – {format(parseISO(activeApt.end_time), 'HH:mm')}
+                  {activeApt.client_name ? ` ${activeApt.client_name}` : ''}
+                </>
+              )}
             </span>
             {activeApt.service_name && <span className="leading-tight opacity-75">{activeApt.service_name}</span>}
           </div>
@@ -1682,6 +1973,8 @@ function DaySlot({
   dayStartMin,
   onSlotClick,
   isClosed,
+  calendarDay,
+  onSidebarScheduleDrop,
 }: {
   slotIndex: number
   isOver: boolean
@@ -1690,6 +1983,8 @@ function DaySlot({
   dayStartMin: number
   onSlotClick?: (slotIndex: number, timeMin: number) => void
   isClosed: boolean
+  calendarDay: Date
+  onSidebarScheduleDrop?: (appointmentId: string, day: Date) => void
 }) {
   const { setNodeRef, isOver: isOverDnd } = useDroppable({ id: `slot-${slotIndex}` })
   const showOver = isOver || isOverDnd
@@ -1712,6 +2007,27 @@ function DaySlot({
       onClick={handleClick}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
+      onDragOver={
+        onSidebarScheduleDrop
+          ? (e) => {
+              if ([...e.dataTransfer.types].includes(ARKAPT_SIDEBAR_SCHEDULE_MIME)) {
+                e.preventDefault()
+                e.dataTransfer.dropEffect = 'move'
+              }
+            }
+          : undefined
+      }
+      onDrop={
+        onSidebarScheduleDrop
+          ? (e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              if (![...e.dataTransfer.types].includes(ARKAPT_SIDEBAR_SCHEDULE_MIME)) return
+              const id = e.dataTransfer.getData(ARKAPT_SIDEBAR_SCHEDULE_MIME)
+              if (id) onSidebarScheduleDrop(id, startOfDay(calendarDay))
+            }
+          : undefined
+      }
       className={cn(
         'transition-colors shrink-0 relative cursor-pointer',
         isHourStart ? 'border-t-2 border-zinc-700' : 'border-t border-zinc-700',
@@ -1751,14 +2067,16 @@ function DayDraggableAppointment({
   leftPct: number
   widthPct: number
 }) {
-  const canDrag = canMoveWorkItemByStageSlug(apt.stage_slug)
+  const canDrag = true
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: apt.id,
     disabled: !canDrag,
   })
   const start = parseISO(apt.start_time)
   const end = parseISO(apt.end_time)
-  const timeRange = `${format(start, 'HH:mm')} – ${format(end, 'HH:mm')}`
+  const timeRange = apt.time_unspecified
+    ? 'Sin hora'
+    : `${format(start, 'HH:mm')} – ${format(end, 'HH:mm')}`
 
   return (
     <button
@@ -1766,7 +2084,7 @@ function DayDraggableAppointment({
       type="button"
       onClick={(e) => onAppointmentClick(apt, e)}
       {...(canDrag ? { ...attributes, ...listeners } : {})}
-      title={!canDrag ? 'No se pueden mover citas completadas o canceladas' : undefined}
+      title={!canDrag ? 'No se pueden mover citas en etapa terminada o cerrada' : undefined}
       className={cn(
         'absolute rounded border-l-4 p-1.5 text-xs text-left transition-shadow cursor-pointer pointer-events-auto overflow-hidden flex flex-col items-start justify-start',
         canDrag ? 'cursor-grab active:cursor-grabbing' : 'cursor-not-allowed opacity-90',
@@ -1781,7 +2099,8 @@ function DayDraggableAppointment({
       }}
     >
       <span className="font-semibold leading-tight truncate w-full">
-        {timeRange}{apt.client_name ? ` ${apt.client_name}` : ''}
+        {timeRange}
+        {apt.client_name ? ` ${apt.client_name}` : ''}
       </span>
       <span className="leading-tight truncate w-full opacity-75">{apt.display_title}</span>
     </button>
@@ -1794,6 +2113,7 @@ function MonthView({
   shiftsByDay = {},
   onAppointmentClick,
   onDropAppointment,
+  onSidebarScheduleDrop,
   onDayClick,
 }: {
   month: Date
@@ -1801,6 +2121,7 @@ function MonthView({
   shiftsByDay?: Record<number, Shift[]>
   onAppointmentClick: (apt: AppointmentNormalized, e: React.MouseEvent) => void
   onDropAppointment?: (apt: AppointmentNormalized, toDate: Date) => void
+  onSidebarScheduleDrop?: (appointmentId: string, day: Date) => void
   onDayClick: (day: Date) => void
 }) {
   const start = startOfMonth(month)
@@ -1888,6 +2209,7 @@ function MonthView({
                   onDayClick={onDayClick}
                   onAppointmentClick={onAppointmentClick}
                   onDropAppointment={onDropAppointment}
+                  onSidebarScheduleDrop={onSidebarScheduleDrop}
                 />
               )
             })
@@ -1907,6 +2229,7 @@ function MonthDayCell({
   onDayClick,
   onAppointmentClick,
   onDropAppointment,
+  onSidebarScheduleDrop,
 }: {
   day: Date
   month: Date
@@ -1916,6 +2239,7 @@ function MonthDayCell({
   onDayClick: (day: Date) => void
   onAppointmentClick: (apt: AppointmentNormalized, e: React.MouseEvent) => void
   onDropAppointment?: (apt: AppointmentNormalized, toDate: Date) => void
+  onSidebarScheduleDrop?: (appointmentId: string, day: Date) => void
 }) {
   const { isOver, setNodeRef } = useDroppable({ id: dayKey })
 
@@ -1930,6 +2254,30 @@ function MonthDayCell({
       role="button"
       tabIndex={0}
       onClick={handleCellClick}
+      onDragOver={
+        onSidebarScheduleDrop
+          ? (e) => {
+              if ([...e.dataTransfer.types].includes(ARKAPT_SIDEBAR_SCHEDULE_MIME)) {
+                e.preventDefault()
+                e.dataTransfer.dropEffect = 'move'
+              }
+            }
+          : undefined
+      }
+      onDrop={
+        onSidebarScheduleDrop
+          ? (e) => {
+              if ([...e.dataTransfer.types].includes(ARKAPT_SIDEBAR_SCHEDULE_MIME)) {
+                e.preventDefault()
+                e.stopPropagation()
+                const id = e.dataTransfer.getData(ARKAPT_SIDEBAR_SCHEDULE_MIME)
+                if (id) onSidebarScheduleDrop(id, startOfDay(day))
+                return
+              }
+              // dnd-kit month drag: no hacer preventDefault aquí para no interferir
+            }
+          : undefined
+      }
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault()
@@ -1979,7 +2327,7 @@ function MonthDraggableAppointment({
   onDropAppointment?: (apt: AppointmentNormalized, toDate: Date) => void
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: apt.id })
-  const canDrag = canMoveWorkItemByStageSlug(apt.stage_slug) && !!onDropAppointment
+  const canDrag = !!onDropAppointment
   return (
     <button
       ref={setNodeRef}

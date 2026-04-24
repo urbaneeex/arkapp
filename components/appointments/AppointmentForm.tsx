@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -12,6 +12,9 @@ import { addMinutes, format, parseISO } from 'date-fns'
 import { useToastFeedback } from '@/hooks/use-toast-feedback'
 import { notifySuccess } from '@/lib/notify'
 import type { PipelineStageRow } from '@/lib/work-items/types'
+import { normalizeStageCategoryRow } from '@/lib/work-items/seedPipelineStages'
+import type { KanbanPriorityLevel } from '@/lib/work-items/kanbanPriority'
+import { parseKanbanPriorityFromMetadata } from '@/lib/work-items/kanbanPriority'
 import { WORK_BOARD_CALENDAR_PATH } from '@/lib/routes'
 
 type Client = { id: string; name: string; phone?: string; email?: string }
@@ -26,6 +29,35 @@ const STATUS_OPTIONS = [
   { value: 'cancelled', label: 'Cancelada' },
   { value: 'no_show', label: 'No se presentó' },
 ] as const
+
+const KANBAN_PRIORITY_OPTIONS: { value: '' | KanbanPriorityLevel; label: string }[] = [
+  { value: '', label: 'Sin prioridad' },
+  { value: 'urgent', label: 'Urgente' },
+  { value: 'high', label: 'Alta' },
+  { value: 'normal', label: 'Normal' },
+  { value: 'low', label: 'Baja' },
+]
+
+function mergeAppointmentMetadata(
+  existing: unknown,
+  kanbanPriority: string
+): Record<string, unknown> | null {
+  const base =
+    existing && typeof existing === 'object' && !Array.isArray(existing)
+      ? { ...(existing as Record<string, unknown>) }
+      : {}
+  if (
+    kanbanPriority === 'urgent' ||
+    kanbanPriority === 'high' ||
+    kanbanPriority === 'normal' ||
+    kanbanPriority === 'low'
+  ) {
+    base.kanban_priority = kanbanPriority
+  } else {
+    delete base.kanban_priority
+  }
+  return Object.keys(base).length > 0 ? base : null
+}
 
 export function AppointmentForm({
   businessId,
@@ -52,12 +84,14 @@ export function AppointmentForm({
     service_id: string | null
     staff_id: string | null
     price_total: number | null
+    metadata?: unknown | null
   }
   redirectOnSuccess?: boolean
   onSuccess?: () => void
   onCancel?: () => void
 }) {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const supabase = createClient()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -69,10 +103,33 @@ export function AppointmentForm({
     void (async () => {
       const { data } = await supabase
         .from('pipeline_stages')
-        .select('id, business_id, slug, label, sort_order')
+        .select('id, business_id, slug, label, sort_order, color, stage_category')
         .eq('business_id', businessId)
         .order('sort_order', { ascending: true })
-      if (!cancelled) setStages((data ?? []) as PipelineStageRow[])
+      if (!cancelled) {
+        setStages(
+          (data ?? []).map((row) => {
+            const r = row as {
+              id: string
+              business_id: string
+              slug: string
+              label: string
+              sort_order: number
+              color: string | null
+              stage_category?: string | null
+            }
+            return {
+              id: r.id,
+              business_id: r.business_id,
+              slug: r.slug,
+              label: r.label,
+              sort_order: r.sort_order,
+              color: r.color?.trim() || '#6366f1',
+              stage_category: normalizeStageCategoryRow(r.slug, r.stage_category),
+            }
+          })
+        )
+      }
     })()
     return () => {
       cancelled = true
@@ -89,6 +146,8 @@ export function AppointmentForm({
       : ''
 
   const defaultStageId = appointment?.pipeline_stage_id ?? ''
+  const initialKanbanPriority =
+    parseKanbanPriorityFromMetadata(appointment?.metadata ?? null) ?? ''
   const [form, setForm] = useState({
     title: appointment?.title?.trim() ?? '',
     start_time: defaultStart,
@@ -101,6 +160,7 @@ export function AppointmentForm({
     status: (appointment?.status ?? 'pending') as string,
     pipeline_stage_id: defaultStageId,
     price_total: appointment?.price_total ?? '',
+    kanban_priority: initialKanbanPriority as '' | KanbanPriorityLevel,
   })
 
   const pendingStageId = useMemo(
@@ -128,6 +188,35 @@ export function AppointmentForm({
       }))
     }
   }, [form.client_id])
+
+  const focusParam = searchParams.get('focus')
+  useEffect(() => {
+    if (!focusParam) return
+    const t = window.setTimeout(() => {
+      if (focusParam === 'schedule') {
+        document.getElementById('appt-field-schedule')?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'center',
+        })
+        document.getElementById('start_time')?.focus()
+        return
+      }
+      const idByFocus: Record<string, string> = {
+        staff: 'staff_id',
+        priority: 'kanban_priority',
+        client: 'client_id',
+        service: 'service_id',
+      }
+      const id = idByFocus[focusParam]
+      if (!id) return
+      const el = document.getElementById(id)
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      if (el instanceof HTMLSelectElement || el instanceof HTMLInputElement) {
+        el.focus()
+      }
+    }, 100)
+    return () => window.clearTimeout(t)
+  }, [focusParam])
 
   const selectedService = services.find((s) => s.id === form.service_id)
   const suggestedEnd = form.start_time && selectedService
@@ -158,6 +247,15 @@ export function AppointmentForm({
       payload.pipeline_stage_id = form.pipeline_stage_id
     } else {
       payload.status = form.status
+    }
+    const metaMerged = mergeAppointmentMetadata(
+      appointment?.metadata ?? null,
+      form.kanban_priority
+    )
+    if (appointment) {
+      payload.metadata = metaMerged
+    } else if (metaMerged) {
+      payload.metadata = metaMerged
     }
     if (appointment) {
       const { error: err } = await supabase
@@ -231,7 +329,7 @@ export function AppointmentForm({
           {error}
         </div>
       )}
-      <div>
+      <div id="appt-field-title">
         <Label htmlFor="appointment_title">Título</Label>
         <Input
           id="appointment_title"
@@ -241,7 +339,7 @@ export function AppointmentForm({
           className="mt-1 text-zinc-100"
         />
       </div>
-      <div>
+      <div id="appt-field-client">
         <Label htmlFor="client_id">Cliente</Label>
         <select
           id="client_id"
@@ -284,7 +382,7 @@ export function AppointmentForm({
           <p className="text-xs text-zinc-400">Si modificas teléfono o email, se guardará en la ficha del cliente antes de crear la cita.</p>
         </div>
       )}
-      <div>
+      <div id="appt-field-service">
         <Label htmlFor="service_id">Servicio</Label>
         <select
           id="service_id"
@@ -306,7 +404,7 @@ export function AppointmentForm({
           ))}
         </select>
       </div>
-      <div>
+      <div id="appt-field-staff">
         <Label htmlFor="staff_id">Empleado</Label>
         <select
           id="staff_id"
@@ -322,7 +420,30 @@ export function AppointmentForm({
           ))}
         </select>
       </div>
-      <div className="grid grid-cols-2 gap-4">
+      <div id="appt-field-priority">
+        <Label htmlFor="kanban_priority">Prioridad en tablero</Label>
+        <select
+          id="kanban_priority"
+          value={form.kanban_priority}
+          onChange={(e) =>
+            setForm((f) => ({
+              ...f,
+              kanban_priority: e.target.value as '' | KanbanPriorityLevel,
+            }))
+          }
+          className="mt-1 flex h-10 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
+        >
+          {KANBAN_PRIORITY_OPTIONS.map((o) => (
+            <option key={o.value || 'none'} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+        <p className="mt-1 text-xs text-zinc-500">
+          Visible en las tarjetas del Kanban. Opcional.
+        </p>
+      </div>
+      <div id="appt-field-schedule" className="grid grid-cols-2 gap-4">
         <div>
           <Label htmlFor="start_time" className="text-zinc-100 font-medium">Inicio</Label>
           <Input

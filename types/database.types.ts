@@ -16,6 +16,7 @@ export type Database = {
     Tables: {
       appointments: {
         Row: {
+          board_sort_order: number | null
           business_id: string
           client_id: string | null
           created_at: string | null
@@ -35,6 +36,7 @@ export type Database = {
           title: string | null
         }
         Insert: {
+          board_sort_order?: number | null
           business_id: string
           client_id?: string | null
           created_at?: string | null
@@ -54,6 +56,7 @@ export type Database = {
           title?: string | null
         }
         Update: {
+          board_sort_order?: number | null
           business_id?: string
           client_id?: string | null
           created_at?: string | null
@@ -113,27 +116,33 @@ export type Database = {
       pipeline_stages: {
         Row: {
           business_id: string
+          color: string | null
           created_at: string | null
           id: string
           label: string
           slug: string
           sort_order: number
+          stage_category: string
         }
         Insert: {
           business_id: string
+          color?: string | null
           created_at?: string | null
           id?: string
           label: string
           slug: string
           sort_order?: number
+          stage_category?: string
         }
         Update: {
           business_id?: string
+          color?: string | null
           created_at?: string | null
           id?: string
           label?: string
           slug?: string
           sort_order?: number
+          stage_category?: string
         }
         Relationships: [
           {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { z } from 'zod'
 import { resolveUserBusinessAndPermissions, hasServerPermission } from '@/lib/user-permissions.server'
+import { isImmutableStageSlug } from '@/lib/work-items/pipelineStageDefinitions'
 
 const PatchBodySchema = z.object({
   label: z.string().trim().min(1, 'label required').max(120, 'label too long').optional(),
@@ -87,7 +88,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     .update(updates)
     .eq('id', id)
     .eq('business_id', access.businessId)
-    .select('id, label, slug, sort_order, business_id, color')
+    .select('id, label, slug, sort_order, business_id, color, stage_category')
     .maybeSingle()
 
   if (updErr) {
@@ -107,7 +108,10 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   return NextResponse.json({ stage: updated })
 }
 
-export async function DELETE(_request: NextRequest, context: { params: Promise<{ id: string }> }) {
+export async function DELETE(
+  _request: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
   const { id } = await context.params
 
   const supabase = await createClient()
@@ -125,12 +129,22 @@ export async function DELETE(_request: NextRequest, context: { params: Promise<{
 
   const { data: stage, error: selErr } = await supabase
     .from('pipeline_stages')
-    .select('id, business_id')
+    .select('id, business_id, slug')
     .eq('id', id)
     .maybeSingle()
 
   if (selErr || !stage || stage.business_id !== access.businessId) {
     return NextResponse.json({ error: 'not_found' }, { status: 404 })
+  }
+
+  if (isImmutableStageSlug(stage.slug)) {
+    return NextResponse.json(
+      {
+        error: 'protected_stage',
+        message: 'No se pueden eliminar los estados Pendiente ni Completada.',
+      },
+      { status: 403 }
+    )
   }
 
   const { error: delErr } = await supabase

@@ -4,6 +4,7 @@ import type { Metadata } from 'next'
 import { getBusinessIdForUser } from '@/lib/supabase/business'
 import { WorkBoardPageClient } from '@/components/work-board/WorkBoardPageClient'
 import { mapAppointmentRowToWorkItem, type AppointmentRowInput } from '@/lib/work-items/mapAppointmentRow'
+import { ensurePipelineStagesForBusiness, normalizeStageCategoryRow } from '@/lib/work-items/seedPipelineStages'
 import type { PipelineStageRow, WorkBoardStaffOption } from '@/lib/work-items/types'
 
 export const metadata: Metadata = {
@@ -50,6 +51,8 @@ export default async function WorkBoardPage({
   const businessId = await getBusinessIdForUser(user.id)
   if (!businessId) redirect('/dashboard')
 
+  await ensurePipelineStagesForBusiness(supabase, businessId)
+
   const [
     { data: stages },
     { data: appointments },
@@ -61,19 +64,20 @@ export default async function WorkBoardPage({
   ] = await Promise.all([
     supabase
       .from('pipeline_stages')
-      .select('id, business_id, slug, label, sort_order, color')
+      .select('id, business_id, slug, label, sort_order, color, stage_category')
       .eq('business_id', businessId)
       .order('sort_order', { ascending: true }),
     supabase
       .from('appointments')
       .select(
-        `id, business_id, title, start_time, end_time, status, price_total, client_id, service_id, staff_id, metadata, pipeline_stage_id,
+        `id, business_id, title, start_time, end_time, status, price_total, client_id, service_id, staff_id, metadata, pipeline_stage_id, board_sort_order,
         clients(name, phone),
         services(name, duration, price),
         staff(name),
-        pipeline_stages(id, slug, label, sort_order)`
+        pipeline_stages(id, slug, label, sort_order, stage_category)`
       )
       .eq('business_id', businessId)
+      .order('board_sort_order', { ascending: true, nullsFirst: false })
       .order('start_time', { ascending: true, nullsFirst: false }),
     supabase
       .from('staff')
@@ -104,7 +108,26 @@ export default async function WorkBoardPage({
       .order('day_of_week', { ascending: true }),
   ])
 
-  const stageRows = (stages ?? []) as PipelineStageRow[]
+  const stageRows: PipelineStageRow[] = (stages ?? []).map((row) => {
+    const r = row as {
+      id: string
+      business_id: string
+      slug: string
+      label: string
+      sort_order: number
+      color: string | null
+      stage_category?: string | null
+    }
+    return {
+      id: r.id,
+      business_id: r.business_id,
+      slug: r.slug,
+      label: r.label,
+      sort_order: r.sort_order,
+      color: r.color?.trim() || '#6366f1',
+      stage_category: normalizeStageCategoryRow(r.slug, r.stage_category),
+    }
+  })
   const rawAppointments = appointments ?? []
   const cards = rawAppointments.map((row) =>
     mapAppointmentRowToWorkItem(row as unknown as AppointmentRowInput)

@@ -1,9 +1,12 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { Loader2 } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
@@ -28,6 +31,7 @@ type AppointmentRow = {
   client_id: string | null
   service_id: string | null
   staff_id: string | null
+  metadata?: unknown | null
 }
 
 export function AppointmentEditModal({
@@ -55,6 +59,15 @@ export function AppointmentEditModal({
 }) {
   const router = useRouter()
   const supabase = createClient()
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [deleteInProgress, setDeleteInProgress] = useState(false)
+
+  useEffect(() => {
+    if (!open) {
+      setDeleteConfirmOpen(false)
+      setDeleteInProgress(false)
+    }
+  }, [open])
 
   const handleSuccess = () => {
     onOpenChange(false)
@@ -64,18 +77,16 @@ export function AppointmentEditModal({
 
   const handleCancel = () => onOpenChange(false)
 
-  const handleDelete = async () => {
+  const handleDeleteConfirm = async () => {
     if (!appointment) return
-    const ok = typeof window !== 'undefined' && window.confirm('¿Eliminar esta cita? Esta acción no se puede deshacer.')
-    if (!ok) return
-    const { error } = await supabase
-      .from('appointments')
-      .delete()
-      .eq('id', appointment.id)
+    setDeleteInProgress(true)
+    const { error } = await supabase.from('appointments').delete().eq('id', appointment.id)
+    setDeleteInProgress(false)
     if (error) {
       onToast?.(error.message, 'error')
       return
     }
+    setDeleteConfirmOpen(false)
     onOpenChange(false)
     router.refresh()
     onDeleted?.()
@@ -85,7 +96,52 @@ export function AppointmentEditModal({
   if (!appointment) return null
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <>
+      <Dialog
+        open={deleteConfirmOpen}
+        onOpenChange={(next) => {
+          if (!next && !deleteInProgress) setDeleteConfirmOpen(false)
+        }}
+      >
+        <DialogContent className="max-w-md" showClose={!deleteInProgress}>
+          <DialogHeader>
+            <DialogTitle className="font-display text-xl font-semibold text-zinc-100 text-left">
+              ¿Eliminar esta tarea?
+            </DialogTitle>
+            <DialogDescription className="text-left mt-2 text-zinc-400">
+              Esta acción es <strong className="text-red-400">permanente</strong> y no se puede deshacer.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col-reverse sm:flex-row gap-2 justify-end mt-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setDeleteConfirmOpen(false)}
+              disabled={deleteInProgress}
+              className="cursor-pointer border-zinc-600"
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => void handleDeleteConfirm()}
+              disabled={deleteInProgress}
+              className="cursor-pointer gap-2 bg-red-700 hover:bg-red-600 text-white"
+            >
+              {deleteInProgress ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
+                  Eliminando…
+                </>
+              ) : (
+                'Sí, eliminar'
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent showClose={true} className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-2xl font-bold text-zinc-100">Editar cita</DialogTitle>
@@ -111,18 +167,19 @@ export function AppointmentEditModal({
             service_id: appointment.service_id,
             staff_id: appointment.staff_id,
             price_total: appointment.price_total,
+            metadata: appointment.metadata ?? null,
           }}
           redirectOnSuccess={false}
           onSuccess={handleSuccess}
           onCancel={handleCancel}
         />
         {canDelete !== false && (
-          <div className="border-t pt-4 mt-4 flex justify-end">
+          <div className="border-t border-zinc-800 pt-4 mt-4 flex justify-end">
             <Button
               type="button"
               variant="outline"
-              className="text-red-600 border-red-800 hover:bg-red-900/50"
-              onClick={handleDelete}
+              className="text-red-400 border-red-900/80 hover:bg-red-950/50"
+              onClick={() => setDeleteConfirmOpen(true)}
             >
               Eliminar cita
             </Button>
@@ -130,5 +187,6 @@ export function AppointmentEditModal({
         )}
       </DialogContent>
     </Dialog>
+    </>
   )
 }
