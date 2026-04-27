@@ -524,7 +524,7 @@ export function KanbanQuickDatePicker({
                 today &&
                   !primarySel &&
                   !secondaryMark &&
-                  'bg-brand/15 font-medium text-brand ring-1 ring-brand/70'
+                  'bg-brand/15 font-medium text-brand ring-1 ring-brand/70',
               )}
               onClick={() => pickDay(day)}
             >
@@ -537,7 +537,7 @@ export function KanbanQuickDatePicker({
   )
 
   const inlineTimeColumn = (
-    <div className="flex min-h-[min(280px,50vw)] min-w-0 flex-col justify-center rounded-md border border-zinc-800/90 bg-zinc-950/40 p-1.5">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col justify-center rounded-md border border-zinc-800/90 bg-zinc-950/40 p-1.5">
       {calendarTarget === 'start' && !startDate.trim() ? (
         <p className="px-2 text-center text-[11px] leading-snug text-zinc-500">
           Selecciona <span className="font-medium text-zinc-400">Inicio</span> arriba y elige el día en el calendario.
@@ -737,9 +737,9 @@ export function KanbanQuickDatePicker({
         </div>
       </div>
 
-      <div className="grid min-w-0 grid-cols-2 items-stretch gap-2">
-        <div className="min-w-0">{calendarPanel}</div>
-        <div className="min-w-0">{inlineTimeColumn}</div>
+      <div className="flex min-w-0 items-stretch gap-3">
+        <div className="min-w-0 shrink-0">{calendarPanel}</div>
+        <div className="min-w-0 flex-1">{inlineTimeColumn}</div>
       </div>
     </div>
   )
