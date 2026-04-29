@@ -1,27 +1,25 @@
-import { createClient } from '@/lib/supabase/server'
+import { getCachedUser } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { PageHeader } from '@/components/layout/PageHeader'
 import ClientForm from '@/app/(dashboard)/dashboard/clients/clientForm'
-import { getBusinessIdForUser } from '@/lib/supabase/business'
+import { getBusinessForUser } from '@/lib/supabase/business'
 
 export default async function NewClientPage() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getCachedUser()
   if (!user) redirect('/login')
 
-  const businessId = await getBusinessIdForUser(user.id)
-  if (!businessId) redirect('/dashboard')
+  const businessResult = await getBusinessForUser(user.id)
+  if (!businessResult) redirect('/dashboard')
 
-  const { data: business } = await supabase
-    .from('businesses')
-    .select('country')
-    .eq('id', businessId)
-    .single()
+  const country =
+    typeof businessResult.business.country === 'string'
+      ? businessResult.business.country
+      : 'ES'
 
   return (
     <div className="max-w-2xl">
       <PageHeader title="Nuevo cliente" />
-      <ClientForm defaultCountry={business?.country ?? 'ES'} />
+      <ClientForm defaultCountry={country} />
     </div>
   )
 }

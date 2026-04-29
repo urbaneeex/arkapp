@@ -16,9 +16,11 @@ export type Database = {
     Tables: {
       appointments: {
         Row: {
+          archived_at: string | null
           board_sort_order: number | null
           business_id: string
           client_id: string | null
+          completed_at: string | null
           created_at: string | null
           end_time: string
           id: string
@@ -34,11 +36,16 @@ export type Database = {
           status: Database["public"]["Enums"]["appointment_status"] | null
           target_address: string | null
           title: string | null
+          team_id: string | null
+          visibility: string
+          created_by: string | null
         }
         Insert: {
+          archived_at?: string | null
           board_sort_order?: number | null
           business_id: string
           client_id?: string | null
+          completed_at?: string | null
           created_at?: string | null
           end_time: string
           id?: string
@@ -54,11 +61,16 @@ export type Database = {
           status?: Database["public"]["Enums"]["appointment_status"] | null
           target_address?: string | null
           title?: string | null
+          team_id?: string | null
+          visibility?: string
+          created_by?: string | null
         }
         Update: {
+          archived_at?: string | null
           board_sort_order?: number | null
           business_id?: string
           client_id?: string | null
+          completed_at?: string | null
           created_at?: string | null
           end_time?: string
           id?: string
@@ -74,6 +86,9 @@ export type Database = {
           status?: Database["public"]["Enums"]["appointment_status"] | null
           target_address?: string | null
           title?: string | null
+          team_id?: string | null
+          visibility?: string
+          created_by?: string | null
         }
         Relationships: [
           {
@@ -109,6 +124,161 @@ export type Database = {
             columns: ["staff_id"]
             isOneToOne: false
             referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "appointments_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      appointment_audit_log: {
+        Row: {
+          action: string
+          actor_id: string | null
+          appointment_id: string
+          business_id: string
+          created_at: string
+          id: string
+          new_record: Json | null
+          old_record: Json | null
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          appointment_id: string
+          business_id: string
+          created_at?: string
+          id?: string
+          new_record?: Json | null
+          old_record?: Json | null
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          appointment_id?: string
+          business_id?: string
+          created_at?: string
+          id?: string
+          new_record?: Json | null
+          old_record?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "appointment_audit_log_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      appointment_teams: {
+        Row: {
+          appointment_id: string
+          team_id: string
+        }
+        Insert: {
+          appointment_id: string
+          team_id: string
+        }
+        Update: {
+          appointment_id?: string
+          team_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "appointment_teams_appointment_id_fkey"
+            columns: ["appointment_id"]
+            isOneToOne: false
+            referencedRelation: "appointments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "appointment_teams_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      team_members: {
+        Row: {
+          id: string
+          is_lead: boolean
+          joined_at: string | null
+          staff_id: string
+          team_id: string
+        }
+        Insert: {
+          id?: string
+          is_lead?: boolean
+          joined_at?: string | null
+          staff_id: string
+          team_id: string
+        }
+        Update: {
+          id?: string
+          is_lead?: boolean
+          joined_at?: string | null
+          staff_id?: string
+          team_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_members_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "team_members_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      teams: {
+        Row: {
+          business_id: string
+          color: string
+          created_at: string | null
+          description: string | null
+          id: string
+          name: string
+          updated_at: string | null
+        }
+        Insert: {
+          business_id: string
+          color?: string
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          name: string
+          updated_at?: string | null
+        }
+        Update: {
+          business_id?: string
+          color?: string
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          name?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "teams_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
             referencedColumns: ["id"]
           },
         ]
@@ -528,6 +698,7 @@ export type Database = {
           description: string | null
           duration: number
           id: string
+          is_active: boolean
           name: string
           price: number
           requires_deposit: boolean | null
@@ -541,6 +712,7 @@ export type Database = {
           description?: string | null
           duration: number
           id?: string
+          is_active?: boolean
           name: string
           price: number
           requires_deposit?: boolean | null
@@ -554,6 +726,7 @@ export type Database = {
           description?: string | null
           duration?: number
           id?: string
+          is_active?: boolean
           name?: string
           price?: number
           requires_deposit?: boolean | null
@@ -1105,6 +1278,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      archive_completed_appointments: { Args: never; Returns: number }
       check_business_access: {
         Args: { business_id_param: string }
         Returns: boolean

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -18,6 +18,7 @@ import {
   CreditCard,
   User,
   Plug,
+  Code,
   Upload,
   Plus,
   Trash2,
@@ -29,6 +30,8 @@ import {
 import { toast } from 'sonner'
 import { useBusinessStore } from '@/stores/business'
 import { CountryCombobox } from '@/components/ui/country-combobox'
+import { QRCodeSVG } from 'qrcode.react'
+import { parsePublicBookingSettings } from '@/lib/public-booking/booking-settings'
 const INDUSTRIES = ['Belleza', 'Salud', 'Consultoría', 'Fitness', 'Educación', 'Legal', 'Otro']
 const DAYS = [
   { label: 'Lunes', day: 1 },
@@ -123,6 +126,27 @@ export function SettingsClient({
     typeof booking.min_advance_hours === 'number' ? booking.min_advance_hours : 2
   )
   const [welcomeMessage, setWelcomeMessage] = useState((booking.welcome_message as string) ?? '')
+
+  const parsedBooking = useMemo(() => parsePublicBookingSettings(business.booking_settings), [business.booking_settings])
+  const [widgetPrimary, setWidgetPrimary] = useState(parsedBooking.widget.primary_color)
+  const [widgetEmailVisible, setWidgetEmailVisible] = useState(parsedBooking.widget.email_visible)
+  const [widgetEmailRequired, setWidgetEmailRequired] = useState(parsedBooking.widget.email_required)
+  const [widgetStaffVisible, setWidgetStaffVisible] = useState(parsedBooking.widget.staff_selector_visible)
+  const [widgetNotesVisible, setWidgetNotesVisible] = useState(parsedBooking.widget.notes_visible)
+  const [snippetOrigin, setSnippetOrigin] = useState('')
+
+  useEffect(() => {
+    const p = parsePublicBookingSettings(business.booking_settings)
+    setWidgetPrimary(p.widget.primary_color)
+    setWidgetEmailVisible(p.widget.email_visible)
+    setWidgetEmailRequired(p.widget.email_required)
+    setWidgetStaffVisible(p.widget.staff_selector_visible)
+    setWidgetNotesVisible(p.widget.notes_visible)
+  }, [business.booking_settings])
+
+  useEffect(() => {
+    setSnippetOrigin(typeof window !== 'undefined' ? window.location.origin : '')
+  }, [])
 
   // Notifications
   const notif = (business.notification_settings || {}) as Record<string, unknown>
@@ -477,10 +501,20 @@ export function SettingsClient({
     setSaving('booking')
     setError(null)
     const payload = {
+      ...(typeof business.booking_settings === 'object' && business.booking_settings !== null
+        ? business.booking_settings
+        : {}),
       allow_online_booking: allowOnline,
       require_confirmation: requireConfirmation,
       min_advance_hours: minAdvanceHours,
       welcome_message: welcomeMessage,
+      widget: {
+        primary_color: widgetPrimary,
+        email_visible: widgetEmailVisible,
+        email_required: widgetEmailRequired,
+        staff_selector_visible: widgetStaffVisible,
+        notes_visible: widgetNotesVisible,
+      },
     }
     const { error: e } = await supabase
       .from('businesses')
@@ -554,6 +588,12 @@ export function SettingsClient({
   }
 
   const slugPath = `/book/${slug || business.slug}`
+  const envSiteBase = (process.env.NEXT_PUBLIC_SITE_URL ?? '').replace(/\/$/, '')
+  const siteBaseForSnippet = envSiteBase || snippetOrigin
+  const embedSnippet =
+    siteBaseForSnippet &&
+    `<div id="arkapp-booking"></div>\n<script src="${siteBaseForSnippet}/embed.js" data-business="${slug || business.slug}" data-color="${widgetPrimary}" defer></script>`
+  const fullBookUrl = siteBaseForSnippet ? `${siteBaseForSnippet}${slugPath}` : ''
 
   return (
     <div>
@@ -905,12 +945,136 @@ export function SettingsClient({
                     <Button
                       variant="outline"
                       className="cursor-pointer"
-                      onClick={() => navigator.clipboard.writeText(typeof window !== 'undefined' ? window.location.origin + slugPath : slugPath)}
+                      onClick={() =>
+                        navigator.clipboard.writeText(
+                          siteBaseForSnippet ? `${siteBaseForSnippet}${slugPath}` : slugPath
+                        )
+                      }
                     >
                       Copiar
                     </Button>
                   </div>
+                  {!envSiteBase ? (
+                    <p className="text-xs text-amber-600 mt-2">
+                      Configura <code className="rounded bg-zinc-800 px-1">NEXT_PUBLIC_SITE_URL</code> para enlaces y
+                      snippet absolutos en producción.
+                    </p>
+                  ) : null}
                 </div>
+
+                <div className="space-y-4 pt-6 border-t border-zinc-700">
+                  <div className="flex items-center gap-2">
+                    <Code className="h-4 w-4 text-zinc-400" />
+                    <h3 className="text-sm font-semibold text-zinc-100">Widget embebible</h3>
+                  </div>
+                  <p className="text-xs text-zinc-500">
+                    Color del botón en la página pública y en el script; mismo flujo que la URL directa.
+                  </p>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Label className="text-zinc-300">Color principal</Label>
+                    <input
+                      type="color"
+                      value={widgetPrimary.length === 7 ? widgetPrimary : '#3b82f6'}
+                      onChange={(e) => setWidgetPrimary(e.target.value)}
+                      className="h-9 w-14 cursor-pointer rounded border border-zinc-600 bg-zinc-900"
+                      aria-label="Color del widget"
+                    />
+                    <Input
+                      value={widgetPrimary}
+                      onChange={(e) => setWidgetPrimary(e.target.value)}
+                      className="max-w-[120px] font-mono text-xs"
+                      placeholder="#3b82f6"
+                    />
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="rounded cursor-pointer"
+                        checked={widgetEmailVisible}
+                        onChange={(e) => setWidgetEmailVisible(e.target.checked)}
+                      />
+                      <span className="text-sm text-zinc-300">Mostrar email en el formulario</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="rounded cursor-pointer"
+                        checked={widgetEmailRequired}
+                        onChange={(e) => setWidgetEmailRequired(e.target.checked)}
+                      />
+                      <span className="text-sm text-zinc-300">Email obligatorio</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="rounded cursor-pointer"
+                        checked={widgetStaffVisible}
+                        onChange={(e) => setWidgetStaffVisible(e.target.checked)}
+                      />
+                      <span className="text-sm text-zinc-300">Selector de profesional</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="rounded cursor-pointer"
+                        checked={widgetNotesVisible}
+                        onChange={(e) => setWidgetNotesVisible(e.target.checked)}
+                      />
+                      <span className="text-sm text-zinc-300">Campo de notas</span>
+                    </label>
+                  </div>
+                  <div>
+                    <Label>Código para pegar en tu web</Label>
+                    <div className="mt-1 flex gap-2 flex-wrap">
+                      <Textarea
+                        readOnly
+                        rows={4}
+                        value={embedSnippet || '(Configura la URL pública del sitio o abre desde el panel para generar el snippet.)'}
+                        className="font-mono text-xs flex-1 min-w-[240px]"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="cursor-pointer shrink-0 self-start"
+                        disabled={!embedSnippet}
+                        onClick={() =>
+                          embedSnippet &&
+                          navigator.clipboard.writeText(embedSnippet).then(() =>
+                            toast.success('Snippet copiado')
+                          )
+                        }
+                      >
+                        Copiar snippet
+                      </Button>
+                    </div>
+                  </div>
+                  {fullBookUrl ? (
+                    <div className="flex flex-col sm:flex-row gap-6 items-start">
+                      <div className="rounded-lg bg-white p-3">
+                        <QRCodeSVG value={fullBookUrl} size={160} level="M" />
+                      </div>
+                      <div className="space-y-2 text-sm text-zinc-400">
+                        <p className="font-medium text-zinc-200">Reserva directa</p>
+                        <p className="break-all font-mono text-xs">{fullBookUrl}</p>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="cursor-pointer"
+                          onClick={() =>
+                            navigator.clipboard.writeText(fullBookUrl).then(() =>
+                              toast.success('Enlace copiado')
+                            )
+                          }
+                        >
+                          Copiar enlace
+                        </Button>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+
                 <div className="space-y-3 pt-4 border-t">
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input

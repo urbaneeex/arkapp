@@ -1,5 +1,10 @@
 'use client'
 
+/**
+ * Beta (no activo para usuarios): listado en tiempo real «quién está fichado» en el dashboard Inicio.
+ * Solo se monta si `NEXT_PUBLIC_DASHBOARD_LIVE_CLOCK_BETA=1` — ver `app/(dashboard)/dashboard/page.tsx`.
+ */
+
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { differenceInSeconds, format, parseISO } from 'date-fns'
 import { Users, Coffee, Loader2, RefreshCw } from 'lucide-react'
@@ -19,7 +24,15 @@ type LiveEntry = {
   } | null
 }
 
-function Elapsed({ clockIn, breakStart, breakEnd }: { clockIn: string; breakStart: string | null; breakEnd: string | null }) {
+function Elapsed({
+  clockIn,
+  breakStart,
+  breakEnd,
+}: {
+  clockIn: string
+  breakStart: string | null
+  breakEnd: string | null
+}) {
   const [secs, setSecs] = useState(0)
 
   useEffect(() => {
@@ -43,7 +56,8 @@ function Elapsed({ clockIn, breakStart, breakEnd }: { clockIn: string; breakStar
   const h = Math.floor(secs / 3600)
   const m = Math.floor((secs % 3600) / 60)
   const s = secs % 60
-  const label = h > 0 ? `${h}h ${String(m).padStart(2, '0')}m` : `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+  const label =
+    h > 0 ? `${h}h ${String(m).padStart(2, '0')}m` : `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
 
   return <span className="font-mono text-xs tabular-nums text-zinc-300">{label}</span>
 }
@@ -61,7 +75,7 @@ function Avatar({ name, color }: { name: string; color: string | null }) {
   const bg = color ?? '#3B82F6'
   return (
     <div
-      className="h-8 w-8 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0 ring-2 ring-zinc-900"
+      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white ring-2 ring-zinc-900"
       style={{ backgroundColor: bg }}
     >
       {getInitials(name)}
@@ -73,11 +87,11 @@ export function LiveClockPanel({ businessId }: { businessId: string }) {
   const [entries, setEntries] = useState<LiveEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
-
-  const fetch = useCallback(async () => {
+  const fetchEntries = useCallback(async () => {
     try {
-      const res = await globalThis.fetch(`/api/clock/live-status?business_id=${businessId}`, { cache: 'no-store' })
+      const res = await globalThis.fetch(`/api/clock/live-status?business_id=${businessId}`, {
+        cache: 'no-store',
+      })
       if (!res.ok) return
       const data = await res.json()
       setEntries(data.entries ?? [])
@@ -90,35 +104,38 @@ export function LiveClockPanel({ businessId }: { businessId: string }) {
   }, [businessId])
 
   useEffect(() => {
-    fetch()
-    pollRef.current = setInterval(fetch, 60_000)
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current)
+    void fetchEntries()
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void fetchEntries()
     }
-  }, [fetch])
-
-  // Re-fetch immediately when any user clocks in or out
-  useEffect(() => {
-    const handler = () => void fetch()
-    window.addEventListener('clock-status-changed', handler)
-    return () => window.removeEventListener('clock-status-changed', handler)
-  }, [fetch])
+    document.addEventListener('visibilitychange', onVisible)
+    const onClock = () => void fetchEntries()
+    window.addEventListener('clock-status-changed', onClock)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('clock-status-changed', onClock)
+    }
+  }, [fetchEntries])
 
   return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
+    <div className="rounded-2xl border border-dashed border-amber-800/40 bg-zinc-900 p-5">
+      <div className="mb-4 flex items-center justify-between">
+        <div className="flex flex-wrap items-center gap-2">
           <Users className="h-4 w-4 text-zinc-400" />
           <h3 className="text-sm font-semibold text-zinc-200">Quién está fichado ahora</h3>
+          <span className="rounded border border-amber-700/50 bg-amber-950/40 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-400">
+            Beta
+          </span>
           {entries.length > 0 && (
-            <span className="bg-green-900/50 text-green-300 text-xs px-2 py-0.5 rounded-full border border-green-700/50">
+            <span className="rounded-full border border-green-700/50 bg-green-900/50 px-2 py-0.5 text-xs text-green-300">
               {entries.length}
             </span>
           )}
         </div>
         <button
-          onClick={fetch}
-          className="p-1 text-zinc-600 hover:text-zinc-300 transition-colors"
+          type="button"
+          onClick={fetchEntries}
+          className="p-1 text-zinc-600 transition-colors hover:text-zinc-300"
           title="Actualizar"
         >
           <RefreshCw className="h-3.5 w-3.5" />
@@ -127,13 +144,11 @@ export function LiveClockPanel({ businessId }: { businessId: string }) {
 
       {loading ? (
         <div className="flex items-center justify-center py-8 text-sm text-zinc-600">
-          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           Cargando…
         </div>
       ) : entries.length === 0 ? (
-        <div className="py-8 text-center text-sm text-zinc-600">
-          Nadie fichado en este momento
-        </div>
+        <div className="py-8 text-center text-sm text-zinc-600">Nadie fichado en este momento</div>
       ) : (
         <div className="space-y-2">
           {entries.map((entry) => {
@@ -143,22 +158,24 @@ export function LiveClockPanel({ businessId }: { businessId: string }) {
               <div
                 key={entry.id}
                 className={cn(
-                  'flex items-center gap-3 rounded-xl px-3 py-2.5 border',
+                  'flex items-center gap-3 rounded-xl border px-3 py-2.5',
                   isOnBreak
-                    ? 'bg-amber-950/20 border-amber-800/30'
-                    : 'bg-zinc-800/50 border-zinc-700/50'
+                    ? 'border-amber-800/30 bg-amber-950/20'
+                    : 'border-zinc-700/50 bg-zinc-800/50'
                 )}
               >
                 <div className="relative">
                   <Avatar name={name} color={entry.staff?.color ?? null} />
-                  <span className={cn(
-                    'absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full ring-2 ring-zinc-900',
-                    isOnBreak ? 'bg-amber-400' : 'bg-green-400'
-                  )} />
+                  <span
+                    className={cn(
+                      'absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full ring-2 ring-zinc-900',
+                      isOnBreak ? 'bg-amber-400' : 'bg-green-400'
+                    )}
+                  />
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-zinc-200 truncate">{name}</p>
-                  <div className="flex items-center gap-1.5 mt-0.5">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-zinc-200">{name}</p>
+                  <div className="mt-0.5 flex items-center gap-1.5">
                     {isOnBreak ? (
                       <span className="flex items-center gap-1 text-xs text-amber-400">
                         <Coffee className="h-3 w-3" />
@@ -170,11 +187,11 @@ export function LiveClockPanel({ businessId }: { businessId: string }) {
                       </span>
                     )}
                     {entry.source && entry.source !== 'manual' && (
-                      <span className="text-xs text-zinc-600 capitalize">· {entry.source}</span>
+                      <span className="text-xs capitalize text-zinc-600">· {entry.source}</span>
                     )}
                   </div>
                 </div>
-                <div className="text-right shrink-0">
+                <div className="shrink-0 text-right">
                   <Elapsed
                     clockIn={entry.clock_in}
                     breakStart={entry.break_start}
@@ -188,8 +205,8 @@ export function LiveClockPanel({ businessId }: { businessId: string }) {
       )}
 
       {lastUpdated && (
-        <p className="text-[10px] text-zinc-700 mt-3 text-right">
-          Actualizado {format(lastUpdated, 'HH:mm:ss')} · auto cada 60s
+        <p className="mt-3 text-right text-[10px] text-zinc-700">
+          Actualizado {format(lastUpdated, 'HH:mm:ss')} · al volver a la pestaña o tras fichar
         </p>
       )}
     </div>

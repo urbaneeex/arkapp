@@ -1,7 +1,7 @@
 'use client'
 
 import type { PointerEventHandler } from 'react'
-import { AtSign, Calendar, Check, Flag, Pencil, Trash2, User, Wrench } from 'lucide-react'
+import { AtSign, Calendar, Check, Flag, Lock, Pencil, Trash2, User, Wrench } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
   kanbanPriorityFlagClass,
@@ -177,6 +177,31 @@ export function WorkBoardCard({
             compact ? 'gap-1.5' : 'gap-2'
           )}
         >
+          {item.visibility === 'personal' ? (
+            <span
+              className="inline-flex shrink-0 items-center gap-1 rounded-md border border-amber-700/50 bg-amber-950/30 px-1.5 py-0.5"
+              title="Visibilidad personal (solo asignado)"
+            >
+              <Lock className={cn(chipIconClass(compact), 'text-amber-400/95')} aria-hidden />
+            </span>
+          ) : null}
+          {item.team_color && item.visibility === 'team' ? (
+            <span
+              className="inline-flex shrink-0 items-center gap-1 rounded-md border border-zinc-700/80 px-1.5 py-0.5"
+              title={item.team_name ? `Equipo: ${item.team_name}` : 'Equipo'}
+            >
+              <span
+                className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-zinc-600"
+                style={{ backgroundColor: item.team_color }}
+                aria-hidden
+              />
+              {item.team_name ? (
+                <span className={cn(chipTextClass(compact), 'max-w-[88px] text-zinc-400')}>
+                  {item.team_name}
+                </span>
+              ) : null}
+            </span>
+          ) : null}
           <button
             type="button"
             data-kanban-chip

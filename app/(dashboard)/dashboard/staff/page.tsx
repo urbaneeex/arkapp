@@ -1,26 +1,26 @@
-import { createClient } from '@/lib/supabase/server'
+import { createClient, getCachedUser } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import type { Metadata } from 'next'
 import { Suspense } from 'react'
 import { StaffClient } from '@/components/staff/StaffClient'
 import { RequirePermission } from '@/components/auth/RequirePermission'
-import { getBusinessIdForUser } from '@/lib/supabase/business'
+import { getBusinessForUser } from '@/lib/supabase/business'
 
 export const metadata: Metadata = {
   title: 'Equipo',
 }
 
 export default async function StaffPage() {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const user = await getCachedUser()
   if (!user) redirect('/login')
 
-  const businessId = await getBusinessIdForUser(user.id)
-  if (!businessId) {
+  const supabase = await createClient()
+
+  const businessResult = await getBusinessForUser(user.id)
+  if (!businessResult) {
     return <div>No tienes un negocio configurado</div>
   }
+  const businessId = businessResult.business.id
 
   const [staffResult, rolesResult] = await Promise.all([
     supabase

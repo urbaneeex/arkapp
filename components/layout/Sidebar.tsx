@@ -12,6 +12,7 @@ import {
   BarChart3,
   DollarSign,
   Clock,
+  UsersRound,
 } from 'lucide-react'
 import { useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
@@ -22,13 +23,25 @@ import { Tooltip } from '@/components/ui/tooltip'
 import { usePermissions } from '@/hooks/usePermissions'
 import type { PermissionKey } from '@/lib/permissions'
 
-const mainNavItems: { href: string; label: string; icon: typeof Home; permission?: PermissionKey }[] = [
+const mainNavItems: {
+  href: string
+  label: string
+  icon: typeof Home
+  permission?: PermissionKey
+  anyOf?: PermissionKey[]
+}[] = [
   { href: '/dashboard', label: 'Dashboard', icon: Home },
   { href: '/dashboard/fichar', label: 'Fichar', icon: Clock },
   { href: '/dashboard/work-board', label: 'Tablero', icon: LayoutGrid, permission: 'work_board_view' },
   { href: '/dashboard/clients', label: 'Clientes', icon: Users, permission: 'clients_view' },
   { href: '/dashboard/services', label: 'Servicios', icon: Briefcase, permission: 'services_view' },
   { href: '/dashboard/staff', label: 'Equipo', icon: UserCircle, permission: 'staff_view' },
+  {
+    href: '/dashboard/teams',
+    label: 'Equipos',
+    icon: UsersRound,
+    anyOf: ['teams_view', 'teams_manage'],
+  },
   { href: '/dashboard/reports', label: 'Reportes', icon: BarChart3, permission: 'reports_view' },
   { href: '/dashboard/finances', label: 'Finanzas', icon: DollarSign, permission: 'finances_view' },
 ]
@@ -41,9 +54,10 @@ export function Sidebar() {
   const { hasPermission, loading: permissionsLoading } = usePermissions()
   const supabase = createClient()
 
-  const visibleNavItems = mainNavItems.filter(
-    (item) => !item.permission || hasPermission(item.permission)
-  )
+  const visibleNavItems = mainNavItems.filter((item) => {
+    if (item.anyOf?.length) return item.anyOf.some((k) => hasPermission(k))
+    return !item.permission || hasPermission(item.permission)
+  })
 
   useEffect(() => {
     const load = async () => {

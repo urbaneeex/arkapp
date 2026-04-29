@@ -182,9 +182,11 @@ Antes de hacer merge de cualquier PR que toque rutas API o autenticación, verif
 
 - [ ] ¿Llama `getUser()` al inicio si accede a datos de negocio?
 - [ ] ¿Verifica que el `businessId` pertenece al usuario autenticado?
+- [ ] ¿Las cargas auxiliares del dashboard (p. ej. catálogo cliente/servicio para modales) comprueban sesión y negocio del usuario?
 - [ ] ¿Los errores devueltos al cliente son genéricos (sin mensajes internos de DB)?
 - [ ] ¿Hay `console.log` con datos sensibles?
 - [ ] ¿Los tokens tienen TTL ≤ 48 h y se marcan como usados?
 - [ ] ¿Los webhooks entrantes verifican el secreto compartido?
 - [ ] ¿Las tablas nuevas tienen RLS habilitado con políticas completas?
+- [ ] ¿Las rutas de historial o auditoría (p. ej. lectura de `appointment_audit_log`) restringen acceso a propietario o rol alto del negocio?
 - [ ] ¿Se ha actualizado el CSP en `next.config.ts` si se añaden dominios externos?

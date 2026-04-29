@@ -1,3 +1,4 @@
+import { cache } from 'react'
 import { createClient } from '@/lib/supabase/server'
 
 export type BusinessAccess = {
@@ -9,8 +10,11 @@ export type BusinessAccess = {
 /**
  * Obtiene el business_id y access_level para un usuario.
  * Optimizado: owner + staff queries en paralelo, sin llamada extra a getUser().
+ * Dedupe por petición (layout + páginas hijas comparten resultado).
  */
-export async function getBusinessAccess(userId: string): Promise<BusinessAccess | null> {
+export const getBusinessAccess = cache(async function getBusinessAccess(
+  userId: string
+): Promise<BusinessAccess | null> {
   const supabase = await createClient()
 
   // Ambas consultas en paralelo: owner check y staff check simultáneamente
@@ -41,13 +45,14 @@ export async function getBusinessAccess(userId: string): Promise<BusinessAccess 
   }
 
   return null
-}
+})
 
 /**
  * Obtiene el objeto business completo para un usuario.
  * Optimizado: owner + staff queries en paralelo.
+ * Dedupe por petición (misma llamada que el layout del dashboard + página inicio).
  */
-export async function getBusinessForUser(userId: string) {
+export const getBusinessForUser = cache(async function getBusinessForUser(userId: string) {
   const supabase = await createClient()
 
   // Ambas consultas en paralelo
@@ -75,7 +80,7 @@ export async function getBusinessForUser(userId: string) {
     .maybeSingle()
 
   return business ? { business, isOwner: false } : null
-}
+})
 
 /**
  * Obtiene solo el business_id para un usuario (más eficiente cuando solo necesitas el ID)

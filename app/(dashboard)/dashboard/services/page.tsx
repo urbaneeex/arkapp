@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { createClient, getCachedUser } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import type { Metadata } from 'next'
 import Link from 'next/link'
@@ -6,23 +6,23 @@ import { Button } from '@/components/ui/button'
 import { Plus } from 'lucide-react'
 import { ServicesList } from '@/components/services/ServicesList'
 import { RequirePermission } from '@/components/auth/RequirePermission'
-import { getBusinessIdForUser } from '@/lib/supabase/business'
+import { getBusinessForUser } from '@/lib/supabase/business'
 
 export const metadata: Metadata = {
   title: 'Servicios',
 }
 
 export default async function ServicesPage() {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const user = await getCachedUser()
   if (!user) redirect('/login')
 
-  const businessId = await getBusinessIdForUser(user.id)
-  if (!businessId) {
+  const supabase = await createClient()
+
+  const businessResult = await getBusinessForUser(user.id)
+  if (!businessResult) {
     return <div>No tienes un negocio configurado</div>
   }
+  const businessId = businessResult.business.id
 
   const { data: services, error } = await supabase
     .from('services')

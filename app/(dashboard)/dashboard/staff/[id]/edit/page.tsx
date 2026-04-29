@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect, notFound } from 'next/navigation'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { StaffForm } from '@/components/staff/StaffForm'
+import { MyTeamsStrip } from '@/components/teams/MyTeamsStrip'
 
 export default async function EditStaffPage({
   params,
@@ -32,6 +33,8 @@ export default async function EditStaffPage({
 
   if (error || !staff) notFound()
 
+  const isOwnProfile = user.id === staff.id
+
   const { data: pendingInvite } = await supabase
     .from('staff_invites')
     .select('id')
@@ -56,6 +59,17 @@ export default async function EditStaffPage({
         initialRoles={roles ?? []}
         hasPendingInvite={hasPendingInvite}
       />
+      {isOwnProfile ? (
+        <section className="mt-10 rounded-xl border border-zinc-800 bg-zinc-950/40 p-5">
+          <h2 className="font-display text-lg font-semibold text-zinc-100">Mis equipos</h2>
+          <p className="mt-1 text-sm text-zinc-500">
+            Equipos a los que perteneces en este negocio (solo lectura).
+          </p>
+          <div className="mt-4">
+            <MyTeamsStrip />
+          </div>
+        </section>
+      ) : null}
     </div>
   )
 }

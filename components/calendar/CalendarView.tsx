@@ -135,6 +135,38 @@ function mergeMetadataTimeUnspecified(metadata: unknown): Record<string, unknown
   return base
 }
 
+/** Panel lateral → calendario con hora explícita: quita marca “solo día”. */
+function mergeMetadataExplicitSchedule(metadata: unknown): Record<string, unknown> {
+  const base =
+    metadata && typeof metadata === 'object' && !Array.isArray(metadata)
+      ? { ...(metadata as Record<string, unknown>) }
+      : {}
+  delete base[CALENDAR_TIME_UNSPECIFIED_KEY]
+  return base
+}
+
+type SidebarScheduleMode = 'date_only' | 'datetime'
+
+function defaultSidebarDurationMinutes(row: AppointmentRow): number {
+  const svc = Array.isArray(row.services) ? row.services[0] : row.services
+  const d =
+    svc && typeof svc === 'object' && typeof (svc as { duration?: unknown }).duration === 'number'
+      ? (svc as { duration: number }).duration
+      : NaN
+  return Number.isFinite(d) && d > 0 ? Math.min(d, 24 * 60) : 60
+}
+
+/** Al terminar cualquier drag HTML5 (soltar fuera o sobre destino). */
+function useDragEndClear(onDragEnd: () => void) {
+  const ref = useRef(onDragEnd)
+  ref.current = onDragEnd
+  useEffect(() => {
+    const handler = () => ref.current()
+    window.addEventListener('dragend', handler)
+    return () => window.removeEventListener('dragend', handler)
+  }, [])
+}
+
 /** Arrastre HTML5 desde el panel lateral (no anida otro DndContext). */
 const ARKAPT_SIDEBAR_SCHEDULE_MIME = 'application/x-arkapt-sidebar-schedule'
 
@@ -444,11 +476,7 @@ export function CalendarView({
   businessCountry = 'ES',
   shiftsByDay = {},
   defaultPeriod,
-  openNewPanel,
-  onNewPanelClosed,
   headerSlot,
-  staffFilter: externalStaffFilter,
-  onStaffFilterChange,
 }: {
   appointments: AppointmentRow[]
   clients: { id: string; name: string; phone?: string | null; email?: string | null }[]
@@ -459,12 +487,7 @@ export function CalendarView({
   shiftsByDay?: Record<number, Shift[]>
   /** Periodo inicial (día/semana/mes). Sin definir → día (p. ej. página Calendario). El tablero pasa `week`. */
   defaultPeriod?: ViewType
-  openNewPanel?: boolean
-  onNewPanelClosed?: () => void
   headerSlot?: React.ReactNode
-  /** Filtro de empleado controlado externamente (desde WorkBoardActionBar) */
-  staffFilter?: string
-  onStaffFilterChange?: (value: string) => void
 }) {
   const router = useRouter()
   const supabase = createClient()
@@ -474,29 +497,12 @@ export function CalendarView({
   const canDeleteAppointments = hasPermission('appointments_delete')
   const [current, setCurrent] = useState(new Date())
   const [view, setView] = useState<ViewType>(defaultPeriod ?? 'day')
-  const [staffFilter, setStaffFilterInternal] = useState<string>(externalStaffFilter ?? '')
-
-  // Si se controla externamente, sincronizamos
-  const staffFilter_ = externalStaffFilter !== undefined ? externalStaffFilter : staffFilter
-  function setStaffFilter(v: string) {
-    setStaffFilterInternal(v)
-    onStaffFilterChange?.(v)
-  }
   const [popoverAppointment, setPopoverAppointment] = useState<AppointmentForPopover | null>(null)
   const [anchorPosition, setAnchorPosition] = useState<{ x: number; y: number } | null>(null)
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
   const [editModalAppointmentId, setEditModalAppointmentId] = useState<string | null>(null)
-  const [externalPanelOpen, setExternalPanelOpen] = useState(false)
   const [selectedMonthDay, setSelectedMonthDay] = useState<Date | null>(null)
   const [tasksPanelOpen, setTasksPanelOpen] = useState(true)
-
-  useEffect(() => {
-    if (openNewPanel) {
-      setExternalPanelOpen(true)
-      onNewPanelClosed?.()
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [openNewPanel])
 
   /** Solo citas con horario: el calendario no puede colocar filas sin start/end. */
   const appointmentsScheduled = useMemo((): AppointmentRowScheduled[] => {
@@ -510,15 +516,11 @@ export function CalendarView({
     [appointmentsScheduled]
   )
 
-  const filteredAppointments = useMemo(() => {
-    if (!staffFilter_) return normalizedForViews
-    return normalizedForViews.filter((a) => a.staff_id === staffFilter_)
-  }, [normalizedForViews, staffFilter_])
+  const filteredAppointments = normalizedForViews
 
   const appointmentsForWeekView = useMemo((): AppointmentRowScheduled[] => {
-    if (!staffFilter_) return appointmentsScheduled
-    return appointmentsScheduled.filter((a) => a.staff_id === staffFilter_)
-  }, [appointmentsScheduled, staffFilter_])
+    return appointmentsScheduled
+  }, [appointmentsScheduled])
 
   const appointmentsUnscheduledBase = useMemo(() => {
     return appointments.filter((a) => {
@@ -539,14 +541,12 @@ export function CalendarView({
   }, [appointments])
 
   const unscheduledForPanel = useMemo(() => {
-    if (!staffFilter_) return appointmentsUnscheduledBase
-    return appointmentsUnscheduledBase.filter((a) => a.staff_id === staffFilter_)
-  }, [appointmentsUnscheduledBase, staffFilter_])
+    return appointmentsUnscheduledBase
+  }, [appointmentsUnscheduledBase])
 
   const overdueForPanel = useMemo(() => {
-    if (!staffFilter_) return appointmentsOverdueBase
-    return appointmentsOverdueBase.filter((a) => a.staff_id === staffFilter_)
-  }, [appointmentsOverdueBase, staffFilter_])
+    return appointmentsOverdueBase
+  }, [appointmentsOverdueBase])
 
   const goPrev = () => {
     if (view === 'day') setCurrent((d) => subDays(d, 1))
@@ -673,13 +673,14 @@ export function CalendarView({
     [filteredAppointments, supabase, router]
   )
 
-  const handleSidebarScheduleOnDay = useCallback(
-    async (appointmentId: string, targetDay: Date) => {
+  const handleSidebarScheduleFromPanel = useCallback(
+    async (appointmentId: string, targetInstant: Date, mode: SidebarScheduleMode) => {
       if (!canMoveAppointments) return
       const row = appointments.find((a) => a.id === appointmentId)
       if (!row) return
       const today = startOfDay(new Date())
-      if (isBefore(startOfDay(targetDay), today)) {
+      const calendarDay = startOfDay(targetInstant)
+      if (isBefore(calendarDay, today)) {
         setToast({ message: 'No se puede asignar a una fecha pasada', type: 'error' })
         return
       }
@@ -693,8 +694,24 @@ export function CalendarView({
         setToast({ message: 'Esta tarea ya tiene fecha futura', type: 'error' })
         return
       }
-      const newStart = startOfDay(targetDay)
-      const newEnd = addMinutes(newStart, 60)
+      const durMin = defaultSidebarDurationMinutes(row)
+      let newStart: Date
+      let newEnd: Date
+      let metadata: Record<string, unknown>
+      if (mode === 'date_only') {
+        newStart = startOfDay(targetInstant)
+        newEnd = addMinutes(newStart, durMin)
+        metadata = mergeMetadataTimeUnspecified(row.metadata ?? null)
+      } else {
+        newStart = new Date(targetInstant)
+        newStart.setSeconds(0, 0)
+        if (isBefore(newStart, new Date())) {
+          setToast({ message: 'No se puede asignar a una hora pasada', type: 'error' })
+          return
+        }
+        newEnd = addMinutes(newStart, durMin)
+        metadata = mergeMetadataExplicitSchedule(row.metadata ?? null)
+      }
       const newStartMs = newStart.getTime()
       const newEndMs = newEnd.getTime()
       const staffId = row.staff_id
@@ -704,7 +721,7 @@ export function CalendarView({
           a.staff_id === staffId &&
           !!a.start_time &&
           !!a.end_time &&
-          isSameDay(parseISO(a.start_time), targetDay)
+          isSameDay(parseISO(a.start_time), calendarDay)
       )
       const conflict = sameDayStaff.find((a) => {
         const aStart = parseISO(a.start_time).getTime()
@@ -717,7 +734,6 @@ export function CalendarView({
         )
         if (!ok) return
       }
-      const metadata = mergeMetadataTimeUnspecified(row.metadata ?? null)
       const { error } = await supabase
         .from('appointments')
         .update({
@@ -730,7 +746,10 @@ export function CalendarView({
         setToast({ message: error.message, type: 'error' })
         return
       }
-      setToast({ message: 'Tarea asignada al día', type: 'success' })
+      setToast({
+        message: mode === 'date_only' ? 'Tarea asignada al día' : 'Tarea programada',
+        type: 'success',
+      })
       router.refresh()
     },
     [canMoveAppointments, appointments, filteredAppointments, supabase, router]
@@ -825,7 +844,7 @@ export function CalendarView({
             }}
             onNavigateToDate={(date) => { setCurrent(date); setView('day') }}
             onDropInDay={canMoveAppointments ? (apt, toDate) => handleDropAppointment(normalizeAppointment(apt), toDate) : undefined}
-            onSidebarScheduleDrop={canMoveAppointments ? handleSidebarScheduleOnDay : undefined}
+            onSidebarScheduleDrop={canMoveAppointments ? handleSidebarScheduleFromPanel : undefined}
             businessId={businessId}
             services={services}
             staff={staff}
@@ -844,7 +863,7 @@ export function CalendarView({
                 shiftsByDay={shiftsByDay}
                 onAppointmentClick={handleAppointmentClick}
                 onDropInDay={canMoveAppointments ? handleDropAppointment : undefined}
-                onSidebarScheduleDrop={canMoveAppointments ? handleSidebarScheduleOnDay : undefined}
+                onSidebarScheduleDrop={canMoveAppointments ? handleSidebarScheduleFromPanel : undefined}
                 businessId={businessId}
                 services={services}
                 staff={staff}
@@ -859,7 +878,7 @@ export function CalendarView({
                 shiftsByDay={shiftsByDay}
                 onAppointmentClick={handleAppointmentClick}
                 onDropAppointment={canMoveAppointments ? handleDropAppointment : undefined}
-                onSidebarScheduleDrop={canMoveAppointments ? handleSidebarScheduleOnDay : undefined}
+                onSidebarScheduleDrop={canMoveAppointments ? handleSidebarScheduleFromPanel : undefined}
                 onDayClick={(day) => setSelectedMonthDay(day)}
               />
             )}
@@ -909,21 +928,6 @@ export function CalendarView({
         canDelete={canDeleteAppointments}
       />
 
-      {externalPanelOpen && (
-        <KanbanQuickAddAppointment
-          defaultOpen
-          initialDay={current}
-          initialTimeMin={9 * 60}
-          businessId={businessId}
-          services={services}
-          staffOptions={staff}
-          onClose={() => setExternalPanelOpen(false)}
-          onSaved={() => router.refresh()}
-          onToast={(message, type) => setToast({ message, type })}
-          wrapperClassName="fixed left-1/2 top-1/2 z-50 w-full max-w-sm -translate-x-1/2 -translate-y-1/2"
-        />
-      )}
-
       {selectedMonthDay && (
         <KanbanQuickAddAppointment
           defaultOpen
@@ -971,8 +975,8 @@ function WeekView({
   onAppointmentClick: (apt: AppointmentRowScheduled, e: React.MouseEvent) => void
   onNavigateToDate?: (date: Date) => void
   onDropInDay?: (apt: AppointmentRowScheduled, toDate: Date) => void
-  /** Soltar tarea del panel lateral: solo fecha (inicio del día). */
-  onSidebarScheduleDrop?: (appointmentId: string, day: Date) => void
+  /** Panel lateral sobre slot: fecha y hora al minuto del slot. */
+  onSidebarScheduleDrop?: (appointmentId: string, targetInstant: Date, mode: SidebarScheduleMode) => void
   businessId?: string
   services?: KanbanService[]
   staff?: WorkBoardStaffOption[]
@@ -980,6 +984,8 @@ function WeekView({
   onSlotSaved?: () => void
 }) {
   const [selectedWeekSlot, setSelectedWeekSlot] = useState<{ dayIndex: number; timeMin: number } | null>(null)
+  const [sidebarScheduleHoverKey, setSidebarScheduleHoverKey] = useState<string | null>(null)
+  useDragEndClear(() => setSidebarScheduleHoverKey(null))
   const days = useMemo(
     () => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)),
     [weekStart]
@@ -1213,6 +1219,10 @@ function WeekView({
                 hasAppointment={slotHasAppointment}
                 onSlotClick={() => !slotHasAppointment && setSelectedWeekSlot({ dayIndex, timeMin })}
                 onSidebarScheduleDrop={onSidebarScheduleDrop}
+                sidebarDropHover={sidebarScheduleHoverKey === `week-${dayIndex}-${slotIndex}`}
+                onSidebarScheduleDragHover={
+                  onSidebarScheduleDrop ? (key: string) => setSidebarScheduleHoverKey(key) : undefined
+                }
               />
             )
           })
@@ -1471,6 +1481,8 @@ function WeekSlot({
   hasAppointment,
   onSlotClick,
   onSidebarScheduleDrop,
+  sidebarDropHover,
+  onSidebarScheduleDragHover,
 }: {
   day: Date
   dayIndex: number
@@ -1480,10 +1492,15 @@ function WeekSlot({
   isClosed: boolean
   hasAppointment: boolean
   onSlotClick: () => void
-  onSidebarScheduleDrop?: (appointmentId: string, day: Date) => void
+  onSidebarScheduleDrop?: (appointmentId: string, targetInstant: Date, mode: SidebarScheduleMode) => void
+  /** Feedback visual drag HTML5 desde panel lateral */
+  sidebarDropHover?: boolean
+  onSidebarScheduleDragHover?: (slotKey: string) => void
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `week-slot-${dayIndex}-${slotIndex}` })
   const [isHovered, setIsHovered] = useState(false)
+  /** Panel lateral (HTML5) o mover cita (dnd-kit): misma animación de slot objetivo */
+  const highlightDropTarget = !isClosed && (sidebarDropHover || isOver)
   const hours = Math.floor(timeMin / 60)
   const minutes = timeMin % 60
   const timeLabel = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
@@ -1494,12 +1511,12 @@ function WeekSlot({
       role="button"
       tabIndex={0}
       className={cn(
-        'relative border-r border-t transition-colors cursor-pointer shrink-0',
+        'relative border-r border-t transition-all duration-150 cursor-pointer shrink-0',
         isHourStart ? 'border-t-2 border-zinc-700' : 'border-t border-zinc-700/80',
         isClosed && 'bg-zinc-700/50',
         isSameDay(day, new Date()) && !isClosed && 'bg-brand/5',
         isHovered && 'bg-brand/35',
-        isOver && 'ring-1 ring-inset ring-brand bg-brand/20',
+        highlightDropTarget && 'animate-sidebar-drop-slot z-[5]',
         dayIndex === 6 && 'border-r-zinc-800'
       )}
       style={{ gridColumn: dayIndex + 2, gridRow: slotIndex + 2, height: SLOT_HEIGHT_PX }}
@@ -1512,6 +1529,7 @@ function WeekSlot({
               if ([...e.dataTransfer.types].includes(ARKAPT_SIDEBAR_SCHEDULE_MIME)) {
                 e.preventDefault()
                 e.dataTransfer.dropEffect = 'move'
+                onSidebarScheduleDragHover?.(`week-${dayIndex}-${slotIndex}`)
               }
             }
           : undefined
@@ -1521,9 +1539,13 @@ function WeekSlot({
           ? (e) => {
               e.preventDefault()
               e.stopPropagation()
+              if (isClosed) return
               if (![...e.dataTransfer.types].includes(ARKAPT_SIDEBAR_SCHEDULE_MIME)) return
               const id = e.dataTransfer.getData(ARKAPT_SIDEBAR_SCHEDULE_MIME)
-              if (id) onSidebarScheduleDrop(id, startOfDay(day))
+              if (!id) return
+              const target = new Date(day)
+              target.setHours(Math.floor(timeMin / 60), timeMin % 60, 0, 0)
+              onSidebarScheduleDrop(id, target, 'datetime')
             }
           : undefined
       }
@@ -1535,11 +1557,9 @@ function WeekSlot({
       }}
       aria-label={`${format(day, 'd MMM', { locale: es })} ${timeLabel}`}
     >
-      {isHovered && (
+      {((isHovered || highlightDropTarget) && !isClosed) && (
         <div className="absolute inset-0 flex items-center pointer-events-none pl-2">
-          <span className={cn('text-xs font-medium', isClosed ? 'text-zinc-500' : 'text-zinc-300')}>
-            {timeLabel}
-          </span>
+          <span className="text-xs font-medium text-zinc-100 drop-shadow-sm">{timeLabel}</span>
         </div>
       )}
     </div>
@@ -1564,7 +1584,7 @@ function DayView({
   shiftsByDay: Record<number, Shift[]>
   onAppointmentClick: (apt: AppointmentNormalized, e: React.MouseEvent) => void
   onDropInDay?: (apt: AppointmentNormalized, toDate: Date) => void
-  onSidebarScheduleDrop?: (appointmentId: string, day: Date) => void
+  onSidebarScheduleDrop?: (appointmentId: string, targetInstant: Date, mode: SidebarScheduleMode) => void
   businessId?: string
   services?: KanbanService[]
   staff?: WorkBoardStaffOption[]
@@ -1733,7 +1753,7 @@ function DayViewContent({
   timeLabels: { min: number; label: string }[]
   onAppointmentClick: (apt: AppointmentNormalized, e: React.MouseEvent) => void
   isSlotClosed: (slotIndex: number) => boolean
-  onSidebarScheduleDrop?: (appointmentId: string, day: Date) => void
+  onSidebarScheduleDrop?: (appointmentId: string, targetInstant: Date, mode: SidebarScheduleMode) => void
   businessId?: string
   services?: KanbanService[]
   staff?: WorkBoardStaffOption[]
@@ -1742,6 +1762,8 @@ function DayViewContent({
 }) {
   const [activeId, setActiveId] = useState<string | null>(null)
   const [selectedSlotTime, setSelectedSlotTime] = useState<{ slotIndex: number; timeMin: number } | null>(null)
+  const [sidebarScheduleHoverSlotIndex, setSidebarScheduleHoverSlotIndex] = useState<number | null>(null)
+  useDragEndClear(() => setSidebarScheduleHoverSlotIndex(null))
   const currentTimeLineRef = useRef<HTMLDivElement>(null)
   const hasScrolledToTimeRef = useRef(false)
 
@@ -1874,6 +1896,10 @@ function DayViewContent({
                   isClosed={closed}
                   calendarDay={day}
                   onSidebarScheduleDrop={onSidebarScheduleDrop}
+                  sidebarDropHover={sidebarScheduleHoverSlotIndex === slotIndex}
+                  onSidebarScheduleDragHover={
+                    onSidebarScheduleDrop ? (idx: number) => setSidebarScheduleHoverSlotIndex(idx) : undefined
+                  }
                 />
               )
             })}
@@ -1975,6 +2001,8 @@ function DaySlot({
   isClosed,
   calendarDay,
   onSidebarScheduleDrop,
+  sidebarDropHover,
+  onSidebarScheduleDragHover,
 }: {
   slotIndex: number
   isOver: boolean
@@ -1984,12 +2012,16 @@ function DaySlot({
   onSlotClick?: (slotIndex: number, timeMin: number) => void
   isClosed: boolean
   calendarDay: Date
-  onSidebarScheduleDrop?: (appointmentId: string, day: Date) => void
+  onSidebarScheduleDrop?: (appointmentId: string, targetInstant: Date, mode: SidebarScheduleMode) => void
+  sidebarDropHover?: boolean
+  onSidebarScheduleDragHover?: (slotIndex: number) => void
 }) {
   const { setNodeRef, isOver: isOverDnd } = useDroppable({ id: `slot-${slotIndex}` })
   const showOver = isOver || isOverDnd
   const [isHovered, setIsHovered] = useState(false)
   const timeMin = dayStartMin + slotIndex * MINUTES_PER_SLOT
+  /** Sidebar HTML5 o mover cita existente (dnd-kit) */
+  const highlightDropTarget = !isClosed && (sidebarDropHover || showOver)
   const hours = Math.floor(timeMin / 60)
   const minutes = timeMin % 60
   const timeLabel = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
@@ -2013,6 +2045,7 @@ function DaySlot({
               if ([...e.dataTransfer.types].includes(ARKAPT_SIDEBAR_SCHEDULE_MIME)) {
                 e.preventDefault()
                 e.dataTransfer.dropEffect = 'move'
+                onSidebarScheduleDragHover?.(slotIndex)
               }
             }
           : undefined
@@ -2022,26 +2055,28 @@ function DaySlot({
           ? (e) => {
               e.preventDefault()
               e.stopPropagation()
+              if (isClosed) return
               if (![...e.dataTransfer.types].includes(ARKAPT_SIDEBAR_SCHEDULE_MIME)) return
               const id = e.dataTransfer.getData(ARKAPT_SIDEBAR_SCHEDULE_MIME)
-              if (id) onSidebarScheduleDrop(id, startOfDay(calendarDay))
+              if (!id) return
+              const target = new Date(calendarDay)
+              target.setHours(Math.floor(timeMin / 60), timeMin % 60, 0, 0)
+              onSidebarScheduleDrop(id, target, 'datetime')
             }
           : undefined
       }
       className={cn(
-        'transition-colors shrink-0 relative cursor-pointer',
+        'transition-all duration-150 shrink-0 relative cursor-pointer',
         isHourStart ? 'border-t-2 border-zinc-700' : 'border-t border-zinc-700',
-        showOver && 'ring-1 ring-inset ring-brand bg-brand/20',
+        highlightDropTarget && 'animate-sidebar-drop-slot z-[15]',
         isHovered && 'bg-brand/35',
         isClosed && onSlotClick && 'cursor-pointer'
       )}
       style={{ height: slotHeightPx }}
     >
-      {isHovered && (
+      {(isHovered || highlightDropTarget) && (
         <div className="absolute inset-0 flex items-center pointer-events-none pl-2">
-          <span className="text-xs font-medium text-zinc-300">
-            {timeLabel}
-          </span>
+          <span className="text-xs font-medium text-zinc-100 drop-shadow-sm">{timeLabel}</span>
         </div>
       )}
     </div>
@@ -2121,7 +2156,7 @@ function MonthView({
   shiftsByDay?: Record<number, Shift[]>
   onAppointmentClick: (apt: AppointmentNormalized, e: React.MouseEvent) => void
   onDropAppointment?: (apt: AppointmentNormalized, toDate: Date) => void
-  onSidebarScheduleDrop?: (appointmentId: string, day: Date) => void
+  onSidebarScheduleDrop?: (appointmentId: string, targetInstant: Date, mode: SidebarScheduleMode) => void
   onDayClick: (day: Date) => void
 }) {
   const start = startOfMonth(month)
@@ -2137,6 +2172,9 @@ function MonthView({
     (day: Date) => getOpenRangesForDay(shiftsByDay, getDayOfWeek(day)).length === 0,
     [shiftsByDay]
   )
+
+  const [sidebarScheduleHoverDayKey, setSidebarScheduleHoverDayKey] = useState<string | null>(null)
+  useDragEndClear(() => setSidebarScheduleHoverDayKey(null))
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
@@ -2210,6 +2248,10 @@ function MonthView({
                   onAppointmentClick={onAppointmentClick}
                   onDropAppointment={onDropAppointment}
                   onSidebarScheduleDrop={onSidebarScheduleDrop}
+                  sidebarDropHover={sidebarScheduleHoverDayKey === dayKey}
+                  onSidebarScheduleDragHover={
+                    onSidebarScheduleDrop ? (k: string) => setSidebarScheduleHoverDayKey(k) : undefined
+                  }
                 />
               )
             })
@@ -2230,6 +2272,8 @@ function MonthDayCell({
   onAppointmentClick,
   onDropAppointment,
   onSidebarScheduleDrop,
+  sidebarDropHover,
+  onSidebarScheduleDragHover,
 }: {
   day: Date
   month: Date
@@ -2239,7 +2283,9 @@ function MonthDayCell({
   onDayClick: (day: Date) => void
   onAppointmentClick: (apt: AppointmentNormalized, e: React.MouseEvent) => void
   onDropAppointment?: (apt: AppointmentNormalized, toDate: Date) => void
-  onSidebarScheduleDrop?: (appointmentId: string, day: Date) => void
+  onSidebarScheduleDrop?: (appointmentId: string, targetInstant: Date, mode: SidebarScheduleMode) => void
+  sidebarDropHover?: boolean
+  onSidebarScheduleDragHover?: (dayKey: string) => void
 }) {
   const { isOver, setNodeRef } = useDroppable({ id: dayKey })
 
@@ -2260,6 +2306,7 @@ function MonthDayCell({
               if ([...e.dataTransfer.types].includes(ARKAPT_SIDEBAR_SCHEDULE_MIME)) {
                 e.preventDefault()
                 e.dataTransfer.dropEffect = 'move'
+                onSidebarScheduleDragHover?.(dayKey)
               }
             }
           : undefined
@@ -2271,7 +2318,7 @@ function MonthDayCell({
                 e.preventDefault()
                 e.stopPropagation()
                 const id = e.dataTransfer.getData(ARKAPT_SIDEBAR_SCHEDULE_MIME)
-                if (id) onSidebarScheduleDrop(id, startOfDay(day))
+                if (id) onSidebarScheduleDrop(id, startOfDay(day), 'date_only')
                 return
               }
               // dnd-kit month drag: no hacer preventDefault aquí para no interferir
@@ -2285,12 +2332,12 @@ function MonthDayCell({
         }
       }}
       className={cn(
-        'flex flex-col min-h-[4rem] p-2 border-r border-b border-zinc-800 cursor-pointer transition-colors overflow-hidden',
+        'flex flex-col min-h-[4rem] p-2 border-r border-b border-zinc-800 cursor-pointer transition-all duration-150 overflow-hidden',
         'hover:bg-zinc-800/70',
         isSameMonth(day, month) ? 'bg-zinc-900' : 'bg-zinc-900/50',
         isClosed && 'bg-gray-50 dark:bg-zinc-700/50',
         isSameDay(day, new Date()) && 'ring-1 ring-brand ring-inset',
-        isOver && 'ring-2 ring-brand ring-inset'
+        (sidebarDropHover || isOver) && !isClosed && 'animate-sidebar-drop-slot z-[1]'
       )}
       aria-label={format(day, "d 'de' MMMM", { locale: es })}
     >

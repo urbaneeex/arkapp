@@ -74,13 +74,18 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
   const { data: stage, error: stErr } = await supabase
     .from('pipeline_stages')
-    .select('id, business_id')
+    .select('id, business_id, slug')
     .eq('id', targetStageId)
     .maybeSingle()
 
   if (stErr || !stage || stage.business_id !== access.businessId) {
     return NextResponse.json({ error: 'invalid_stage' }, { status: 400 })
   }
+
+  const completedAtPatch =
+    stage.slug === 'completed'
+      ? { completed_at: new Date().toISOString() }
+      : { completed_at: null }
 
   const columnIds = parsed.data.column_item_ids
   const sourceStageId = apt.pipeline_stage_id
@@ -105,6 +110,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
         .update({
           pipeline_stage_id: targetStageId,
           board_sort_order: i,
+          ...completedAtPatch,
         })
         .eq('id', columnIds[i]!)
         .eq('business_id', access.businessId)
@@ -141,7 +147,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
   const { error: updErr } = await supabase
     .from('appointments')
-    .update({ pipeline_stage_id: targetStageId })
+    .update({ pipeline_stage_id: targetStageId, ...completedAtPatch })
     .eq('id', id)
 
   if (updErr) {

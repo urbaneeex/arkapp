@@ -1,10 +1,10 @@
-import { createClient } from '@/lib/supabase/server'
+import { createClient, getCachedUser } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import type { Metadata } from 'next'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { FinancesPageClient } from '@/components/finances/FinancesPageClient'
 import { RequirePermission } from '@/components/auth/RequirePermission'
-import { getBusinessIdForUser } from '@/lib/supabase/business'
+import { getBusinessForUser } from '@/lib/supabase/business'
 import {
   startOfMonth,
   endOfMonth,
@@ -18,14 +18,14 @@ export const metadata: Metadata = {
 }
 
 export default async function FinancesPage() {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const user = await getCachedUser()
   if (!user) redirect('/login')
 
-  const businessId = await getBusinessIdForUser(user.id)
-  if (!businessId) redirect('/dashboard')
+  const supabase = await createClient()
+
+  const businessResult = await getBusinessForUser(user.id)
+  if (!businessResult) redirect('/dashboard')
+  const businessId = businessResult.business.id
 
   const monthStart = startOfMonth(new Date()).toISOString()
   const monthEnd = endOfMonth(new Date()).toISOString()

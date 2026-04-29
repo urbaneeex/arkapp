@@ -39,6 +39,10 @@ export type PermissionKey =
   | 'time_tracking_manage'
   | 'absences_view'
   | 'absences_manage'
+  | 'teams_view'
+  | 'teams_manage'
+  | 'tasks_view_all'
+  | 'tasks_view_own'
 
 export type Permissions = Record<PermissionKey, boolean>
 
@@ -70,6 +74,10 @@ const baseKeys: PermissionKey[] = [
   'time_tracking_manage',
   'absences_view',
   'absences_manage',
+  'teams_view',
+  'teams_manage',
+  'tasks_view_all',
+  'tasks_view_own',
 ]
 
 function makePermissions(overrides: Partial<Permissions>): Permissions {
@@ -84,6 +92,9 @@ export const DEFAULT_MATRIX: PermissionMatrix = {
   basico: makePermissions({
     calendar_view: true,
     work_board_view: true,
+    appointments_create: true,
+    teams_view: true,
+    tasks_view_own: true,
   }),
   bajo: makePermissions({
     calendar_view: true,
@@ -91,6 +102,8 @@ export const DEFAULT_MATRIX: PermissionMatrix = {
     appointments_create: true,
     clients_view: true,
     services_view: true,
+    teams_view: true,
+    tasks_view_own: true,
   }),
   medio: makePermissions({
     calendar_view: true,
@@ -107,6 +120,8 @@ export const DEFAULT_MATRIX: PermissionMatrix = {
     finances_view: true,
     time_tracking_view: true,
     absences_view: true,
+    teams_view: true,
+    tasks_view_own: true,
   }),
   alto: makePermissions({
     calendar_view: true,
@@ -133,6 +148,10 @@ export const DEFAULT_MATRIX: PermissionMatrix = {
     absences_view: true,
     absences_manage: true,
     pipeline_stages_manage: true,
+    teams_view: true,
+    teams_manage: true,
+    tasks_view_all: true,
+    tasks_view_own: true,
   }),
   propietario: makePermissions({
     calendar_view: true,
@@ -160,6 +179,10 @@ export const DEFAULT_MATRIX: PermissionMatrix = {
     absences_view: true,
     absences_manage: true,
     pipeline_stages_manage: true,
+    teams_view: true,
+    teams_manage: true,
+    tasks_view_all: true,
+    tasks_view_own: true,
   }),
 }
 
@@ -213,6 +236,10 @@ export const PERMISSION_ROWS: { category: string; permission: string; key: Permi
   { category: 'Fichajes', permission: 'Gestionar fichajes (crear/editar)', key: 'time_tracking_manage' },
   { category: 'Vacaciones', permission: 'Ver solicitudes de ausencia', key: 'absences_view' },
   { category: 'Vacaciones', permission: 'Aprobar/rechazar ausencias', key: 'absences_manage' },
+  { category: 'Equipos', permission: 'Ver equipos y «Mis equipos»', key: 'teams_view' },
+  { category: 'Equipos', permission: 'Gestionar equipos', key: 'teams_manage' },
+  { category: 'Tablero', permission: 'Ver todas las tareas del negocio', key: 'tasks_view_all' },
+  { category: 'Tablero', permission: 'Ámbito de tareas propias', key: 'tasks_view_own' },
 ]
 
 export const PERMISSION_LEVELS_UI = [

@@ -107,6 +107,7 @@ export function ClockInWidget({
         setMessage('¡Salida registrada!')
       }
       setStatus('success')
+      window.dispatchEvent(new CustomEvent('clock-status-changed'))
       setTimeout(() => setStatus('idle'), 3000)
     } catch (e: unknown) {
       setMessage((e as Error).message || 'Error desconocido')
@@ -136,6 +137,7 @@ export function ClockInWidget({
         setMessage('¡Jornada reanudada!')
       }
       setStatus('success')
+      window.dispatchEvent(new CustomEvent('clock-status-changed'))
       setTimeout(() => setStatus('idle'), 2000)
     } catch (e: unknown) {
       setMessage((e as Error).message || 'Error desconocido')

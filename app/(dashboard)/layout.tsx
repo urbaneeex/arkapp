@@ -5,6 +5,7 @@ import { Sidebar } from '@/components/layout/Sidebar'
 import { MobileBottomNav } from '@/components/layout/MobileBottomNav'
 import { DashboardMain } from '@/components/layout/DashboardMain'
 import { PermissionsProvider } from '@/contexts/PermissionsContext'
+import { ReactQueryProvider } from '@/components/providers/ReactQueryProvider'
 import { getCachedUser } from '@/lib/supabase/server'
 import { getBusinessForUser } from '@/lib/supabase/business'
 
@@ -26,16 +27,18 @@ export default async function DashboardLayout({
 
   return (
     <PermissionsProvider>
-      <div className="h-screen min-h-0 overflow-hidden flex flex-col bg-zinc-950">
-        <GlobalHeader initialUserName={userName} initialBusinessName={businessName} />
-        <Sidebar />
-        <DashboardMain>{children}</DashboardMain>
-        <Suspense
-          fallback={<div className="lg:hidden shrink-0 h-[calc(4.25rem+env(safe-area-inset-bottom))]" aria-hidden />}
-        >
-          <MobileBottomNav />
-        </Suspense>
-      </div>
+      <ReactQueryProvider>
+        <div className="h-screen min-h-0 overflow-hidden flex flex-col bg-zinc-950">
+          <GlobalHeader initialUserName={userName} initialBusinessName={businessName} />
+          <Sidebar />
+          <DashboardMain>{children}</DashboardMain>
+          <Suspense
+            fallback={<div className="lg:hidden shrink-0 h-[calc(4.25rem+env(safe-area-inset-bottom))]" aria-hidden />}
+          >
+            <MobileBottomNav />
+          </Suspense>
+        </div>
+      </ReactQueryProvider>
     </PermissionsProvider>
   )
 }

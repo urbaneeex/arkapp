@@ -43,6 +43,17 @@ export type WorkItemCard = {
   price_total: number | null
   /** Desde `metadata.kanban_priority` en citas del tablero. */
   kanban_priority?: KanbanPriorityLevel | null
+  /** Citas/tablero: quién ve la tarea */
+  visibility: 'personal' | 'team' | 'business'
+  team_id: string | null
+  /** Equipos enlazados (puente); primer elemento suele coincidir con team_id. */
+  team_ids?: string[]
+  teams_linked?: { id: string; name: string; color: string }[]
+  /** auth.users id del creador de la fila (Kanban). */
+  created_by?: string | null
+  /** Join opcional `teams` para chips en Kanban */
+  team_color?: string | null
+  team_name?: string | null
   /** Copia de `appointments.metadata` para edición en tarjeta (asignaciones, etc.). */
   metadata?: Record<string, unknown> | null
 }

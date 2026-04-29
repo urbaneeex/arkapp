@@ -37,7 +37,6 @@ export function ClockStatusButton() {
     'idle' | 'loading' | 'gps' | 'scanning' | 'success' | 'error' | 'break_loading'
   >('idle')
   const [actionMsg, setActionMsg] = useState('')
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const scannerRef = useRef<HTMLDivElement>(null)
   const qrScannerInstanceRef = useRef<{ destroy: () => void } | null>(null)
 
@@ -60,11 +59,22 @@ export function ClockStatusButton() {
     }
   }, [])
 
+  /** Sin polling periódico: inicial + cambios desde otros puntos de fichaje + vuelta a la pestaña. */
   useEffect(() => {
-    fetchStatus()
-    pollRef.current = setInterval(fetchStatus, 60_000)
+    void fetchStatus()
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void fetchStatus()
+    }
+    const onClockExternalSync = (e: Event) => {
+      const d = (e as CustomEvent<{ skipHeaderRefetch?: boolean }>).detail
+      if (d?.skipHeaderRefetch) return
+      void fetchStatus()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    window.addEventListener('clock-status-changed', onClockExternalSync)
     return () => {
-      if (pollRef.current) clearInterval(pollRef.current)
+      document.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('clock-status-changed', onClockExternalSync)
     }
   }, [fetchStatus])
 
@@ -123,8 +133,10 @@ export function ClockStatusButton() {
         if (!res.ok) throw new Error(json.error)
         setActionMsg(action === 'in' ? '¡Entrada registrada!' : '¡Salida registrada!')
         setActionState('success')
-        window.dispatchEvent(new CustomEvent('clock-status-changed'))
         await fetchStatus()
+        window.dispatchEvent(
+          new CustomEvent('clock-status-changed', { detail: { skipHeaderRefetch: true } })
+        )
         setTimeout(() => {
           setActionState('idle')
           setActionMsg('')
@@ -156,6 +168,9 @@ export function ClockStatusButton() {
       setActionMsg(isOnBreak ? '¡Jornada reanudada!' : 'Pausa iniciada')
       setActionState('success')
       await fetchStatus()
+      window.dispatchEvent(
+        new CustomEvent('clock-status-changed', { detail: { skipHeaderRefetch: true } })
+      )
       setTimeout(() => {
         setActionState('idle')
         setActionMsg('')

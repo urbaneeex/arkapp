@@ -1,24 +1,24 @@
-import { createClient } from '@/lib/supabase/server'
+import { createClient, getCachedUser } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import type { Metadata } from 'next'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { SettingsClient } from '@/components/settings/SettingsClient'
 import { RequirePermission } from '@/components/auth/RequirePermission'
-import { getBusinessIdForUser } from '@/lib/supabase/business'
+import { getBusinessForUser } from '@/lib/supabase/business'
 
 export const metadata: Metadata = {
   title: 'Ajustes',
 }
 
 export default async function SettingsPage() {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const user = await getCachedUser()
   if (!user) redirect('/login')
 
-  const businessId = await getBusinessIdForUser(user.id)
-  if (!businessId) redirect('/dashboard')
+  const supabase = await createClient()
+
+  const businessResult = await getBusinessForUser(user.id)
+  if (!businessResult) redirect('/dashboard')
+  const businessId = businessResult.business.id
 
   const { data: business } = await supabase
     .from('businesses')

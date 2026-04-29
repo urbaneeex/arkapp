@@ -1,7 +1,6 @@
 'use client'
 
 import React, { useMemo, useCallback, useState, useEffect, useRef } from 'react'
-import { useRouter } from 'next/navigation'
 import {
   Calendar,
   Check,
@@ -11,11 +10,11 @@ import {
   CornerDownLeft,
   User,
   Search,
-  Users,
   Ban,
   X,
   Wrench,
   Loader2,
+  Lock,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { format, parseISO } from 'date-fns'
@@ -44,6 +43,8 @@ import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 import type { WorkItemCard, WorkBoardStaffOption } from '@/lib/work-items/types'
 import type { PipelineStageRow } from '@/lib/work-items/types'
+import type { KanbanFiltersState } from '@/lib/work-board/kanbanFilters'
+import { countActiveKanbanFilters, matchesKanbanFilters } from '@/lib/work-board/kanbanFilters'
 import { WorkBoardCard, type WorkBoardCardKanbanActions } from './WorkBoardCard'
 import type { WorkBoardCardQuickEditContext } from './workBoardCardFields'
 import {
@@ -252,6 +253,7 @@ export function KanbanQuickAddAppointment({
   editItem,
   onEditClose,
   variant = 'default',
+  teams = [],
 }: {
   stageId?: string
   businessId: string
@@ -273,6 +275,7 @@ export function KanbanQuickAddAppointment({
   onEditClose?: () => void
   /** `modal`: solo el formulario; el padre envuelve en Dialog (sin botón colapsable). */
   variant?: 'default' | 'modal'
+  teams?: { id: string; name: string; color: string }[]
 }) {
   const isEditMode = Boolean(editItem)
   const isCalendarMode = !!(defaultOpen && onClose)
@@ -310,6 +313,9 @@ export function KanbanQuickAddAppointment({
   const [priority, setPriority] = useState<QuickPriority>('none')
   /** Varias personas asignables; `staff_id` en BD = primera (compatibilidad). */
   const [staffIds, setStaffIds] = useState<string[]>([])
+  const [taskVisibility, setTaskVisibility] = useState<'personal' | 'team' | 'business'>('team')
+  /** Equipos vinculados (multi); `appointments.team_id` se sincroniza con el primero. */
+  const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -447,6 +453,8 @@ export function KanbanQuickAddAppointment({
     setEndLocal(calcInitialEnd(d, t))
     setPriority('none')
     setStaffIds([])
+    setTaskVisibility('team')
+    setSelectedTeamIds([])
     setStaffAvail({})
     setAssignOpen(false)
     setAssignSearch('')
@@ -492,6 +500,14 @@ export function KanbanQuickAddAppointment({
     setEndLocal(editItem.end_time ?? null)
     setPriority(editItem.kanban_priority ?? 'none')
     setStaffIds(staffIdsFromWorkItem(editItem))
+    setTaskVisibility(editItem.visibility ?? 'team')
+    setSelectedTeamIds(
+      editItem.team_ids?.length
+        ? editItem.team_ids
+        : editItem.team_id
+          ? [editItem.team_id]
+          : []
+    )
     setStaffAvail({})
     setAssignOpen(false)
     setAssignSearch('')
@@ -637,6 +653,38 @@ export function KanbanQuickAddAppointment({
     }
     const primaryStaffId = staffIds.length > 0 ? staffIds[0]! : null
 
+    const resolveVisibilityPayload = async (): Promise<
+      | { ok: true; visibility: 'personal' | 'team' | 'business'; team_id: string | null }
+      | { ok: false; message: string }
+    > => {
+      if (taskVisibility === 'personal' || taskVisibility === 'business') {
+        return { ok: true, visibility: taskVisibility, team_id: null }
+      }
+      let tid: string | null = selectedTeamIds[0] ?? null
+      if (!tid && teams.length === 1) tid = teams[0]!.id
+      if (!tid && primaryStaffId) {
+        const res = await fetch(
+          `/api/teams/for-assignee?staff_id=${encodeURIComponent(primaryStaffId)}`
+        )
+        if (!res.ok) return { ok: false, message: 'No se pudieron obtener equipos del asignado.' }
+        const j = (await res.json()) as { team_ids?: string[] }
+        const allowed = new Set(teams.map((t) => t.id))
+        const matched = (j.team_ids ?? []).filter((id) => allowed.has(id))
+        if (matched.length === 1) tid = matched[0]!
+      }
+      if (!tid) {
+        if (teams.length === 0) {
+          return {
+            ok: false,
+            message:
+              'No hay equipos definidos. Usa «Todo el negocio» o «Personal», o crea un equipo en la sección Equipos.',
+          }
+        }
+        return { ok: false, message: 'Selecciona al menos un equipo para «Mi equipo».' }
+      }
+      return { ok: true, visibility: 'team', team_id: tid }
+    }
+
     // Resolver client_id
     let clientId: string | null = null
     if (clientMode === 'existing' && selectedClient) {
@@ -660,6 +708,22 @@ export function KanbanQuickAddAppointment({
 
     setSaving(true)
     try {
+      const visResolved = await resolveVisibilityPayload()
+      if (!visResolved.ok) {
+        setError(visResolved.message)
+        return
+      }
+      const { visibility: visibilityNext, team_id: teamIdNext } = visResolved
+
+      const teamIdsForBridge: string[] =
+        visibilityNext === 'team'
+          ? selectedTeamIds.length > 0
+            ? selectedTeamIds
+            : teamIdNext
+              ? [teamIdNext]
+              : []
+          : []
+
       if (editItem) {
         const priceNext =
           selectedService?.price ?? editItem.price_total ?? null
@@ -675,6 +739,8 @@ export function KanbanQuickAddAppointment({
             price_total: priceNext,
             metadata,
             pipeline_stage_id: editItem.pipeline_stage_id,
+            visibility: visibilityNext,
+            team_id: teamIdNext,
           })
           .eq('id', editItem.id)
           .eq('business_id', businessId)
@@ -682,6 +748,27 @@ export function KanbanQuickAddAppointment({
         if (upErr) {
           setError(upErr.message)
           return
+        }
+
+        const { error: delBridgeErr } = await supabase
+          .from('appointment_teams')
+          .delete()
+          .eq('appointment_id', editItem.id)
+        if (delBridgeErr) {
+          setError(delBridgeErr.message)
+          return
+        }
+        if (visibilityNext === 'team' && teamIdsForBridge.length > 0) {
+          const { error: bridgeErr } = await supabase.from('appointment_teams').insert(
+            teamIdsForBridge.map((tid) => ({
+              appointment_id: editItem.id,
+              team_id: tid,
+            }))
+          )
+          if (bridgeErr) {
+            setError(bridgeErr.message)
+            return
+          }
         }
 
         onSaved?.()
@@ -721,6 +808,8 @@ export function KanbanQuickAddAppointment({
           price_total: selectedService?.price ?? null,
           metadata,
           status: 'confirmed',
+          visibility: visibilityNext,
+          team_id: teamIdNext,
         })
         .select('id')
         .maybeSingle()
@@ -728,6 +817,22 @@ export function KanbanQuickAddAppointment({
       if (insErr) {
         setError(insErr.message)
         return
+      }
+
+      if (inserted?.id) {
+        const { error: bridgeInsErr } =
+          visibilityNext === 'team' && teamIdsForBridge.length > 0
+            ? await supabase.from('appointment_teams').insert(
+                teamIdsForBridge.map((tid) => ({
+                  appointment_id: inserted.id,
+                  team_id: tid,
+                }))
+              )
+            : { error: null }
+        if (bridgeInsErr) {
+          setError(bridgeInsErr.message)
+          return
+        }
       }
 
       if (inserted?.id) {
@@ -1042,17 +1147,76 @@ export function KanbanQuickAddAppointment({
                         'mt-1 border-t border-zinc-800/80 px-3 pb-1 pt-3 text-[11px] uppercase tracking-wide'
                       )}
                     >
-                      Equipos
+                      Visibilidad
                     </p>
-                    <div
-                      className={cn(
-                        KANBAN_QUICK_ADD_ROW_MUTED,
-                        'flex items-center gap-2 px-2 pb-2 text-xs text-zinc-600'
-                      )}
-                    >
-                      <Users className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
-                      <span>Sin equipos en este negocio.</span>
+                    <div className="flex flex-wrap gap-1 px-2 pb-2">
+                      {(
+                        [
+                          ['personal', 'Personal'] as const,
+                          ['team', 'Mi equipo'] as const,
+                          ['business', 'Todo el negocio'] as const,
+                        ]
+                      ).map(([v, label]) => (
+                        <button
+                          key={v}
+                          type="button"
+                          className={cn(
+                            KANBAN_COLUMN_TITLE_TYPO,
+                            'rounded-md px-2 py-1 text-[11px]',
+                            taskVisibility === v
+                              ? 'bg-brand/20 text-brand ring-1 ring-brand/40'
+                              : 'bg-zinc-800/60 text-zinc-400 hover:bg-zinc-800'
+                          )}
+                          onClick={() => {
+                            setTaskVisibility(v)
+                            if (v !== 'team') setSelectedTeamIds([])
+                          }}
+                        >
+                          {label}
+                        </button>
+                      ))}
                     </div>
+                    {taskVisibility === 'team' ? (
+                      teams.length === 0 ? (
+                        <p className={cn(KANBAN_QUICK_ADD_ROW_MUTED, 'px-3 pb-2 text-xs text-amber-400/90')}>
+                          Sin equipos: cambia a «Todo el negocio» o crea equipos en el menú Equipos.
+                        </p>
+                      ) : (
+                        <div className="flex max-h-28 flex-wrap gap-1.5 overflow-y-auto px-2 pb-2">
+                          {teams.map((t) => {
+                            const on = selectedTeamIds.includes(t.id)
+                            return (
+                              <button
+                                key={t.id}
+                                type="button"
+                                disabled={saving}
+                                className={cn(
+                                  KANBAN_COLUMN_TITLE_TYPO,
+                                  'flex items-center gap-1 rounded-md border px-2 py-1 text-[11px]',
+                                  on
+                                    ? 'border-brand bg-brand/15 text-brand'
+                                    : 'border-zinc-700 bg-zinc-900 text-zinc-400 hover:bg-zinc-800'
+                                )}
+                                onClick={() =>
+                                  setSelectedTeamIds((prev) =>
+                                    prev.includes(t.id)
+                                      ? prev.filter((id) => id !== t.id)
+                                      : [...prev, t.id]
+                                  )
+                                }
+                              >
+                                <span
+                                  className="h-2 w-2 shrink-0 rounded-full ring-1 ring-zinc-600"
+                                  style={{ backgroundColor: t.color }}
+                                  aria-hidden
+                                />
+                                {t.name}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      )
+                    ) : null}
                   </div>
                 </PopoverContent>
               </Popover>
@@ -1690,6 +1854,91 @@ export function KanbanQuickAddAppointment({
 
             <div className="sm:col-span-2 rounded-xl border border-zinc-800/90 bg-zinc-950/60 p-4">
               <div className="mb-3 flex items-center gap-2">
+                <Lock className="h-4 w-4 shrink-0 text-zinc-500" aria-hidden />
+                <span
+                  className={cn(
+                    KANBAN_QUICK_ADD_ROW_MUTED,
+                    'text-[11px] font-semibold uppercase tracking-wide text-zinc-400'
+                  )}
+                >
+                  Visibilidad de la tarea
+                </span>
+              </div>
+              <div className="mb-3 flex flex-wrap gap-2">
+                {(
+                  [
+                    ['personal', 'Solo asignado(s)', 'Ideal para notas privadas.'] as const,
+                    ['team', 'Mi equipo', 'Visible para quien comparte el equipo elegido.'] as const,
+                    ['business', 'Todo el negocio', 'Cualquiera del negocio con acceso al tablero.'] as const,
+                  ]
+                ).map(([v, title, hint]) => (
+                  <button
+                    key={v}
+                    type="button"
+                    disabled={saving}
+                    onClick={() => {
+                      setTaskVisibility(v)
+                      if (v !== 'team') setSelectedTeamIds([])
+                    }}
+                    className={cn(
+                      'flex max-w-[11rem] flex-col rounded-lg border px-3 py-2 text-left text-xs transition-colors disabled:opacity-50',
+                      taskVisibility === v
+                        ? 'border-brand bg-brand/15 text-zinc-100'
+                        : 'border-zinc-700 bg-zinc-900/80 text-zinc-400 hover:border-zinc-600'
+                    )}
+                  >
+                    <span className="font-semibold text-zinc-100">{title}</span>
+                    <span className="mt-0.5 text-[11px] leading-snug text-zinc-500">{hint}</span>
+                  </button>
+                ))}
+              </div>
+              {taskVisibility === 'team' ? (
+                teams.length === 0 ? (
+                  <p className="text-sm text-amber-400/90">
+                    No hay equipos en este negocio. Cambia la visibilidad o crea equipos en «Equipos» en el menú lateral.
+                  </p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    <span className={cn(KANBAN_QUICK_ADD_ROW_MUTED, 'w-full text-xs')}>
+                      Equipos (uno o varios)
+                    </span>
+                    {teams.map((t) => {
+                      const on = selectedTeamIds.includes(t.id)
+                      return (
+                        <button
+                          key={t.id}
+                          type="button"
+                          disabled={saving}
+                          className={cn(
+                            'flex items-center gap-2 rounded-lg border px-3 py-2 text-xs transition-colors disabled:opacity-50',
+                            on
+                              ? 'border-brand bg-brand/15 text-zinc-100'
+                              : 'border-zinc-700 bg-zinc-900/80 text-zinc-400 hover:border-zinc-600'
+                          )}
+                          onClick={() =>
+                            setSelectedTeamIds((prev) =>
+                              prev.includes(t.id)
+                                ? prev.filter((id) => id !== t.id)
+                                : [...prev, t.id]
+                            )
+                          }
+                        >
+                          <span
+                            className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-zinc-600"
+                            style={{ backgroundColor: t.color }}
+                            aria-hidden
+                          />
+                          {t.name}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )
+              ) : null}
+            </div>
+
+            <div className="sm:col-span-2 rounded-xl border border-zinc-800/90 bg-zinc-950/60 p-4">
+              <div className="mb-3 flex items-center gap-2">
                 <User className="h-4 w-4 shrink-0 text-zinc-500" aria-hidden />
                 <span
                   className={cn(
@@ -2006,7 +2255,10 @@ function KanbanColumn({
   currentUserId,
   staffOptions,
   services,
+  teams,
   onAppointmentCreated,
+  showFilteredEmpty,
+  hideQuickAdd,
 }: {
   stage: PipelineStageRow
   children: React.ReactNode
@@ -2016,7 +2268,10 @@ function KanbanColumn({
   currentUserId: string
   staffOptions: WorkBoardStaffOption[]
   services: KanbanService[]
+  teams: { id: string; name: string; color: string }[]
   onAppointmentCreated: () => void
+  showFilteredEmpty?: boolean
+  hideQuickAdd?: boolean
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: stage.id })
   const [quickAddSignal, setQuickAddSignal] = useState(0)
@@ -2041,13 +2296,19 @@ function KanbanColumn({
       />
       <div className="flex min-w-0 flex-col gap-2 p-2">
         {children}
-        {canCreateAppointments ? (
+        {showFilteredEmpty ? (
+          <p className="rounded-md border border-dashed border-zinc-700/80 px-2 py-3 text-center text-xs text-zinc-500">
+            Sin tareas con estos filtros
+          </p>
+        ) : null}
+        {canCreateAppointments && !hideQuickAdd ? (
           <KanbanQuickAddAppointment
             stageId={stage.id}
             businessId={businessId}
             currentUserId={currentUserId}
             staffOptions={staffOptions}
             services={services}
+            teams={teams}
             onCreated={onAppointmentCreated}
             forceOpenSignal={quickAddSignal}
           />
@@ -2070,6 +2331,7 @@ function SortableKanbanCard({
   currentUserId,
   staffOptions,
   services,
+  teams,
   onAppointmentUpdated,
 }: {
   item: WorkItemCard
@@ -2085,6 +2347,7 @@ function SortableKanbanCard({
   currentUserId: string
   staffOptions: WorkBoardStaffOption[]
   services: KanbanService[]
+  teams: { id: string; name: string; color: string }[]
   onAppointmentUpdated?: () => void
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -2121,6 +2384,7 @@ function SortableKanbanCard({
             currentUserId={currentUserId}
             staffOptions={staffOptions}
             services={services}
+            teams={teams}
             onEditClose={onCloseInlineEdit}
             onCreated={onAppointmentUpdated}
           />
@@ -2147,12 +2411,15 @@ export function WorkBoardKanbanView({
   staffOptions,
   services = [],
   kanbanClients = [],
+  teams = [],
   canCreateAppointments = false,
   canEditAppointments = false,
   canMoveAppointments = false,
   canDeleteAppointments = false,
   onItemOpen,
   onStageUpdated,
+  kanbanFilters,
+  dragDisabled = false,
 }: {
   businessId: string
   currentUserId: string
@@ -2162,6 +2429,8 @@ export function WorkBoardKanbanView({
   services?: KanbanService[]
   /** Clientes del negocio (búsqueda en chip de cliente). */
   kanbanClients?: WorkBoardCardQuickEditContext['clients']
+  /** Equipos del negocio (visibilidad «Mi equipo» / chips). */
+  teams?: { id: string; name: string; color: string }[]
   canCreateAppointments?: boolean
   /** Si es true, al pulsar la tarjeta se abre el mismo panel que al crear (sin ir a otra página). */
   canEditAppointments?: boolean
@@ -2169,8 +2438,10 @@ export function WorkBoardKanbanView({
   canDeleteAppointments?: boolean
   onItemOpen?: (item: WorkItemCard) => void
   onStageUpdated?: () => void
+  kanbanFilters: KanbanFiltersState
+  /** Vista solo lectura (tareas archivadas). */
+  dragDisabled?: boolean
 }) {
-  const router = useRouter()
   const [localItems, setLocalItems] = useState(items)
   const [localStages, setLocalStages] = useState(stages)
   const [inlineEditId, setInlineEditId] = useState<string | null>(null)
@@ -2214,8 +2485,7 @@ export function WorkBoardKanbanView({
 
   const handleAppointmentCreated = useCallback(() => {
     onStageUpdated?.()
-    router.refresh()
-  }, [onStageUpdated, router])
+  }, [onStageUpdated])
 
   const handleCardOpen = useCallback(
     (item: WorkItemCard) => {
@@ -2244,9 +2514,8 @@ export function WorkBoardKanbanView({
       }
       toast.success('Marcada como hecha')
       onStageUpdated?.()
-      router.refresh()
     },
-    [onStageUpdated, router]
+    [onStageUpdated]
   )
 
   const handleCardDeleteRequest = useCallback(
@@ -2271,8 +2540,7 @@ export function WorkBoardKanbanView({
     setDeleteConfirmItem(null)
     toast.success('Tarea eliminada')
     onStageUpdated?.()
-    router.refresh()
-  }, [deleteConfirmItem, canDeleteAppointments, onStageUpdated, router])
+  }, [deleteConfirmItem, canDeleteAppointments, onStageUpdated])
 
   const closeInlineEdit = useCallback(() => {
     setInlineEditId(null)
@@ -2287,18 +2555,9 @@ export function WorkBoardKanbanView({
       clients: kanbanClients,
       onUpdated: () => {
         onStageUpdated?.()
-        router.refresh()
       },
     }),
-    [
-      businessId,
-      currentUserId,
-      staffOptions,
-      services,
-      kanbanClients,
-      onStageUpdated,
-      router,
-    ]
+    [businessId, currentUserId, staffOptions, services, kanbanClients, onStageUpdated]
   )
 
   const itemById = useMemo(
@@ -2312,10 +2571,14 @@ export function WorkBoardKanbanView({
     })
   )
 
-  const handleDragStart = useCallback((event: DragStartEvent) => {
-    setActiveId(String(event.active.id))
-    dragSnapshotRef.current = cloneOrderMap(columnOrderMapRef.current)
-  }, [])
+  const handleDragStart = useCallback(
+    (event: DragStartEvent) => {
+      if (dragDisabled) return
+      setActiveId(String(event.active.id))
+      dragSnapshotRef.current = cloneOrderMap(columnOrderMapRef.current)
+    },
+    [dragDisabled]
+  )
 
   const handleDragCancel = useCallback(() => {
     setActiveId(null)
@@ -2327,6 +2590,7 @@ export function WorkBoardKanbanView({
 
   const handleDragOver = useCallback(
     (event: DragOverEvent) => {
+      if (dragDisabled) return
       if (!canMoveAppointments) return
       const { active, over } = event
       if (!over || active.id === over.id) return
@@ -2361,7 +2625,7 @@ export function WorkBoardKanbanView({
         return { ...prev, [activeCol]: arrayMove(c, oldI, newI) }
       })
     },
-    [canMoveAppointments, stageIds]
+    [canMoveAppointments, stageIds, dragDisabled]
   )
 
   const handleDragEnd = useCallback(
@@ -2370,6 +2634,11 @@ export function WorkBoardKanbanView({
       const mapAtEnd = columnOrderMapRef.current
       const activeIdStr = String(active.id)
       setActiveId(null)
+
+      if (dragDisabled) {
+        dragSnapshotRef.current = null
+        return
+      }
 
       if (!canMoveAppointments) {
         dragSnapshotRef.current = null
@@ -2426,14 +2695,13 @@ export function WorkBoardKanbanView({
         return
       }
       onStageUpdated?.()
-      router.refresh()
     },
     [
       canMoveAppointments,
+      dragDisabled,
       localItems,
       localStages,
       onStageUpdated,
-      router,
       stageIds,
     ]
   )
@@ -2505,20 +2773,32 @@ export function WorkBoardKanbanView({
         <div className="flex items-start gap-3">
           {localStages.map((stage) => {
             const colIds = columnOrderMap[stage.id] ?? []
+            const colIdsVisible = colIds.filter((id) => {
+              const it = itemById.get(id)
+              return it ? matchesKanbanFilters(it, kanbanFilters) : false
+            })
+            const showFilteredEmpty =
+              colIds.length > 0 &&
+              colIdsVisible.length === 0 &&
+              countActiveKanbanFilters(kanbanFilters) > 0 &&
+              !kanbanFilters.showArchivedOnly
             return (
               <KanbanColumn
                 key={stage.id}
                 stage={stage}
-                count={colIds.length}
+                count={colIdsVisible.length}
                 canCreateAppointments={canCreateAppointments}
                 businessId={businessId}
                 currentUserId={currentUserId}
                 staffOptions={staffOptions}
                 services={services}
+                teams={teams}
                 onAppointmentCreated={handleAppointmentCreated}
+                showFilteredEmpty={showFilteredEmpty}
+                hideQuickAdd={dragDisabled}
               >
-                <SortableContext items={colIds} strategy={verticalListSortingStrategy}>
-                  {colIds.map((itemId) => {
+                <SortableContext items={colIdsVisible} strategy={verticalListSortingStrategy}>
+                  {colIdsVisible.map((itemId) => {
                     const item = itemById.get(itemId)
                     if (!item) return null
                     const showMarkDone =
@@ -2538,7 +2818,7 @@ export function WorkBoardKanbanView({
                         key={itemId}
                         item={item}
                         columnColor={stage.color}
-                        sortDisabled={!canMoveAppointments}
+                        sortDisabled={dragDisabled || !canMoveAppointments}
                         onOpen={handleCardOpen}
                         quickEdit={cardQuickEdit}
                         kanbanActions={kanbanActions}
@@ -2548,6 +2828,7 @@ export function WorkBoardKanbanView({
                         currentUserId={currentUserId}
                         staffOptions={staffOptions}
                         services={services}
+                        teams={teams}
                         onAppointmentUpdated={handleAppointmentCreated}
                       />
                     )
