@@ -51,6 +51,7 @@ import { getClosedRangesForDay } from '@/lib/availability'
 import { createClient } from '@/lib/supabase/client'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { usePermissions } from '@/hooks/usePermissions'
+import { userParticipatesInAppointmentRow } from '@/lib/work-board/appointmentParticipation'
 import { mapAppointmentRowToWorkItem, type AppointmentRowInput } from '@/lib/work-items/mapAppointmentRow'
 import { stageColorClassForSlug } from '@/lib/work-items/stageColors'
 import type { PipelineStageCategory } from '@/lib/work-items/pipelineStageDefinitions'
@@ -89,6 +90,8 @@ type AppointmentRow = {
   client_id: string | null
   service_id: string | null
   staff_id: string | null
+  /** Creador Kanban (auth uid); controla visibilidad y borrado. */
+  created_by?: string | null
   pipeline_stage_id: string
   metadata?: unknown | null
   clients: { name: string; phone?: string } | { name: string; phone?: string }[] | null
@@ -472,7 +475,9 @@ export function CalendarView({
   clients,
   services,
   staff,
+  teams = [],
   businessId,
+  currentUserId,
   businessCountry = 'ES',
   shiftsByDay = {},
   defaultPeriod,
@@ -482,7 +487,9 @@ export function CalendarView({
   clients: { id: string; name: string; phone?: string | null; email?: string | null }[]
   services: { id: string; name: string; duration: number; price: number }[]
   staff: { id: string; name: string }[]
+  teams?: { id: string; name: string; color: string }[]
   businessId: string
+  currentUserId: string
   businessCountry?: string | null
   shiftsByDay?: Record<number, Shift[]>
   /** Periodo inicial (día/semana/mes). Sin definir → día (p. ej. página Calendario). El tablero pasa `week`. */
@@ -491,10 +498,38 @@ export function CalendarView({
 }) {
   const router = useRouter()
   const supabase = createClient()
-  const { hasPermission } = usePermissions()
+  const { hasPermission, isOwner, accessLevel } = usePermissions()
   const canMoveAppointments = hasPermission('appointments_move')
   const canEditAppointments = hasPermission('appointments_edit')
-  const canDeleteAppointments = hasPermission('appointments_delete')
+  const canDeleteBusinessAppointments =
+    (isOwner || accessLevel === 'alto') && hasPermission('appointments_delete')
+
+  const calendarCanDelete = useCallback(
+    (row: AppointmentRow | null) => {
+      if (!row) return false
+      if (canDeleteBusinessAppointments) return true
+      return row.created_by != null && row.created_by === currentUserId
+    },
+    [canDeleteBusinessAppointments, currentUserId]
+  )
+
+  const calendarCanEditModal = useCallback(
+    (row: AppointmentRow | null) => {
+      if (!row) return false
+      if (canEditAppointments) return true
+      return userParticipatesInAppointmentRow(
+        {
+          business_id: row.business_id,
+          created_by: row.created_by ?? null,
+          staff_id: row.staff_id,
+          metadata: row.metadata,
+        },
+        currentUserId,
+        businessId
+      )
+    },
+    [canEditAppointments, currentUserId, businessId]
+  )
   const [current, setCurrent] = useState(new Date())
   const [view, setView] = useState<ViewType>(defaultPeriod ?? 'day')
   const [popoverAppointment, setPopoverAppointment] = useState<AppointmentForPopover | null>(null)
@@ -503,6 +538,11 @@ export function CalendarView({
   const [editModalAppointmentId, setEditModalAppointmentId] = useState<string | null>(null)
   const [selectedMonthDay, setSelectedMonthDay] = useState<Date | null>(null)
   const [tasksPanelOpen, setTasksPanelOpen] = useState(true)
+
+  const popoverSourceRow = useMemo(() => {
+    if (!popoverAppointment) return null
+    return appointments.find((a) => a.id === popoverAppointment.id) ?? null
+  }, [popoverAppointment, appointments])
 
   /** Solo citas con horario: el calendario no puede colocar filas sin start/end. */
   const appointmentsScheduled = useMemo((): AppointmentRowScheduled[] => {
@@ -848,6 +888,7 @@ export function CalendarView({
             businessId={businessId}
             services={services}
             staff={staff}
+            teams={teams}
             onSlotToast={(message, type) => setToast({ message, type })}
             onSlotSaved={() => router.refresh()}
           />
@@ -867,6 +908,7 @@ export function CalendarView({
                 businessId={businessId}
                 services={services}
                 staff={staff}
+                teams={teams}
                 onToast={(message, type) => setToast({ message, type })}
                 onSaved={() => router.refresh()}
               />
@@ -906,7 +948,7 @@ export function CalendarView({
         onStatusChange={handleStatusChange}
         onEdit={handleEdit}
         onToast={(message, type) => setToast({ message, type })}
-        canEdit={canEditAppointments}
+        canEdit={calendarCanEditModal(popoverSourceRow)}
       />
       {toast && (
         <ToastSimple
@@ -925,7 +967,11 @@ export function CalendarView({
         services={services}
         staff={staff}
         onToast={(message, type) => setToast({ message, type })}
-        canDelete={canDeleteAppointments}
+        canDelete={calendarCanDelete(
+          editModalAppointmentId
+            ? (appointments.find((a) => a.id === editModalAppointmentId) ?? null)
+            : null
+        )}
       />
 
       {selectedMonthDay && (
@@ -936,6 +982,7 @@ export function CalendarView({
           businessId={businessId}
           services={services}
           staffOptions={staff}
+          teams={teams}
           onClose={() => setSelectedMonthDay(null)}
           onSaved={() => router.refresh()}
           onToast={(message, type) => setToast({ message, type })}
@@ -966,6 +1013,7 @@ function WeekView({
   businessId,
   services,
   staff,
+  teams = [],
   onSlotToast,
   onSlotSaved,
 }: {
@@ -980,6 +1028,7 @@ function WeekView({
   businessId?: string
   services?: KanbanService[]
   staff?: WorkBoardStaffOption[]
+  teams?: { id: string; name: string; color: string }[]
   onSlotToast?: (message: string, type: 'success' | 'error') => void
   onSlotSaved?: () => void
 }) {
@@ -1297,6 +1346,7 @@ function WeekView({
             businessId={businessId}
             services={services ?? []}
             staffOptions={staff ?? []}
+            teams={teams}
             onClose={() => setSelectedWeekSlot(null)}
             onSaved={onSlotSaved}
             onToast={onSlotToast}
@@ -1576,6 +1626,7 @@ function DayView({
   businessId,
   services,
   staff,
+  teams = [],
   onToast,
   onSaved,
 }: {
@@ -1588,6 +1639,7 @@ function DayView({
   businessId?: string
   services?: KanbanService[]
   staff?: WorkBoardStaffOption[]
+  teams?: { id: string; name: string; color: string }[]
   onToast?: (message: string, type: 'success' | 'error') => void
   onSaved?: () => void
 }) {
@@ -1713,6 +1765,7 @@ function DayView({
         businessId={businessId}
         services={services}
         staff={staff}
+        teams={teams}
         onToast={onToast}
         onSaved={onSaved}
       />
@@ -1738,6 +1791,7 @@ function DayViewContent({
   businessId,
   services,
   staff,
+  teams = [],
   onToast,
   onSaved,
 }: {
@@ -1757,6 +1811,7 @@ function DayViewContent({
   businessId?: string
   services?: KanbanService[]
   staff?: WorkBoardStaffOption[]
+  teams?: { id: string; name: string; color: string }[]
   onToast?: (message: string, type: 'success' | 'error') => void
   onSaved?: () => void
 }) {
@@ -1938,6 +1993,7 @@ function DayViewContent({
                   businessId={businessId}
                   services={services ?? []}
                   staffOptions={staff ?? []}
+                  teams={teams}
                   onClose={() => setSelectedSlotTime(null)}
                   onSaved={onSaved}
                   onToast={onToast}

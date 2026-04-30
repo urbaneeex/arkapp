@@ -191,13 +191,22 @@ export function WorkBoardPageClient({
     }
   }, [])
 
-  const { hasPermission, loading } = usePermissions()
+  const { hasPermission, loading, isOwner, accessLevel } = usePermissions()
   const canView = hasPermission('work_board_view')
   const canManageStages = hasPermission('pipeline_stages_manage')
   const canCreateAppointments = hasPermission('appointments_create')
   const canEditAppointments = hasPermission('appointments_edit')
   const canMoveAppointments = hasPermission('appointments_move')
-  const canDeleteAppointments = hasPermission('appointments_delete')
+  const canDeleteBusinessAppointments =
+    (isOwner || accessLevel === 'alto') && hasPermission('appointments_delete')
+
+  const canDeleteWorkBoardItem = useCallback(
+    (item: WorkItemCard) => {
+      if (canDeleteBusinessAppointments) return true
+      return item.created_by != null && item.created_by === currentUserId
+    },
+    [canDeleteBusinessAppointments, currentUserId]
+  )
 
   const [viewMode, setViewMode] = useState<WorkBoardViewMode>(initialView)
   const [calendarDefaultPeriod] = useState<CalendarPeriod>(() =>
@@ -431,7 +440,7 @@ export function WorkBoardPageClient({
             canCreateAppointments={canCreateAppointments}
             canEditAppointments={canEditAppointments}
             canMoveAppointments={canMoveAppointments}
-            canDeleteAppointments={canDeleteAppointments}
+            canDeleteWorkBoardItem={canDeleteWorkBoardItem}
             onItemOpen={openItemInFullPage}
             onStageUpdated={() => onInvalidateBoard?.()}
             kanbanFilters={kanbanFilters}
@@ -442,11 +451,13 @@ export function WorkBoardPageClient({
 
       {isCalendar && (
         <CalendarView
+          currentUserId={currentUserId}
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           appointments={calendarAppointmentsFiltered as any}
           clients={catalogClients}
           services={catalogServices}
           staff={calendarStaff}
+          teams={teamsForKanban}
           businessId={businessId}
           defaultPeriod={calendarDefaultPeriod}
           shiftsByDay={shiftsByDay}

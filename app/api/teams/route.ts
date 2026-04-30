@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { resolveUserBusinessAndPermissions, hasServerPermission } from '@/lib/user-permissions.server'
 import { TEAM_COLOR_PRESETS, isValidTeamColorHex } from '@/lib/teams/teamColors'
+import { enrichTeamsTeamMemberStaffNames } from '@/lib/teams/enrichTeamMemberStaffNames.server'
 import { z } from 'zod'
 
 const MemberSchema = z.object({
@@ -64,7 +65,8 @@ export async function GET() {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  return NextResponse.json({ teams: rows ?? [] })
+  const teams = await enrichTeamsTeamMemberStaffNames(access.businessId, rows ?? [])
+  return NextResponse.json({ teams })
 }
 
 /** Crear equipo (teams_manage). */

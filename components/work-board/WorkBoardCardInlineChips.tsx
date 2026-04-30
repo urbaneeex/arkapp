@@ -42,7 +42,7 @@ import {
   formatTaskRangeRelative,
   taskRangeHasOverduePart,
 } from '@/lib/work-items/formatRelativeTaskRange'
-import type { WorkItemCard } from '@/lib/work-items/types'
+import type { WorkItemCard, WorkBoardStaffOption } from '@/lib/work-items/types'
 import {
   KanbanQuickDatePicker,
   combineDateAndOptionalTime,
@@ -55,6 +55,7 @@ import {
 } from './kanbanTypography'
 import type { WorkBoardCardQuickEditContext, WorkBoardKanbanClientOption } from './workBoardCardFields'
 import { WORK_BOARD_KANBAN_CHIP_CLASS } from './workBoardCardFields'
+import { deriveAppointmentScope } from '@/lib/work-board/deriveAppointmentScope'
 
 type QuickPriority = 'none' | 'urgent' | 'high' | 'normal' | 'low'
 
@@ -97,6 +98,12 @@ function staffIdsFromWorkItem(item: WorkItemCard): string[] {
     }
   }
   return ids.length > 0 ? ids : item.staff_id ? [item.staff_id] : []
+}
+
+function teamIdsFromWorkItem(item: WorkItemCard): string[] {
+  if (item.team_ids?.length) return [...item.team_ids]
+  if (item.team_id) return [item.team_id]
+  return []
 }
 
 /** Compara instantes de cita (ISO) para no guardar ni mostrar toast si no hubo cambio. */
@@ -189,7 +196,7 @@ export function WorkBoardCardInlineChips({
   priorityText: string | null
 }) {
   const supabase = createClient()
-  const { businessId, currentUserId, staffOptions, services, clients, onUpdated } = quickEdit
+  const { businessId, currentUserId, staffOptions, teams = [], services, clients, onUpdated } = quickEdit
   const [saving, setSaving] = useState(false)
 
   const datePopoverRef = useRef<HTMLDivElement>(null)
@@ -399,22 +406,32 @@ export function WorkBoardCardInlineChips({
   const [assignOpen, setAssignOpen] = useState(false)
   const [assignSearch, setAssignSearch] = useState('')
   const [staffIds, setStaffIds] = useState<string[]>(() => staffIdsFromWorkItem(item))
+  const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>(() => teamIdsFromWorkItem(item))
   const staffIdsRef = useRef(staffIds)
   staffIdsRef.current = staffIds
+  const selectedTeamIdsRef = useRef(selectedTeamIds)
+  selectedTeamIdsRef.current = selectedTeamIds
   const staffSnapshotOnOpen = useRef<string[]>([])
+  const teamsSnapshotOnOpen = useRef<string[]>([])
 
   useEffect(() => {
     if (!assignOpen) return
     const ids = staffIdsFromWorkItem(item)
+    const tids = teamIdsFromWorkItem(item)
     staffSnapshotOnOpen.current = [...ids]
+    teamsSnapshotOnOpen.current = [...tids]
     setStaffIds(ids)
+    setSelectedTeamIds(tids)
   }, [assignOpen, item])
 
-  const persistStaff = useCallback(async () => {
-    const next = staffIdsRef.current
-    const prev = staffSnapshotOnOpen.current.join('\0')
-    if (next.join('\0') === prev) return
-    const assignees = next
+  const persistAssignment = useCallback(async () => {
+    const staffNext = staffIdsRef.current
+    const teamsNext = selectedTeamIdsRef.current
+    const prevStaff = staffSnapshotOnOpen.current.join('\0')
+    const prevTeams = teamsSnapshotOnOpen.current.join('\0')
+    if (staffNext.join('\0') === prevStaff && teamsNext.join('\0') === prevTeams) return
+
+    const assignees = staffNext
       .map((id) => {
         const s = staffOptions.find((o) => o.id === id)
         return s ? { id: s.id, name: s.name } : { id, name: '?' }
@@ -423,33 +440,85 @@ export function WorkBoardCardInlineChips({
       item.metadata && typeof item.metadata === 'object' && !Array.isArray(item.metadata)
         ? { ...(item.metadata as Record<string, unknown>) }
         : {}
-    if (next.length > 0) meta.kanban_assignees = assignees
+    if (staffNext.length > 0) meta.kanban_assignees = assignees
     else delete meta.kanban_assignees
+
+    const scope = await deriveAppointmentScope({
+      staffIds: staffNext,
+      selectedTeamIds: teamsNext,
+      teamsInBusiness: teams,
+    })
+    if ('error' in scope) {
+      toast.error(scope.error)
+      return
+    }
+    const { visibility: visibilityNext, team_id: appointmentTeamId, teamIdsForBridge } = scope
+
     setSaving(true)
     const { error } = await supabase
       .from('appointments')
       .update({
-        staff_id: next[0] ?? null,
+        staff_id: staffNext[0] ?? null,
         metadata: Object.keys(meta).length > 0 ? meta : null,
+        visibility: visibilityNext,
+        team_id: appointmentTeamId,
       })
       .eq('id', item.id)
       .eq('business_id', businessId)
-    setSaving(false)
+
     if (error) {
+      setSaving(false)
       toast.error(error.message)
       return
     }
-    toast.success('Empleados actualizados')
+
+    const { error: delBridgeErr } = await supabase
+      .from('appointment_teams')
+      .delete()
+      .eq('appointment_id', item.id)
+    if (delBridgeErr) {
+      setSaving(false)
+      toast.error(delBridgeErr.message)
+      return
+    }
+
+    const bridgeTeamIds =
+      visibilityNext === 'team' && teamIdsForBridge.length > 0 ? teamIdsForBridge : []
+
+    if (bridgeTeamIds.length > 0) {
+      const { error: insErr } = await supabase.from('appointment_teams').insert(
+        bridgeTeamIds.map((tid) => ({
+          appointment_id: item.id,
+          team_id: tid,
+        }))
+      )
+      if (insErr) {
+        setSaving(false)
+        toast.error(insErr.message)
+        return
+      }
+    }
+
+    setSaving(false)
+    toast.success('Asignación actualizada')
     onUpdated()
-  }, [supabase, item.id, item.metadata, staffOptions, businessId, onUpdated])
+  }, [
+    supabase,
+    item.id,
+    item.metadata,
+    staffOptions,
+    teams,
+    businessId,
+    onUpdated,
+  ])
 
   const handleAssignOpenChange = useCallback(
     (next: boolean) => {
-      if (!next && assignOpen) void persistStaff()
+      if (!next && assignOpen) void persistAssignment()
       setAssignOpen(next)
       if (!next) setAssignSearch('')
     },
-    [assignOpen, persistStaff]
+    [assignOpen, persistAssignment]
   )
 
   const filteredStaff = useMemo(() => {
@@ -461,6 +530,65 @@ export function WorkBoardCardInlineChips({
       return false
     })
   }, [staffOptions, assignSearch])
+
+  const filteredTeams = useMemo(() => {
+    const q = assignSearch.trim().toLowerCase()
+    if (!q) return teams
+    return teams.filter((t) => t.name.toLowerCase().includes(q))
+  }, [teams, assignSearch])
+
+  const staffPickerOptions = useMemo(
+    () => filteredStaff.filter((s) => !staffIds.includes(s.id)),
+    [filteredStaff, staffIds]
+  )
+
+  const teamsPickerOptions = useMemo(
+    () => filteredTeams.filter((t) => !selectedTeamIds.includes(t.id)),
+    [filteredTeams, selectedTeamIds]
+  )
+
+  const assignChipSummary = useMemo(() => {
+    const parts: string[] = []
+    if (assignee?.trim()) parts.push(assignee.trim())
+    const tls = item.teams_linked
+    if (tls && tls.length > 0) {
+      parts.push(tls.map((t) => t.name).join(', '))
+    } else if (item.team_name?.trim()) {
+      parts.push(item.team_name.trim())
+    }
+    return parts.length > 0 ? parts.join(' · ') : null
+  }, [assignee, item.team_name, item.teams_linked])
+
+  const selectedStaffOrderedDraft = useMemo(
+    () =>
+      staffIds
+        .map((id) => staffOptions.find((s) => s.id === id))
+        .filter((s): s is WorkBoardStaffOption => !!s),
+    [staffIds, staffOptions]
+  )
+
+  const selectedTeamsOrderedDraft = useMemo(
+    () =>
+      selectedTeamIds
+        .map((id) => teams.find((t) => t.id === id))
+        .filter((t): t is (typeof teams)[number] => !!t),
+    [selectedTeamIds, teams]
+  )
+
+  const assignPopoverDraftSummary = useMemo(() => {
+    const parts: string[] = []
+    if (selectedStaffOrderedDraft.length > 0) {
+      parts.push(
+        selectedStaffOrderedDraft.map((s) => (s.id === currentUserId ? 'Yo' : s.name)).join(', ')
+      )
+    }
+    if (selectedTeamsOrderedDraft.length > 0) {
+      parts.push(selectedTeamsOrderedDraft.map((t) => t.name.trim()).join(', '))
+    }
+    return parts.length > 0 ? parts.join(' · ') : null
+  }, [selectedStaffOrderedDraft, selectedTeamsOrderedDraft, currentUserId])
+
+  const assignChipDisplaySummary = assignOpen ? assignPopoverDraftSummary : assignChipSummary
 
   const [priorityMenuOpen, setPriorityMenuOpen] = useState(false)
   const priorityValue = (priority ?? 'none') as QuickPriority
@@ -647,21 +775,6 @@ export function WorkBoardCardInlineChips({
           <Lock className={cn(chipIconClass(compact), 'text-amber-400/95')} aria-hidden />
         </span>
       ) : null}
-      {item.team_color && item.visibility === 'team' ? (
-        <span
-          className="inline-flex shrink-0 items-center gap-1 rounded-md border border-zinc-700/80 px-1.5 py-0.5"
-          title={item.team_name ? `Equipo: ${item.team_name}` : 'Equipo'}
-        >
-          <span
-            className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-zinc-600"
-            style={{ backgroundColor: item.team_color }}
-            aria-hidden
-          />
-          {item.team_name ? (
-            <span className={cn(chipTextClass(compact), 'max-w-[88px] text-zinc-400')}>{item.team_name}</span>
-          ) : null}
-        </span>
-      ) : null}
       <KanbanQuickDatePicker
         open={dateMenuOpen}
         onOpenChange={handleDateOpenChange}
@@ -679,7 +792,7 @@ export function WorkBoardCardInlineChips({
         trigger={dateChipTrigger}
       />
 
-      {staffOptions.length > 0 ? (
+      {staffOptions.length > 0 || teams.length > 0 ? (
         <Popover open={assignOpen} onOpenChange={handleAssignOpenChange}>
           <PopoverTrigger asChild>
             <button
@@ -687,12 +800,16 @@ export function WorkBoardCardInlineChips({
               data-kanban-chip
               disabled={saving}
               onPointerDown={stopDrag}
-              className={cn(WORK_BOARD_KANBAN_CHIP_CLASS, !assignee && 'px-2')}
-              title={assignee ? `Responsable: ${assignee}` : 'Asignar empleado'}
-              aria-label={assignee ?? 'Empleado: asignar'}
+              className={cn(WORK_BOARD_KANBAN_CHIP_CLASS)}
+              title={
+                assignChipDisplaySummary ? `Asignación: ${assignChipDisplaySummary}` : 'Añadir asignación'
+              }
+              aria-label={assignChipDisplaySummary ?? 'Añadir asignación'}
             >
               <AtSign className={cn(chipIconClass(compact), 'text-zinc-400')} aria-hidden />
-              {assignee ? <span className={chipTextClass(compact)}>{assignee}</span> : null}
+              <span className={chipTextClass(compact)}>
+                {assignChipDisplaySummary ?? 'Añadir asignación'}
+              </span>
             </button>
           </PopoverTrigger>
           <PopoverContent
@@ -713,76 +830,204 @@ export function WorkBoardCardInlineChips({
                 type="search"
                 value={assignSearch}
                 onChange={(e) => setAssignSearch(e.target.value)}
-                placeholder="Buscar…"
+                placeholder="Buscar persona o equipo…"
                 className="min-w-0 flex-1 border-0 bg-transparent text-zinc-200 outline-none placeholder:text-zinc-500"
                 autoFocus
               />
             </div>
-            <div className="max-h-56 overflow-y-auto py-1">
+            <div className="border-b border-zinc-800 px-3 py-2.5">
               <p
                 className={cn(
                   KANBAN_QUICK_ADD_ROW_MUTED,
-                  'px-3 pb-0.5 pt-2 text-[11px] uppercase tracking-wide'
+                  'text-[11px] uppercase tracking-wide text-zinc-500'
                 )}
               >
-                Personas
+                Asignación
               </p>
-              <button
-                type="button"
-                className={cn(
-                  KANBAN_COLUMN_TITLE_TYPO,
-                  'flex w-full items-center gap-2 px-2 py-2 text-left text-zinc-300 hover:bg-zinc-800/90'
-                )}
-                onClick={() => setStaffIds([])}
-              >
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-700 text-xs font-semibold text-zinc-200">
-                  —
-                </span>
-                <span className="min-w-0 flex-1 truncate">Quitar asignaciones</span>
-              </button>
-              {filteredStaff.map((s) => {
-                const isMe = s.id === currentUserId
-                const selected = staffIds.includes(s.id)
-                return (
-                  <button
-                    key={s.id}
-                    type="button"
-                    role="checkbox"
-                    aria-checked={selected}
-                    className={cn(
-                      KANBAN_COLUMN_TITLE_TYPO,
-                      'flex w-full items-center gap-2 px-2 py-2 text-left hover:bg-zinc-800/90',
-                      selected && 'bg-zinc-800/60'
-                    )}
-                    onClick={() => {
-                      setStaffIds((prev) =>
-                        prev.includes(s.id) ? prev.filter((id) => id !== s.id) : [...prev, s.id]
+              <div className="mt-2 rounded-lg border border-zinc-800/90 bg-zinc-950/70 px-2 py-2">
+                {selectedStaffOrderedDraft.length === 0 && selectedTeamsOrderedDraft.length === 0 ? (
+                  <p className={cn(KANBAN_QUICK_ADD_ROW_MUTED, 'px-1 py-0.5 text-xs text-zinc-500')}>
+                    Sin asignar
+                  </p>
+                ) : (
+                  <ul className="list-none space-y-0.5 p-0">
+                    {selectedStaffOrderedDraft.map((s) => {
+                      const isMe = s.id === currentUserId
+                      return (
+                        <li key={`chip-as-p-${s.id}`} className="list-none">
+                          <button
+                            type="button"
+                            disabled={saving}
+                            className={cn(
+                              KANBAN_COLUMN_TITLE_TYPO,
+                              'flex w-full items-center gap-2 rounded-md px-1 py-1.5 text-left transition-colors hover:bg-zinc-800/55 disabled:opacity-50'
+                            )}
+                            aria-label={`Quitar a ${isMe ? 'Yo' : s.name} de la asignación`}
+                            onClick={() =>
+                              setStaffIds((prev) => prev.filter((id) => id !== s.id))
+                            }
+                          >
+                            <span
+                              className="relative inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold text-white shadow-inner"
+                              style={{ backgroundColor: staffAvatarBackground(s.color) }}
+                            >
+                              {staffInitials(s.name)}
+                              {isMe ? (
+                                <span
+                                  className="absolute bottom-0 right-0 h-1.5 w-1.5 rounded-full bg-emerald-500 ring-1 ring-zinc-900"
+                                  aria-hidden
+                                />
+                              ) : null}
+                            </span>
+                            <span className="min-w-0 flex-1 truncate text-sm text-zinc-100">
+                              {isMe ? 'Yo' : s.name}
+                            </span>
+                            <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+                              Persona
+                            </span>
+                            <X className="h-3.5 w-3.5 shrink-0 text-zinc-500" aria-hidden />
+                          </button>
+                        </li>
                       )
-                    }}
-                  >
-                    <span
-                      className="relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white shadow-inner"
-                      style={{ backgroundColor: staffAvatarBackground(s.color) }}
-                    >
-                      {staffInitials(s.name)}
-                      {isMe ? (
-                        <span
-                          className="absolute bottom-0 right-0 h-2 w-2 rounded-full bg-emerald-500 ring-2 ring-zinc-900"
-                          aria-hidden
-                        />
-                      ) : null}
-                    </span>
-                    <span className="min-w-0 flex-1 truncate text-zinc-100">
-                      {isMe ? 'Yo' : s.name}
-                    </span>
-                    {selected ? (
-                      <Check className="h-4 w-4 shrink-0 text-brand" aria-hidden />
-                    ) : (
-                      <span className="inline-flex h-4 w-4 shrink-0" aria-hidden />
+                    })}
+                    {selectedTeamsOrderedDraft.map((t) => (
+                      <li key={`chip-as-t-${t.id}`} className="list-none">
+                        <button
+                          type="button"
+                          disabled={saving}
+                          className={cn(
+                            KANBAN_COLUMN_TITLE_TYPO,
+                            'flex w-full items-center gap-2 rounded-md px-1 py-1.5 text-left transition-colors hover:bg-zinc-800/55 disabled:opacity-50'
+                          )}
+                          aria-label={`Quitar equipo ${t.name} de la asignación`}
+                          onClick={() =>
+                            setSelectedTeamIds((prev) => prev.filter((id) => id !== t.id))
+                          }
+                        >
+                          <span
+                            className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold text-white shadow-inner"
+                            style={{ backgroundColor: staffAvatarBackground(t.color) }}
+                          >
+                            {staffInitials(t.name)}
+                          </span>
+                          <span className="min-w-0 flex-1 truncate text-sm text-zinc-100">{t.name}</span>
+                          <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+                            Equipo
+                          </span>
+                          <X className="h-3.5 w-3.5 shrink-0 text-zinc-500" aria-hidden />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+            <div className="max-h-56 overflow-y-auto py-1">
+              {staffOptions.length > 0 ? (
+                <>
+                  <p
+                    className={cn(
+                      KANBAN_QUICK_ADD_ROW_MUTED,
+                      'px-3 pb-0.5 pt-2 text-[11px] uppercase tracking-wide'
                     )}
-                  </button>
-                )
-              })}
+                  >
+                    Personas
+                  </p>
+                  {filteredStaff.length === 0 ? (
+                    <p className={cn(KANBAN_QUICK_ADD_ROW_MUTED, 'px-3 py-2 text-xs')}>
+                      Sin coincidencias.
+                    </p>
+                  ) : staffPickerOptions.length === 0 ? (
+                    <p className={cn(KANBAN_QUICK_ADD_ROW_MUTED, 'px-3 py-2 text-xs')}>
+                      Ya están en asignación.
+                    </p>
+                  ) : (
+                    staffPickerOptions.map((s) => {
+                      const isMe = s.id === currentUserId
+                      return (
+                        <button
+                          key={s.id}
+                          type="button"
+                          className={cn(
+                            KANBAN_COLUMN_TITLE_TYPO,
+                            'flex w-full items-center gap-2 px-2 py-2 text-left hover:bg-zinc-800/90'
+                          )}
+                          onClick={() =>
+                            setStaffIds((prev) => (prev.includes(s.id) ? prev : [...prev, s.id]))
+                          }
+                        >
+                          <span
+                            className="relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white shadow-inner"
+                            style={{ backgroundColor: staffAvatarBackground(s.color) }}
+                          >
+                            {staffInitials(s.name)}
+                            {isMe ? (
+                              <span
+                                className="absolute bottom-0 right-0 h-2 w-2 rounded-full bg-emerald-500 ring-2 ring-zinc-900"
+                                aria-hidden
+                              />
+                            ) : null}
+                          </span>
+                          <span className="min-w-0 flex-1 truncate text-zinc-100">
+                            {isMe ? 'Yo' : s.name}
+                          </span>
+                          <Plus className="h-4 w-4 shrink-0 text-zinc-500" aria-hidden />
+                        </button>
+                      )
+                    })
+                  )}
+                </>
+              ) : null}
+              {teams.length > 0 ? (
+                <>
+                  {staffOptions.length > 0 ? (
+                    <div className="mx-2 border-t border-zinc-800/80" aria-hidden />
+                  ) : null}
+                  <p
+                    className={cn(
+                      KANBAN_QUICK_ADD_ROW_MUTED,
+                      'px-3 pb-0.5 pt-2 text-[11px] uppercase tracking-wide'
+                    )}
+                  >
+                    Equipo
+                  </p>
+                  {filteredTeams.length === 0 ? (
+                    <p className={cn(KANBAN_QUICK_ADD_ROW_MUTED, 'px-3 py-1 text-xs')}>
+                      Sin coincidencias.
+                    </p>
+                  ) : teamsPickerOptions.length === 0 ? (
+                    <p className={cn(KANBAN_QUICK_ADD_ROW_MUTED, 'px-3 py-1 text-xs')}>
+                      Ya están en asignación.
+                    </p>
+                  ) : (
+                    teamsPickerOptions.map((t) => (
+                      <button
+                        key={t.id}
+                        type="button"
+                        disabled={saving}
+                        className={cn(
+                          KANBAN_COLUMN_TITLE_TYPO,
+                          'flex w-full items-center gap-2 px-2 py-2 text-left hover:bg-zinc-800/90'
+                        )}
+                        onClick={() =>
+                          setSelectedTeamIds((prev) =>
+                            prev.includes(t.id) ? prev : [...prev, t.id]
+                          )
+                        }
+                      >
+                        <span
+                          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white shadow-inner"
+                          style={{ backgroundColor: staffAvatarBackground(t.color) }}
+                        >
+                          {staffInitials(t.name)}
+                        </span>
+                        <span className="min-w-0 flex-1 truncate text-zinc-100">{t.name}</span>
+                        <Plus className="h-4 w-4 shrink-0 text-zinc-500" aria-hidden />
+                      </button>
+                    ))
+                  )}
+                </>
+              ) : null}
             </div>
           </PopoverContent>
         </Popover>
@@ -795,6 +1040,7 @@ export function WorkBoardCardInlineChips({
           )}
         >
           <AtSign className={cn(chipIconClass(compact), 'text-zinc-400')} aria-hidden />
+          <span className={chipTextClass(compact)}>Añadir asignación</span>
         </span>
       )}
 

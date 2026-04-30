@@ -14,7 +14,6 @@ import {
   X,
   Wrench,
   Loader2,
-  Lock,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { format, parseISO } from 'date-fns'
@@ -56,6 +55,7 @@ import {
   KANBAN_QUICK_ADD_ROW_MUTED,
   KANBAN_QUICK_ADD_ROW_TAP,
 } from './kanbanTypography'
+import { deriveAppointmentScope } from '@/lib/work-board/deriveAppointmentScope'
 import { isTerminalWorkItemStage } from '@/lib/work-items/canMoveWorkItem'
 import { kanbanCardAccentFromStageColor, stageColorClassForSlug } from '@/lib/work-items/stageColors'
 import { Input } from '@/components/ui/input'
@@ -313,7 +313,6 @@ export function KanbanQuickAddAppointment({
   const [priority, setPriority] = useState<QuickPriority>('none')
   /** Varias personas asignables; `staff_id` en BD = primera (compatibilidad). */
   const [staffIds, setStaffIds] = useState<string[]>([])
-  const [taskVisibility, setTaskVisibility] = useState<'personal' | 'team' | 'business'>('team')
   /** Equipos vinculados (multi); `appointments.team_id` se sincroniza con el primero. */
   const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
@@ -453,7 +452,6 @@ export function KanbanQuickAddAppointment({
     setEndLocal(calcInitialEnd(d, t))
     setPriority('none')
     setStaffIds([])
-    setTaskVisibility('team')
     setSelectedTeamIds([])
     setStaffAvail({})
     setAssignOpen(false)
@@ -500,7 +498,6 @@ export function KanbanQuickAddAppointment({
     setEndLocal(editItem.end_time ?? null)
     setPriority(editItem.kanban_priority ?? 'none')
     setStaffIds(staffIdsFromWorkItem(editItem))
-    setTaskVisibility(editItem.visibility ?? 'team')
     setSelectedTeamIds(
       editItem.team_ids?.length
         ? editItem.team_ids
@@ -653,38 +650,6 @@ export function KanbanQuickAddAppointment({
     }
     const primaryStaffId = staffIds.length > 0 ? staffIds[0]! : null
 
-    const resolveVisibilityPayload = async (): Promise<
-      | { ok: true; visibility: 'personal' | 'team' | 'business'; team_id: string | null }
-      | { ok: false; message: string }
-    > => {
-      if (taskVisibility === 'personal' || taskVisibility === 'business') {
-        return { ok: true, visibility: taskVisibility, team_id: null }
-      }
-      let tid: string | null = selectedTeamIds[0] ?? null
-      if (!tid && teams.length === 1) tid = teams[0]!.id
-      if (!tid && primaryStaffId) {
-        const res = await fetch(
-          `/api/teams/for-assignee?staff_id=${encodeURIComponent(primaryStaffId)}`
-        )
-        if (!res.ok) return { ok: false, message: 'No se pudieron obtener equipos del asignado.' }
-        const j = (await res.json()) as { team_ids?: string[] }
-        const allowed = new Set(teams.map((t) => t.id))
-        const matched = (j.team_ids ?? []).filter((id) => allowed.has(id))
-        if (matched.length === 1) tid = matched[0]!
-      }
-      if (!tid) {
-        if (teams.length === 0) {
-          return {
-            ok: false,
-            message:
-              'No hay equipos definidos. Usa «Todo el negocio» o «Personal», o crea un equipo en la sección Equipos.',
-          }
-        }
-        return { ok: false, message: 'Selecciona al menos un equipo para «Mi equipo».' }
-      }
-      return { ok: true, visibility: 'team', team_id: tid }
-    }
-
     // Resolver client_id
     let clientId: string | null = null
     if (clientMode === 'existing' && selectedClient) {
@@ -708,21 +673,16 @@ export function KanbanQuickAddAppointment({
 
     setSaving(true)
     try {
-      const visResolved = await resolveVisibilityPayload()
-      if (!visResolved.ok) {
-        setError(visResolved.message)
+      const scope = await deriveAppointmentScope({
+        staffIds,
+        selectedTeamIds,
+        teamsInBusiness: teams,
+      })
+      if ('error' in scope) {
+        setError(scope.error)
         return
       }
-      const { visibility: visibilityNext, team_id: teamIdNext } = visResolved
-
-      const teamIdsForBridge: string[] =
-        visibilityNext === 'team'
-          ? selectedTeamIds.length > 0
-            ? selectedTeamIds
-            : teamIdNext
-              ? [teamIdNext]
-              : []
-          : []
+      const { visibility: visibilityNext, team_id: teamIdNext, teamIdsForBridge } = scope
 
       if (editItem) {
         const priceNext =
@@ -931,6 +891,42 @@ export function KanbanQuickAddAppointment({
     })
   }, [staffOptions, assignSearch])
 
+  const filteredTeams = useMemo(() => {
+    const q = assignSearch.trim().toLowerCase()
+    if (!q) return teams
+    return teams.filter((t) => t.name.toLowerCase().includes(q))
+  }, [teams, assignSearch])
+
+  const assignTriggerLabel = useMemo(() => {
+    const parts: string[] = []
+    if (staffLabel) parts.push(staffLabel)
+    if (selectedTeamIds.length > 0) {
+      const names = selectedTeamIds
+        .map((id) => teams.find((t) => t.id === id)?.name?.trim())
+        .filter((n): n is string => Boolean(n))
+      if (names.length) parts.push(names.join(', '))
+    }
+    return parts.length > 0 ? parts.join(' · ') : null
+  }, [staffLabel, selectedTeamIds, teams])
+
+  const selectedTeamsOrdered = useMemo(
+    () =>
+      selectedTeamIds
+        .map((id) => teams.find((t) => t.id === id))
+        .filter((t): t is (typeof teams)[number] => !!t),
+    [selectedTeamIds, teams]
+  )
+
+  const staffPickerOptions = useMemo(
+    () => filteredStaff.filter((s) => !staffIds.includes(s.id)),
+    [filteredStaff, staffIds]
+  )
+
+  const teamsPickerOptions = useMemo(
+    () => filteredTeams.filter((t) => !selectedTeamIds.includes(t.id)),
+    [filteredTeams, selectedTeamIds]
+  )
+
   const cardBody = (
     <>
       <div
@@ -1004,9 +1000,9 @@ export function KanbanQuickAddAppointment({
             />
             </div>
 
-            {/* ── EMPLEADOS ─────────────────────────────────────────────── */}
+            {/* ── ASIGNACIÓN ────────────────────────────────────────────── */}
             <div className="min-w-0">
-            {staffOptions.length > 0 ? (
+            {staffOptions.length > 0 || teams.length > 0 ? (
               <Popover
                 open={assignOpen}
                 onOpenChange={(next) => {
@@ -1029,7 +1025,7 @@ export function KanbanQuickAddAppointment({
                     ) : (
                       <User className="h-4 w-4 shrink-0 text-zinc-500 transition-colors group-hover:text-zinc-400 group-data-[state=open]:text-zinc-300" aria-hidden />
                     )}
-                    <span className="truncate">{staffLabel ?? 'Asignar empleados'}</span>
+                    <span className="truncate">{assignTriggerLabel ?? 'Añadir asignación'}</span>
                   </button>
                 </PopoverTrigger>
                 <PopoverContent
@@ -1052,170 +1048,215 @@ export function KanbanQuickAddAppointment({
                       type="search"
                       value={assignSearch}
                       onChange={(e) => setAssignSearch(e.target.value)}
-                      placeholder="Buscar o escribir correo…"
+                      placeholder="Buscar persona o equipo…"
                       className="min-w-0 flex-1 border-0 bg-transparent text-zinc-200 outline-none placeholder:text-zinc-500"
                       autoFocus
                     />
                   </div>
-                  <div className="max-h-56 overflow-y-auto py-1">
+                  <div className="border-b border-zinc-800 px-3 py-2.5">
                     <p
                       className={cn(
                         KANBAN_QUICK_ADD_ROW_MUTED,
-                        'px-3 pb-0.5 pt-2 text-[11px] uppercase tracking-wide'
+                        'text-[11px] uppercase tracking-wide text-zinc-500'
                       )}
                     >
-                      Personas
+                      Asignación
                     </p>
-                    <p className="px-3 pb-1 text-[11px] leading-snug text-zinc-600">
-                      Pulsa para marcar o desmarcar; puedes elegir varios.
-                    </p>
-                    <button
-                      type="button"
-                      className={cn(
-                        KANBAN_COLUMN_TITLE_TYPO,
-                        'flex w-full items-center gap-2 px-2 py-2 text-left text-zinc-300 hover:bg-zinc-800/90'
-                      )}
-                      onClick={() => setStaffIds([])}
-                    >
-                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-700 text-xs font-semibold text-zinc-200">
-                        —
-                      </span>
-                      <span className="min-w-0 flex-1 truncate">Quitar asignaciones</span>
-                    </button>
-                    {filteredStaff.length === 0 ? (
-                      <p
-                        className={cn(KANBAN_QUICK_ADD_ROW_MUTED, 'px-3 py-2 text-xs')}
-                      >
-                        No hay coincidencias.
-                      </p>
-                    ) : (
-                      filteredStaff.map((s) => {
-                        const isMe = s.id === currentUserId
-                        const selected = staffIds.includes(s.id)
-                        const isOccupied = !!selectedClient && startDate.trim().length > 0 && staffAvail[s.id] === false
-                        return (
-                          <button
-                            key={s.id}
-                            type="button"
-                            role="checkbox"
-                            aria-checked={selected}
-                            className={cn(
-                              KANBAN_COLUMN_TITLE_TYPO,
-                              'flex w-full items-center gap-2 px-2 py-2 text-left hover:bg-zinc-800/90',
-                              selected && 'bg-zinc-800/60',
-                              isOccupied && 'opacity-75'
-                            )}
-                            onClick={() => {
-                              setStaffIds((prev) =>
-                                prev.includes(s.id) ? prev.filter((id) => id !== s.id) : [...prev, s.id]
-                              )
-                            }}
-                          >
-                            <span className="relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white shadow-inner" style={{ backgroundColor: staffAvatarBackground(s.color) }}>
-                              {staffInitials(s.name)}
-                              {isMe ? (
-                                <span
-                                  className="absolute bottom-0 right-0 h-2 w-2 rounded-full bg-emerald-500 ring-2 ring-zinc-900"
-                                  aria-hidden
-                                />
-                              ) : null}
-                            </span>
-                            <span className="min-w-0 flex-1 truncate text-zinc-100">
-                              {isMe ? 'Yo' : s.name}
-                            </span>
-                            {isOccupied ? (
-                              <span className="shrink-0 rounded bg-amber-900/60 px-1.5 py-0.5 text-[10px] font-semibold text-amber-400">
-                                Ocupado
-                              </span>
-                            ) : s.email ? (
-                              <span className="hidden max-w-[40%] truncate text-xs text-zinc-500 sm:inline">
-                                {s.email}
-                              </span>
-                            ) : null}
-                            {selected ? (
-                              <Check className="h-4 w-4 shrink-0 text-brand" aria-hidden />
-                            ) : (
-                              <span className="inline-flex h-4 w-4 shrink-0" aria-hidden />
-                            )}
-                          </button>
-                        )
-                      })
-                    )}
-                    <p
-                      className={cn(
-                        KANBAN_QUICK_ADD_ROW_MUTED,
-                        'mt-1 border-t border-zinc-800/80 px-3 pb-1 pt-3 text-[11px] uppercase tracking-wide'
-                      )}
-                    >
-                      Visibilidad
-                    </p>
-                    <div className="flex flex-wrap gap-1 px-2 pb-2">
-                      {(
-                        [
-                          ['personal', 'Personal'] as const,
-                          ['team', 'Mi equipo'] as const,
-                          ['business', 'Todo el negocio'] as const,
-                        ]
-                      ).map(([v, label]) => (
-                        <button
-                          key={v}
-                          type="button"
-                          className={cn(
-                            KANBAN_COLUMN_TITLE_TYPO,
-                            'rounded-md px-2 py-1 text-[11px]',
-                            taskVisibility === v
-                              ? 'bg-brand/20 text-brand ring-1 ring-brand/40'
-                              : 'bg-zinc-800/60 text-zinc-400 hover:bg-zinc-800'
-                          )}
-                          onClick={() => {
-                            setTaskVisibility(v)
-                            if (v !== 'team') setSelectedTeamIds([])
-                          }}
-                        >
-                          {label}
-                        </button>
-                      ))}
-                    </div>
-                    {taskVisibility === 'team' ? (
-                      teams.length === 0 ? (
-                        <p className={cn(KANBAN_QUICK_ADD_ROW_MUTED, 'px-3 pb-2 text-xs text-amber-400/90')}>
-                          Sin equipos: cambia a «Todo el negocio» o crea equipos en el menú Equipos.
+                    <div className="mt-2 rounded-lg border border-zinc-800/90 bg-zinc-950/70 px-2 py-2">
+                      {selectedStaffOrdered.length === 0 && selectedTeamsOrdered.length === 0 ? (
+                        <p className={cn(KANBAN_QUICK_ADD_ROW_MUTED, 'px-1 py-0.5 text-xs text-zinc-500')}>
+                          Sin asignar
                         </p>
                       ) : (
-                        <div className="flex max-h-28 flex-wrap gap-1.5 overflow-y-auto px-2 pb-2">
-                          {teams.map((t) => {
-                            const on = selectedTeamIds.includes(t.id)
+                        <ul className="list-none space-y-0.5 p-0">
+                          {selectedStaffOrdered.map((s) => {
+                            const isMe = s.id === currentUserId
                             return (
+                              <li key={`as-p-${s.id}`} className="list-none">
+                                <button
+                                  type="button"
+                                  disabled={saving}
+                                  className={cn(
+                                    KANBAN_COLUMN_TITLE_TYPO,
+                                    'flex w-full items-center gap-2 rounded-md px-1 py-1.5 text-left transition-colors hover:bg-zinc-800/55 disabled:opacity-50'
+                                  )}
+                                  aria-label={`Quitar a ${isMe ? 'Yo' : s.name} de la asignación`}
+                                  onClick={() =>
+                                    setStaffIds((prev) => prev.filter((id) => id !== s.id))
+                                  }
+                                >
+                                  <span
+                                    className="relative inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold text-white shadow-inner"
+                                    style={{ backgroundColor: staffAvatarBackground(s.color) }}
+                                  >
+                                    {staffInitials(s.name)}
+                                    {isMe ? (
+                                      <span
+                                        className="absolute bottom-0 right-0 h-1.5 w-1.5 rounded-full bg-emerald-500 ring-1 ring-zinc-900"
+                                        aria-hidden
+                                      />
+                                    ) : null}
+                                  </span>
+                                  <span className="min-w-0 flex-1 truncate text-sm text-zinc-100">
+                                    {isMe ? 'Yo' : s.name}
+                                  </span>
+                                  <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+                                    Persona
+                                  </span>
+                                  <X className="h-3.5 w-3.5 shrink-0 text-zinc-500" aria-hidden />
+                                </button>
+                              </li>
+                            )
+                          })}
+                          {selectedTeamsOrdered.map((t) => (
+                            <li key={`as-t-${t.id}`} className="list-none">
                               <button
-                                key={t.id}
                                 type="button"
                                 disabled={saving}
                                 className={cn(
                                   KANBAN_COLUMN_TITLE_TYPO,
-                                  'flex items-center gap-1 rounded-md border px-2 py-1 text-[11px]',
-                                  on
-                                    ? 'border-brand bg-brand/15 text-brand'
-                                    : 'border-zinc-700 bg-zinc-900 text-zinc-400 hover:bg-zinc-800'
+                                  'flex w-full items-center gap-2 rounded-md px-1 py-1.5 text-left transition-colors hover:bg-zinc-800/55 disabled:opacity-50'
                                 )}
+                                aria-label={`Quitar equipo ${t.name} de la asignación`}
                                 onClick={() =>
-                                  setSelectedTeamIds((prev) =>
-                                    prev.includes(t.id)
-                                      ? prev.filter((id) => id !== t.id)
-                                      : [...prev, t.id]
-                                  )
+                                  setSelectedTeamIds((prev) => prev.filter((id) => id !== t.id))
                                 }
                               >
                                 <span
-                                  className="h-2 w-2 shrink-0 rounded-full ring-1 ring-zinc-600"
-                                  style={{ backgroundColor: t.color }}
-                                  aria-hidden
-                                />
-                                {t.name}
+                                  className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold text-white shadow-inner"
+                                  style={{ backgroundColor: staffAvatarBackground(t.color) }}
+                                >
+                                  {staffInitials(t.name)}
+                                </span>
+                                <span className="min-w-0 flex-1 truncate text-sm text-zinc-100">{t.name}</span>
+                                <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+                                  Equipo
+                                </span>
+                                <X className="h-3.5 w-3.5 shrink-0 text-zinc-500" aria-hidden />
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  </div>
+                  <div className="max-h-56 overflow-y-auto py-1">
+                    {staffOptions.length > 0 ? (
+                      <>
+                        <p
+                          className={cn(
+                            KANBAN_QUICK_ADD_ROW_MUTED,
+                            'px-3 pb-0.5 pt-2 text-[11px] uppercase tracking-wide'
+                          )}
+                        >
+                          Personas
+                        </p>
+                        {filteredStaff.length === 0 ? (
+                          <p className={cn(KANBAN_QUICK_ADD_ROW_MUTED, 'px-3 py-2 text-xs')}>
+                            Sin coincidencias.
+                          </p>
+                        ) : staffPickerOptions.length === 0 ? (
+                          <p className={cn(KANBAN_QUICK_ADD_ROW_MUTED, 'px-3 py-2 text-xs')}>
+                            Ya están en asignación.
+                          </p>
+                        ) : (
+                          staffPickerOptions.map((s) => {
+                            const isMe = s.id === currentUserId
+                            const isOccupied =
+                              !!selectedClient && startDate.trim().length > 0 && staffAvail[s.id] === false
+                            return (
+                              <button
+                                key={s.id}
+                                type="button"
+                                className={cn(
+                                  KANBAN_COLUMN_TITLE_TYPO,
+                                  'flex w-full items-center gap-2 px-2 py-2 text-left hover:bg-zinc-800/90',
+                                  isOccupied && 'opacity-75'
+                                )}
+                                onClick={() =>
+                                  setStaffIds((prev) => (prev.includes(s.id) ? prev : [...prev, s.id]))
+                                }
+                              >
+                                <span
+                                  className="relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white shadow-inner"
+                                  style={{ backgroundColor: staffAvatarBackground(s.color) }}
+                                >
+                                  {staffInitials(s.name)}
+                                  {isMe ? (
+                                    <span
+                                      className="absolute bottom-0 right-0 h-2 w-2 rounded-full bg-emerald-500 ring-2 ring-zinc-900"
+                                      aria-hidden
+                                    />
+                                  ) : null}
+                                </span>
+                                <span className="min-w-0 flex-1 truncate text-zinc-100">
+                                  {isMe ? 'Yo' : s.name}
+                                </span>
+                                {isOccupied ? (
+                                  <span className="shrink-0 rounded bg-amber-900/60 px-1.5 py-0.5 text-[10px] font-semibold text-amber-400">
+                                    Ocupado
+                                  </span>
+                                ) : s.email ? (
+                                  <span className="hidden max-w-[40%] truncate text-xs text-zinc-500 sm:inline">
+                                    {s.email}
+                                  </span>
+                                ) : null}
+                                <Plus className="h-4 w-4 shrink-0 text-zinc-500" aria-hidden />
                               </button>
                             )
-                          })}
-                        </div>
-                      )
+                          })
+                        )}
+                      </>
+                    ) : null}
+                    {teams.length > 0 ? (
+                      <>
+                        {staffOptions.length > 0 ? (
+                          <div className="mx-2 border-t border-zinc-800/80" aria-hidden />
+                        ) : null}
+                        <p
+                          className={cn(
+                            KANBAN_QUICK_ADD_ROW_MUTED,
+                            'px-3 pb-0.5 pt-2 text-[11px] uppercase tracking-wide'
+                          )}
+                        >
+                          Equipo
+                        </p>
+                        {filteredTeams.length === 0 ? (
+                          <p className={cn(KANBAN_QUICK_ADD_ROW_MUTED, 'px-3 py-1 text-xs')}>
+                            Sin coincidencias.
+                          </p>
+                        ) : teamsPickerOptions.length === 0 ? (
+                          <p className={cn(KANBAN_QUICK_ADD_ROW_MUTED, 'px-3 py-1 text-xs')}>
+                            Ya están en asignación.
+                          </p>
+                        ) : (
+                          teamsPickerOptions.map((t) => (
+                            <button
+                              key={t.id}
+                              type="button"
+                              disabled={saving}
+                              className={cn(
+                                KANBAN_COLUMN_TITLE_TYPO,
+                                'flex w-full items-center gap-2 px-2 py-2 text-left hover:bg-zinc-800/90'
+                              )}
+                              onClick={() =>
+                                setSelectedTeamIds((prev) =>
+                                  prev.includes(t.id) ? prev : [...prev, t.id]
+                                )
+                              }
+                            >
+                              <span
+                                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white shadow-inner"
+                                style={{ backgroundColor: staffAvatarBackground(t.color) }}
+                              >
+                                {staffInitials(t.name)}
+                              </span>
+                              <span className="min-w-0 flex-1 truncate text-zinc-100">{t.name}</span>
+                              <Plus className="h-4 w-4 shrink-0 text-zinc-500" aria-hidden />
+                            </button>
+                          ))
+                        )}
+                      </>
                     ) : null}
                   </div>
                 </PopoverContent>
@@ -1228,7 +1269,7 @@ export function KanbanQuickAddAppointment({
                 )}
               >
                 <User className="h-4 w-4 shrink-0" aria-hidden />
-                <span className="truncate">Sin empleados activos</span>
+                <span className="truncate">Sin equipo ni personas disponibles</span>
               </div>
             )}
             </div>
@@ -1747,7 +1788,7 @@ export function KanbanQuickAddAppointment({
               </div>
             ) : null}
 
-            {staffOptions.length > 0 ? (
+            {staffOptions.length > 0 || teams.length > 0 ? (
               <div className="sm:col-span-2 rounded-xl border border-zinc-800/90 bg-zinc-950/60 p-4">
                 <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex items-center gap-2">
@@ -1758,87 +1799,227 @@ export function KanbanQuickAddAppointment({
                         'text-[11px] font-semibold uppercase tracking-wide text-zinc-400'
                       )}
                     >
-                      Equipo
+                      Añadir asignación
                     </span>
                     {checkingAvail ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin text-zinc-500" aria-hidden />
                     ) : null}
                   </div>
-                  {staffOptions.length > 5 ? (
+                  {staffOptions.length > 5 || teams.length > 0 ? (
                     <div className="relative w-full sm:max-w-xs">
                       <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500" />
                       <Input
                         value={assignSearch}
                         onChange={(e) => setAssignSearch(e.target.value)}
-                        placeholder="Filtrar personas…"
+                        placeholder="Filtrar persona o equipo…"
                         disabled={saving}
                         className="h-9 border-zinc-700 bg-zinc-900 pl-8 text-sm"
                       />
                     </div>
                   ) : null}
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    disabled={saving}
-                    onClick={() => setStaffIds([])}
+                <div className="mb-4 rounded-lg border border-zinc-800/90 bg-zinc-950/70 px-3 py-3">
+                  <p
                     className={cn(
-                      'rounded-full border px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50',
-                      staffIds.length === 0
-                        ? 'border-brand bg-brand/15 text-brand'
-                        : 'border-zinc-700 bg-zinc-900/80 text-zinc-400 hover:border-zinc-600'
+                      KANBAN_QUICK_ADD_ROW_MUTED,
+                      'mb-2 text-[11px] uppercase tracking-wide text-zinc-500'
                     )}
                   >
-                    Nadie
-                  </button>
-                  {filteredStaff.map((s) => {
-                    const isMe = s.id === currentUserId
-                    const selected = staffIds.includes(s.id)
-                    const isOccupied =
-                      !!selectedClient &&
-                      startDate.trim().length > 0 &&
-                      staffAvail[s.id] === false
-                    return (
-                      <button
-                        key={s.id}
-                        type="button"
-                        disabled={saving}
-                        onClick={() => {
-                          setStaffIds((prev) =>
-                            prev.includes(s.id) ? prev.filter((id) => id !== s.id) : [...prev, s.id]
+                    Asignación
+                  </p>
+                  <div className="rounded-lg border border-zinc-800/80 bg-zinc-950/80 px-2 py-2">
+                    {selectedStaffOrdered.length === 0 && selectedTeamsOrdered.length === 0 ? (
+                      <p className={cn(KANBAN_QUICK_ADD_ROW_MUTED, 'px-1 py-1 text-xs text-zinc-500')}>
+                        Sin asignar
+                      </p>
+                    ) : (
+                      <ul className="list-none space-y-0.5 p-0">
+                        {selectedStaffOrdered.map((s) => {
+                          const isMe = s.id === currentUserId
+                          return (
+                            <li key={`modal-as-p-${s.id}`} className="list-none">
+                              <button
+                                type="button"
+                                disabled={saving}
+                                className={cn(
+                                  KANBAN_COLUMN_TITLE_TYPO,
+                                  'flex w-full items-center gap-2 rounded-md px-1 py-2 text-left transition-colors hover:bg-zinc-800/55 disabled:opacity-50'
+                                )}
+                                aria-label={`Quitar a ${isMe ? 'Yo' : s.name} de la asignación`}
+                                onClick={() =>
+                                  setStaffIds((prev) => prev.filter((id) => id !== s.id))
+                                }
+                              >
+                                <span
+                                  className="relative inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold text-white shadow-inner"
+                                  style={{ backgroundColor: staffAvatarBackground(s.color) }}
+                                >
+                                  {staffInitials(s.name)}
+                                  {isMe ? (
+                                    <span
+                                      className="absolute bottom-0 right-0 h-1.5 w-1.5 rounded-full bg-emerald-500 ring-1 ring-zinc-900"
+                                      aria-hidden
+                                    />
+                                  ) : null}
+                                </span>
+                                <span className="min-w-0 flex-1 truncate text-sm text-zinc-100">
+                                  {isMe ? 'Yo' : s.name}
+                                </span>
+                                <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+                                  Persona
+                                </span>
+                                <X className="h-3.5 w-3.5 shrink-0 text-zinc-500" aria-hidden />
+                              </button>
+                            </li>
                           )
-                        }}
-                        className={cn(
-                          'flex items-center gap-2 rounded-full border px-2 py-1 pr-3 text-xs font-medium transition-colors disabled:opacity-50',
-                          selected
-                            ? 'border-brand bg-brand/15 text-zinc-100'
-                            : 'border-zinc-700 bg-zinc-900/80 text-zinc-300 hover:border-zinc-600',
-                          isOccupied && 'opacity-70'
-                        )}
-                      >
-                        <span
-                          className="relative inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold text-white"
-                          style={{ backgroundColor: staffAvatarBackground(s.color) }}
-                        >
-                          {staffInitials(s.name)}
-                          {isMe ? (
-                            <span
-                              className="absolute bottom-0 right-0 h-1.5 w-1.5 rounded-full bg-emerald-500 ring-2 ring-zinc-900"
-                              aria-hidden
-                            />
-                          ) : null}
-                        </span>
-                        <span className="max-w-[10rem] truncate">{isMe ? 'Yo' : s.name}</span>
-                        {isOccupied ? (
-                          <span className="rounded bg-amber-900/50 px-1 text-[9px] text-amber-400">
-                            Ocup.
-                          </span>
-                        ) : null}
-                        {selected ? <Check className="h-3.5 w-3.5 shrink-0 text-brand" /> : null}
-                      </button>
-                    )
-                  })}
+                        })}
+                        {selectedTeamsOrdered.map((t) => (
+                          <li key={`modal-as-t-${t.id}`} className="list-none">
+                            <button
+                              type="button"
+                              disabled={saving}
+                              className={cn(
+                                KANBAN_COLUMN_TITLE_TYPO,
+                                'flex w-full items-center gap-2 rounded-md px-1 py-2 text-left transition-colors hover:bg-zinc-800/55 disabled:opacity-50'
+                              )}
+                              aria-label={`Quitar equipo ${t.name} de la asignación`}
+                              onClick={() =>
+                                setSelectedTeamIds((prev) => prev.filter((id) => id !== t.id))
+                              }
+                            >
+                              <span
+                                className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold text-white shadow-inner"
+                                style={{ backgroundColor: staffAvatarBackground(t.color) }}
+                              >
+                                {staffInitials(t.name)}
+                              </span>
+                              <span className="min-w-0 flex-1 truncate text-sm text-zinc-100">{t.name}</span>
+                              <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+                                Equipo
+                              </span>
+                              <X className="h-3.5 w-3.5 shrink-0 text-zinc-500" aria-hidden />
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
                 </div>
+                <p
+                  className={cn(
+                    KANBAN_QUICK_ADD_ROW_MUTED,
+                    'mb-2 text-[11px] uppercase tracking-wide text-zinc-500'
+                  )}
+                >
+                  Personas
+                </p>
+                <div className="mb-4 space-y-1 rounded-lg border border-zinc-800/60 bg-zinc-950/40 p-1">
+                  {staffOptions.length === 0 ? (
+                    <p className={cn(KANBAN_QUICK_ADD_ROW_MUTED, 'px-2 py-2 text-xs text-zinc-500')}>
+                      Sin empleados.
+                    </p>
+                  ) : filteredStaff.length === 0 ? (
+                    <p className={cn(KANBAN_QUICK_ADD_ROW_MUTED, 'px-2 py-2 text-xs text-zinc-500')}>
+                      Sin coincidencias.
+                    </p>
+                  ) : staffPickerOptions.length === 0 ? (
+                    <p className={cn(KANBAN_QUICK_ADD_ROW_MUTED, 'px-2 py-2 text-xs text-zinc-500')}>
+                      Ya están en asignación.
+                    </p>
+                  ) : (
+                    staffPickerOptions.map((s) => {
+                      const isMe = s.id === currentUserId
+                      const isOccupied =
+                        !!selectedClient &&
+                        startDate.trim().length > 0 &&
+                        staffAvail[s.id] === false
+                      return (
+                        <button
+                          key={s.id}
+                          type="button"
+                          disabled={saving}
+                          className={cn(
+                            KANBAN_COLUMN_TITLE_TYPO,
+                            'flex w-full items-center gap-2 rounded-md px-2 py-2.5 text-left hover:bg-zinc-800/90',
+                            isOccupied && 'opacity-70'
+                          )}
+                          onClick={() =>
+                            setStaffIds((prev) => (prev.includes(s.id) ? prev : [...prev, s.id]))
+                          }
+                        >
+                          <span
+                            className="relative inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white shadow-inner"
+                            style={{ backgroundColor: staffAvatarBackground(s.color) }}
+                          >
+                            {staffInitials(s.name)}
+                            {isMe ? (
+                              <span
+                                className="absolute bottom-0 right-0 h-2 w-2 rounded-full bg-emerald-500 ring-2 ring-zinc-900"
+                                aria-hidden
+                              />
+                            ) : null}
+                          </span>
+                          <span className="min-w-0 flex-1 truncate text-zinc-100">{isMe ? 'Yo' : s.name}</span>
+                          {isOccupied ? (
+                            <span className="shrink-0 rounded bg-amber-900/60 px-1.5 py-0.5 text-[10px] font-semibold text-amber-400">
+                              Ocupado
+                            </span>
+                          ) : null}
+                          <Plus className="h-4 w-4 shrink-0 text-zinc-500" aria-hidden />
+                        </button>
+                      )
+                    })
+                  )}
+                </div>
+                {teams.length > 0 ? (
+                  <div className="space-y-2">
+                    <p
+                      className={cn(
+                        KANBAN_QUICK_ADD_ROW_MUTED,
+                        'text-[11px] uppercase tracking-wide text-zinc-500'
+                      )}
+                    >
+                      Equipo
+                    </p>
+                    <div className="space-y-1 rounded-lg border border-zinc-800/60 bg-zinc-950/40 p-1">
+                      {filteredTeams.length === 0 ? (
+                        <p className={cn(KANBAN_QUICK_ADD_ROW_MUTED, 'px-2 py-2 text-xs text-zinc-500')}>
+                          Sin coincidencias.
+                        </p>
+                      ) : teamsPickerOptions.length === 0 ? (
+                        <p className={cn(KANBAN_QUICK_ADD_ROW_MUTED, 'px-2 py-2 text-xs text-zinc-500')}>
+                          Ya están en asignación.
+                        </p>
+                      ) : (
+                        teamsPickerOptions.map((t) => (
+                          <button
+                            key={t.id}
+                            type="button"
+                            disabled={saving}
+                            className={cn(
+                              KANBAN_COLUMN_TITLE_TYPO,
+                              'flex w-full items-center gap-2 rounded-md px-2 py-2.5 text-left hover:bg-zinc-800/90'
+                            )}
+                            onClick={() =>
+                              setSelectedTeamIds((prev) =>
+                                prev.includes(t.id) ? prev : [...prev, t.id]
+                              )
+                            }
+                          >
+                            <span
+                              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white shadow-inner"
+                              style={{ backgroundColor: staffAvatarBackground(t.color) }}
+                            >
+                              {staffInitials(t.name)}
+                            </span>
+                            <span className="min-w-0 flex-1 truncate text-zinc-100">{t.name}</span>
+                            <Plus className="h-4 w-4 shrink-0 text-zinc-500" aria-hidden />
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                ) : null}
               </div>
             ) : (
               <div
@@ -1848,94 +2029,9 @@ export function KanbanQuickAddAppointment({
                 )}
               >
                 <User className="h-4 w-4 shrink-0" aria-hidden />
-                Sin empleados activos
+                Sin equipo ni personas disponibles
               </div>
             )}
-
-            <div className="sm:col-span-2 rounded-xl border border-zinc-800/90 bg-zinc-950/60 p-4">
-              <div className="mb-3 flex items-center gap-2">
-                <Lock className="h-4 w-4 shrink-0 text-zinc-500" aria-hidden />
-                <span
-                  className={cn(
-                    KANBAN_QUICK_ADD_ROW_MUTED,
-                    'text-[11px] font-semibold uppercase tracking-wide text-zinc-400'
-                  )}
-                >
-                  Visibilidad de la tarea
-                </span>
-              </div>
-              <div className="mb-3 flex flex-wrap gap-2">
-                {(
-                  [
-                    ['personal', 'Solo asignado(s)', 'Ideal para notas privadas.'] as const,
-                    ['team', 'Mi equipo', 'Visible para quien comparte el equipo elegido.'] as const,
-                    ['business', 'Todo el negocio', 'Cualquiera del negocio con acceso al tablero.'] as const,
-                  ]
-                ).map(([v, title, hint]) => (
-                  <button
-                    key={v}
-                    type="button"
-                    disabled={saving}
-                    onClick={() => {
-                      setTaskVisibility(v)
-                      if (v !== 'team') setSelectedTeamIds([])
-                    }}
-                    className={cn(
-                      'flex max-w-[11rem] flex-col rounded-lg border px-3 py-2 text-left text-xs transition-colors disabled:opacity-50',
-                      taskVisibility === v
-                        ? 'border-brand bg-brand/15 text-zinc-100'
-                        : 'border-zinc-700 bg-zinc-900/80 text-zinc-400 hover:border-zinc-600'
-                    )}
-                  >
-                    <span className="font-semibold text-zinc-100">{title}</span>
-                    <span className="mt-0.5 text-[11px] leading-snug text-zinc-500">{hint}</span>
-                  </button>
-                ))}
-              </div>
-              {taskVisibility === 'team' ? (
-                teams.length === 0 ? (
-                  <p className="text-sm text-amber-400/90">
-                    No hay equipos en este negocio. Cambia la visibilidad o crea equipos en «Equipos» en el menú lateral.
-                  </p>
-                ) : (
-                  <div className="flex flex-wrap gap-2">
-                    <span className={cn(KANBAN_QUICK_ADD_ROW_MUTED, 'w-full text-xs')}>
-                      Equipos (uno o varios)
-                    </span>
-                    {teams.map((t) => {
-                      const on = selectedTeamIds.includes(t.id)
-                      return (
-                        <button
-                          key={t.id}
-                          type="button"
-                          disabled={saving}
-                          className={cn(
-                            'flex items-center gap-2 rounded-lg border px-3 py-2 text-xs transition-colors disabled:opacity-50',
-                            on
-                              ? 'border-brand bg-brand/15 text-zinc-100'
-                              : 'border-zinc-700 bg-zinc-900/80 text-zinc-400 hover:border-zinc-600'
-                          )}
-                          onClick={() =>
-                            setSelectedTeamIds((prev) =>
-                              prev.includes(t.id)
-                                ? prev.filter((id) => id !== t.id)
-                                : [...prev, t.id]
-                            )
-                          }
-                        >
-                          <span
-                            className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-zinc-600"
-                            style={{ backgroundColor: t.color }}
-                            aria-hidden
-                          />
-                          {t.name}
-                        </button>
-                      )
-                    })}
-                  </div>
-                )
-              ) : null}
-            </div>
 
             <div className="sm:col-span-2 rounded-xl border border-zinc-800/90 bg-zinc-950/60 p-4">
               <div className="mb-3 flex items-center gap-2">
@@ -2415,7 +2511,7 @@ export function WorkBoardKanbanView({
   canCreateAppointments = false,
   canEditAppointments = false,
   canMoveAppointments = false,
-  canDeleteAppointments = false,
+  canDeleteWorkBoardItem,
   onItemOpen,
   onStageUpdated,
   kanbanFilters,
@@ -2435,7 +2531,8 @@ export function WorkBoardKanbanView({
   /** Si es true, al pulsar la tarjeta se abre el mismo panel que al crear (sin ir a otra página). */
   canEditAppointments?: boolean
   canMoveAppointments?: boolean
-  canDeleteAppointments?: boolean
+  /** Eliminar: alta dirección + permiso, o bien ser el creador de la tarea. */
+  canDeleteWorkBoardItem?: (item: WorkItemCard) => boolean
   onItemOpen?: (item: WorkItemCard) => void
   onStageUpdated?: () => void
   kanbanFilters: KanbanFiltersState
@@ -2498,7 +2595,7 @@ export function WorkBoardKanbanView({
     [canEditAppointments, onItemOpen]
   )
 
-  const canMarkTaskDone = canMoveAppointments || canEditAppointments
+  const canMarkTaskDone = true
 
   const handleCardMarkDone = useCallback(
     async (item: WorkItemCard) => {
@@ -2520,15 +2617,15 @@ export function WorkBoardKanbanView({
 
   const handleCardDeleteRequest = useCallback(
     (item: WorkItemCard) => {
-      if (!canDeleteAppointments) return
+      if (!canDeleteWorkBoardItem?.(item)) return
       setDeleteConfirmItem(item)
     },
-    [canDeleteAppointments]
+    [canDeleteWorkBoardItem]
   )
 
   const handleCardDeleteConfirm = useCallback(async () => {
     const item = deleteConfirmItem
-    if (!item || !canDeleteAppointments) return
+    if (!item || !canDeleteWorkBoardItem?.(item)) return
     setDeleteInProgress(true)
     const supabase = createClient()
     const { error } = await supabase.from('appointments').delete().eq('id', item.id)
@@ -2540,7 +2637,7 @@ export function WorkBoardKanbanView({
     setDeleteConfirmItem(null)
     toast.success('Tarea eliminada')
     onStageUpdated?.()
-  }, [deleteConfirmItem, canDeleteAppointments, onStageUpdated])
+  }, [deleteConfirmItem, canDeleteWorkBoardItem, onStageUpdated])
 
   const closeInlineEdit = useCallback(() => {
     setInlineEditId(null)
@@ -2551,13 +2648,14 @@ export function WorkBoardKanbanView({
       businessId,
       currentUserId,
       staffOptions,
+      teams,
       services,
       clients: kanbanClients,
       onUpdated: () => {
         onStageUpdated?.()
       },
     }),
-    [businessId, currentUserId, staffOptions, services, kanbanClients, onStageUpdated]
+    [businessId, currentUserId, staffOptions, teams, services, kanbanClients, onStageUpdated]
   )
 
   const itemById = useMemo(
@@ -2808,7 +2906,7 @@ export function WorkBoardKanbanView({
                     const kanbanActions: WorkBoardCardKanbanActions = {
                       showMarkDone,
                       showEdit,
-                      showDelete: canDeleteAppointments,
+                      showDelete: canDeleteWorkBoardItem?.(item) ?? false,
                       onMarkDone: () => void handleCardMarkDone(item),
                       onEdit: () => handleCardOpen(item),
                       onDelete: () => handleCardDeleteRequest(item),

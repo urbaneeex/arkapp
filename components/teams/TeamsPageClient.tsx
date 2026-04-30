@@ -238,7 +238,7 @@ export function TeamsPageClient({ staffForPicker }: { staffForPicker: StaffRow[]
                     key={m.id}
                     className="rounded-full border border-zinc-700 bg-zinc-900/80 px-2 py-0.5"
                   >
-                    {(m.staff?.name ?? '?').trim()}
+                    {(m.staff?.name ?? '—').trim()}
                     {m.is_lead ? (
                       <span className="ml-1 font-semibold text-brand">· líder</span>
                     ) : null}

@@ -2,6 +2,12 @@
 
 import { useEffect, useState } from 'react'
 
+type RosterEntry = {
+  staff_id: string
+  name: string
+  is_lead: boolean
+}
+
 type MembershipTeam = {
   id: string
   name: string
@@ -9,6 +15,7 @@ type MembershipTeam = {
   color: string
   is_lead: boolean
   joined_at: string | null
+  roster?: RosterEntry[]
 }
 
 /** Solo lectura: equipos del usuario actual (GET /api/teams/memberships). */
@@ -60,23 +67,47 @@ export function MyTeamsStrip() {
       {teams.map((t) => (
         <li
           key={t.id}
-          className="flex items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-950/40 px-3 py-2"
+          className="flex flex-col gap-0 rounded-lg border border-zinc-800 bg-zinc-950/40"
         >
-          <span
-            className="h-3 w-3 shrink-0 rounded-full ring-1 ring-zinc-600"
-            style={{ backgroundColor: t.color }}
-            aria-hidden
-          />
-          <div className="min-w-0 flex-1">
-            <p className="truncate font-medium text-zinc-100">{t.name}</p>
-            {t.description ? (
-              <p className="truncate text-xs text-zinc-500">{t.description}</p>
+          <div className="flex items-center gap-3 px-3 py-2">
+            <span
+              className="h-3 w-3 shrink-0 rounded-full ring-1 ring-zinc-600"
+              style={{ backgroundColor: t.color }}
+              aria-hidden
+            />
+            <div className="min-w-0 flex-1">
+              <p className="truncate font-medium text-zinc-100">{t.name}</p>
+              {t.description ? (
+                <p className="truncate text-xs text-zinc-500">{t.description}</p>
+              ) : null}
+            </div>
+            {t.is_lead ? (
+              <span className="shrink-0 rounded bg-brand/15 px-2 py-0.5 text-[10px] font-semibold uppercase text-brand">
+                Líder
+              </span>
             ) : null}
           </div>
-          {t.is_lead ? (
-            <span className="shrink-0 rounded bg-brand/15 px-2 py-0.5 text-[10px] font-semibold uppercase text-brand">
-              Líder
-            </span>
+          {(t.roster?.length ?? 0) > 0 ? (
+            <ul className="border-t border-zinc-800/80 px-3 py-2">
+              {[...(t.roster ?? [])]
+                .sort((a, b) => {
+                  if (a.is_lead !== b.is_lead) return a.is_lead ? -1 : 1
+                  return a.name.localeCompare(b.name, 'es')
+                })
+                .map((m) => (
+                  <li
+                    key={m.staff_id}
+                    className="flex items-center justify-between gap-2 py-0.5 text-xs text-zinc-400"
+                  >
+                    <span className="min-w-0 truncate text-zinc-300">{m.name}</span>
+                    {m.is_lead ? (
+                      <span className="shrink-0 text-[10px] font-semibold uppercase text-brand">
+                        Líder
+                      </span>
+                    ) : null}
+                  </li>
+                ))}
+            </ul>
           ) : null}
         </li>
       ))}

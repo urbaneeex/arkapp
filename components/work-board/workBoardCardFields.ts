@@ -19,6 +19,8 @@ export type WorkBoardCardQuickEditContext = {
   businessId: string
   currentUserId: string
   staffOptions: WorkBoardStaffOption[]
+  /** Equipos del negocio (asignación junto a personas en chip @). */
+  teams: { id: string; name: string; color: string }[]
   services: { id: string; name: string; duration: number; price: number }[]
   clients: WorkBoardKanbanClientOption[]
   onUpdated: () => void

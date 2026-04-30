@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { z } from 'zod'
 import { resolveUserBusinessAndPermissions, hasServerPermission } from '@/lib/user-permissions.server'
+import { userParticipatesInAppointmentRow } from '@/lib/work-board/appointmentParticipation'
 import { isPipelineStageSlug } from '@/lib/work-items/constants'
 
 const BodySchema = z
@@ -43,18 +44,35 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
   const canEdit = hasServerPermission(access, 'appointments_edit')
   const canMove = hasServerPermission(access, 'appointments_move')
-  if (!canEdit && !canMove) {
-    return NextResponse.json({ error: 'forbidden' }, { status: 403 })
-  }
 
   const { data: apt, error: aptErr } = await supabase
     .from('appointments')
-    .select('id, business_id, pipeline_stage_id, board_sort_order')
+    .select('id, business_id, pipeline_stage_id, board_sort_order, created_by, staff_id, metadata')
     .eq('id', id)
     .maybeSingle()
 
   if (aptErr || !apt || apt.business_id !== access.businessId) {
     return NextResponse.json({ error: 'not_found' }, { status: 404 })
+  }
+
+  const participates = userParticipatesInAppointmentRow(
+    {
+      business_id: apt.business_id,
+      created_by: apt.created_by,
+      staff_id: apt.staff_id,
+      metadata: apt.metadata,
+    },
+    user.id,
+    access.businessId
+  )
+
+  const columnIds = parsed.data.column_item_ids
+  if (columnIds && columnIds.length > 0 && !canEdit && !canMove) {
+    return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+  }
+
+  if (!canEdit && !canMove && !participates) {
+    return NextResponse.json({ error: 'forbidden' }, { status: 403 })
   }
 
   let targetStageId = parsed.data.pipeline_stage_id ?? null
@@ -87,7 +105,6 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       ? { completed_at: new Date().toISOString() }
       : { completed_at: null }
 
-  const columnIds = parsed.data.column_item_ids
   const sourceStageId = apt.pipeline_stage_id
 
   if (columnIds && columnIds.length > 0) {
