@@ -49,7 +49,7 @@ export function WorkBoardActionBar({
             Ordenar
           </Button>
         </PopoverTrigger>
-        <PopoverContent align="start" className="w-72 text-sm text-zinc-300">
+        <PopoverContent align="start" className="z-[120] w-72 text-sm text-zinc-300">
           <p className="font-medium text-zinc-100">Ordenación</p>
           <p className="mt-2 text-xs leading-relaxed text-zinc-500">
             Próximamente podrás ordenar las tareas por fecha, prioridad o nombre.

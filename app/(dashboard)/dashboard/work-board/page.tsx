@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 export default function WorkBoardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ view?: string; new?: string; period?: string; scope?: string }>
+  searchParams: Promise<{ view?: string; new?: string; period?: string }>
 }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">

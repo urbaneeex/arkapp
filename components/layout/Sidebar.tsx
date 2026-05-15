@@ -9,10 +9,10 @@ import {
   UserCircle,
   LayoutGrid,
   Settings,
-  BarChart3,
   DollarSign,
   Clock,
   UsersRound,
+  ChartColumnIncreasing,
 } from 'lucide-react'
 import { useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
@@ -23,16 +23,34 @@ import { Tooltip } from '@/components/ui/tooltip'
 import { usePermissions } from '@/hooks/usePermissions'
 import type { PermissionKey } from '@/lib/permissions'
 
+const WORK_BOARD_HREF = '/dashboard/work-board'
+const PRODUCTIVIDAD_HREF = '/dashboard/work-board/productividad'
+
+function sidebarItemIsActive(pathname: string, href: string): boolean {
+  if (href === '/dashboard') return pathname === '/dashboard'
+  if (href === WORK_BOARD_HREF) {
+    if (!pathname.startsWith(WORK_BOARD_HREF)) return false
+    if (pathname === WORK_BOARD_HREF) return true
+    if (pathname.startsWith(PRODUCTIVIDAD_HREF)) return false
+    return pathname.startsWith(`${WORK_BOARD_HREF}/`)
+  }
+  if (href === PRODUCTIVIDAD_HREF) {
+    return pathname === PRODUCTIVIDAD_HREF || pathname.startsWith(`${PRODUCTIVIDAD_HREF}/`)
+  }
+  return pathname === href || pathname.startsWith(`${href}/`)
+}
+
 const mainNavItems: {
   href: string
   label: string
   icon: typeof Home
   permission?: PermissionKey
   anyOf?: PermissionKey[]
+  requireOwner?: boolean
 }[] = [
   { href: '/dashboard', label: 'Dashboard', icon: Home },
-  { href: '/dashboard/fichar', label: 'Fichar', icon: Clock },
   { href: '/dashboard/work-board', label: 'Tablero', icon: LayoutGrid, permission: 'work_board_view' },
+  { href: '/dashboard/fichar', label: 'Fichar', icon: Clock },
   { href: '/dashboard/clients', label: 'Clientes', icon: Users, permission: 'clients_view' },
   { href: '/dashboard/services', label: 'Servicios', icon: Briefcase, permission: 'services_view' },
   { href: '/dashboard/staff', label: 'Equipo', icon: UserCircle, permission: 'staff_view' },
@@ -42,7 +60,13 @@ const mainNavItems: {
     icon: UsersRound,
     anyOf: ['teams_view', 'teams_manage'],
   },
-  { href: '/dashboard/reports', label: 'Reportes', icon: BarChart3, permission: 'reports_view' },
+  {
+    href: PRODUCTIVIDAD_HREF,
+    label: 'Productividad',
+    icon: ChartColumnIncreasing,
+    permission: 'tasks_metrics_view',
+    requireOwner: true,
+  },
   { href: '/dashboard/finances', label: 'Finanzas', icon: DollarSign, permission: 'finances_view' },
 ]
 
@@ -51,13 +75,18 @@ const iconSize = 'w-7 h-7'
 export function Sidebar() {
   const pathname = usePathname()
   const setBusiness = useBusinessStore((s) => s.setBusiness)
-  const { hasPermission, loading: permissionsLoading } = usePermissions()
+  const { hasPermission, loading: permissionsLoading, isOwner } = usePermissions()
   const supabase = createClient()
 
   const visibleNavItems = mainNavItems.filter((item) => {
+    if (item.requireOwner && !isOwner) return false
     if (item.anyOf?.length) return item.anyOf.some((k) => hasPermission(k))
     return !item.permission || hasPermission(item.permission)
   })
+
+  const navItemsToShow = permissionsLoading
+    ? mainNavItems.filter((i) => !i.requireOwner)
+    : visibleNavItems
 
   useEffect(() => {
     const load = async () => {
@@ -76,10 +105,8 @@ export function Sidebar() {
     <aside className="hidden lg:block fixed top-16 left-0 z-40 h-[calc(100vh-4rem)] w-[4.5rem] bg-zinc-100 dark:bg-zinc-950 border-r border-zinc-200 dark:border-zinc-800">
       <div className="flex flex-col h-full pt-1 pb-4">
         <nav className="flex-1 px-3 pt-2 space-y-2 overflow-y-hidden">
-          {(permissionsLoading ? mainNavItems : visibleNavItems).map(({ href, label, icon: Icon }) => {
-            const isActive =
-              pathname === href ||
-              (href !== '/dashboard' && pathname.startsWith(href))
+          {navItemsToShow.map(({ href, label, icon: Icon }) => {
+            const isActive = sidebarItemIsActive(pathname, href)
             return (
               <Tooltip key={href} content={label} className="w-full flex items-center justify-center">
                 <Link

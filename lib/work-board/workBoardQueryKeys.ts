@@ -3,5 +3,5 @@ import type { WorkBoardSearchParams } from '@/lib/work-board/loadWorkBoardBootst
 export const workBoardKeys = {
   all: ['work-board'] as const,
   bootstrap: (sp: WorkBoardSearchParams) =>
-    ['work-board', 'bootstrap', sp.view ?? '', sp.period ?? '', sp.scope ?? '', sp.new ?? ''] as const,
+    ['work-board', 'bootstrap', sp.view ?? '', sp.period ?? '', sp.new ?? ''] as const,
 }

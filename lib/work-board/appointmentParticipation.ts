@@ -23,3 +23,58 @@ export function userParticipatesInAppointmentRow(row: {
   if (row.staff_id === userId) return true
   return metadataKanbanAssigneesIncludeUser(row.metadata, userId)
 }
+
+/** Coincidencia `team_id` / `team_ids` de la tarjeta con equipos del usuario (SSR/cliente). */
+export function userSharesTeamWithAppointmentCard(
+  item: { team_id?: string | null; team_ids?: string[] | undefined },
+  myTeamIds: readonly string[]
+): boolean {
+  if (!myTeamIds.length) return false
+  const mine = new Set(myTeamIds)
+  if (item.team_id && mine.has(item.team_id)) return true
+  for (const tid of item.team_ids ?? []) {
+    if (mine.has(tid)) return true
+  }
+  return false
+}
+
+/** Solo el creador puede editar contenido (título, equipos, asignaciones amplias, etc.). */
+export function userCanEditAppointmentCardClient(
+  item: { business_id: string; created_by?: string | null },
+  userId: string,
+  businessId: string
+): boolean {
+  return item.business_id === businessId && item.created_by === userId
+}
+
+/** Mover columna / marcar completado: creador, staff principal, kanban_assignees o equipo de la tarjeta. */
+export function userCanMoveAppointmentCardClient(
+  item: {
+    business_id: string
+    created_by?: string | null
+    staff_id?: string | null
+    metadata?: unknown | null
+    team_id?: string | null
+    team_ids?: string[]
+  },
+  userId: string,
+  businessId: string,
+  myTeamIds: readonly string[]
+): boolean {
+  if (item.business_id !== businessId) return false
+  if (
+    userParticipatesInAppointmentRow(
+      {
+        business_id: businessId,
+        created_by: item.created_by,
+        staff_id: item.staff_id,
+        metadata: item.metadata,
+      },
+      userId,
+      businessId
+    )
+  ) {
+    return true
+  }
+  return userSharesTeamWithAppointmentCard(item, myTeamIds)
+}

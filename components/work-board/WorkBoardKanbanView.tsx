@@ -738,28 +738,13 @@ export function KanbanQuickAddAppointment({
         return
       }
 
-      let nextBoardSort: number | undefined
-      if (stageId) {
-        const { data: maxRows } = await supabase
-          .from('appointments')
-          .select('board_sort_order')
-          .eq('business_id', businessId)
-          .eq('pipeline_stage_id', stageId)
-          .order('board_sort_order', { ascending: false, nullsFirst: false })
-          .limit(1)
-        const max = maxRows?.[0]?.board_sort_order
-        nextBoardSort = typeof max === 'number' && !Number.isNaN(max) ? max + 1 : 0
-      }
-
-      const { data: inserted, error: insErr } = await supabase
-        .from('appointments')
-        .insert({
+      const createRes = await fetch('/api/work-board/appointments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           business_id: businessId,
           title: titleTrim,
-          ...(stageId ? { pipeline_stage_id: stageId } : {}),
-          ...(stageId !== undefined && nextBoardSort !== undefined
-            ? { board_sort_order: nextBoardSort }
-            : {}),
+          pipeline_stage_id: stageId ?? null,
           start_time: start?.toISOString() ?? null,
           end_time: end?.toISOString() ?? null,
           client_id: clientId,
@@ -770,32 +755,23 @@ export function KanbanQuickAddAppointment({
           status: 'confirmed',
           visibility: visibilityNext,
           team_id: teamIdNext,
-        })
-        .select('id')
-        .maybeSingle()
-
-      if (insErr) {
-        setError(insErr.message)
+          team_ids_for_bridge: teamIdsForBridge,
+        }),
+      })
+      const createJson = (await createRes.json().catch(() => ({}))) as { id?: string; error?: string }
+      if (!createRes.ok) {
+        setError(
+          typeof createJson.error === 'string' ? createJson.error : 'No se pudo crear la tarea'
+        )
+        return
+      }
+      const inserted = createJson.id ? { id: createJson.id } : null
+      if (!inserted?.id) {
+        setError('No se pudo crear la tarea')
         return
       }
 
-      if (inserted?.id) {
-        const { error: bridgeInsErr } =
-          visibilityNext === 'team' && teamIdsForBridge.length > 0
-            ? await supabase.from('appointment_teams').insert(
-                teamIdsForBridge.map((tid) => ({
-                  appointment_id: inserted.id,
-                  team_id: tid,
-                }))
-              )
-            : { error: null }
-        if (bridgeInsErr) {
-          setError(bridgeInsErr.message)
-          return
-        }
-      }
-
-      if (inserted?.id) {
+      if (inserted.id) {
         try {
           await fetch('/api/webhooks/n8n-appointment', {
             method: 'POST',
@@ -1014,6 +990,7 @@ export function KanbanQuickAddAppointment({
                   <button
                     type="button"
                     disabled={saving}
+                    aria-label={assignTriggerLabel ?? 'Asignar empleado o equipo'}
                     className={cn(
                       KANBAN_QUICK_ADD_ROW_MUTED,
                       KANBAN_QUICK_ADD_ROW_TAP,
@@ -1025,7 +1002,9 @@ export function KanbanQuickAddAppointment({
                     ) : (
                       <User className="h-4 w-4 shrink-0 text-zinc-500 transition-colors group-hover:text-zinc-400 group-data-[state=open]:text-zinc-300" aria-hidden />
                     )}
-                    <span className="truncate">{assignTriggerLabel ?? 'Añadir asignación'}</span>
+                    <span className="min-w-0 truncate">
+                      {assignTriggerLabel ?? 'Añadir asignación'}
+                    </span>
                   </button>
                 </PopoverTrigger>
                 <PopoverContent
@@ -1799,7 +1778,7 @@ export function KanbanQuickAddAppointment({
                         'text-[11px] font-semibold uppercase tracking-wide text-zinc-400'
                       )}
                     >
-                      Añadir asignación
+                      Asignación
                     </span>
                     {checkingAvail ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin text-zinc-500" aria-hidden />
@@ -2420,6 +2399,7 @@ function SortableKanbanCard({
   sortDisabled,
   onOpen,
   quickEdit,
+  kanbanInteractionLocked,
   kanbanActions,
   inlineEditing,
   onCloseInlineEdit,
@@ -2436,6 +2416,7 @@ function SortableKanbanCard({
   sortDisabled?: boolean
   onOpen?: (item: WorkItemCard) => void
   quickEdit?: WorkBoardCardQuickEditContext
+  kanbanInteractionLocked?: boolean
   kanbanActions?: WorkBoardCardKanbanActions
   inlineEditing?: boolean
   onCloseInlineEdit?: () => void
@@ -2492,6 +2473,7 @@ function SortableKanbanCard({
           columnColor={columnColor}
           onOpen={onOpen}
           quickEdit={quickEdit}
+          kanbanInteractionLocked={kanbanInteractionLocked}
           kanbanActions={kanbanActions}
         />
       )}
@@ -2509,13 +2491,14 @@ export function WorkBoardKanbanView({
   kanbanClients = [],
   teams = [],
   canCreateAppointments = false,
-  canEditAppointments = false,
-  canMoveAppointments = false,
+  canMoveAppointmentCard,
   canDeleteWorkBoardItem,
-  onItemOpen,
   onStageUpdated,
   kanbanFilters,
   dragDisabled = false,
+  /** Si false, no se persisten reordenaciones intra-columna ni patch masivo (solo cambio de columna para la tarjeta arrastrada). */
+  canBulkReorderKanban = true,
+  canEditAppointmentCard,
 }: {
   businessId: string
   currentUserId: string
@@ -2528,16 +2511,18 @@ export function WorkBoardKanbanView({
   /** Equipos del negocio (visibilidad «Mi equipo» / chips). */
   teams?: { id: string; name: string; color: string }[]
   canCreateAppointments?: boolean
-  /** Si es true, al pulsar la tarjeta se abre el mismo panel que al crear (sin ir a otra página). */
-  canEditAppointments?: boolean
-  canMoveAppointments?: boolean
-  /** Eliminar: alta dirección + permiso, o bien ser el creador de la tarea. */
+  /** Mover columna / marcar hecha: creador, asignados o equipo de la tarjeta (alineado con RLS). */
+  canMoveAppointmentCard: (item: WorkItemCard) => boolean
+  /** Eliminar: solo el creador en servidor/UI. */
   canDeleteWorkBoardItem?: (item: WorkItemCard) => boolean
-  onItemOpen?: (item: WorkItemCard) => void
   onStageUpdated?: () => void
   kanbanFilters: KanbanFiltersState
   /** Vista solo lectura (tareas archivadas). */
   dragDisabled?: boolean
+  /** Sin patch masivo de columna (RLS solo creador por fila). */
+  canBulkReorderKanban?: boolean
+  /** Solo el creador edita chips/modal (coincide con RLS). */
+  canEditAppointmentCard: (item: WorkItemCard) => boolean
 }) {
   const [localItems, setLocalItems] = useState(items)
   const [localStages, setLocalStages] = useState(stages)
@@ -2586,13 +2571,10 @@ export function WorkBoardKanbanView({
 
   const handleCardOpen = useCallback(
     (item: WorkItemCard) => {
-      if (canEditAppointments) {
-        setInlineEditId(item.id)
-        return
-      }
-      onItemOpen?.(item)
+      if (!canEditAppointmentCard(item)) return
+      setInlineEditId(item.id)
     },
-    [canEditAppointments, onItemOpen]
+    [canEditAppointmentCard]
   )
 
   const canMarkTaskDone = true
@@ -2663,6 +2645,11 @@ export function WorkBoardKanbanView({
     [localItems]
   )
 
+  const allowDragCard = useCallback(
+    (item: WorkItemCard) => canMoveAppointmentCard(item),
+    [canMoveAppointmentCard]
+  )
+
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 8 },
@@ -2689,16 +2676,19 @@ export function WorkBoardKanbanView({
   const handleDragOver = useCallback(
     (event: DragOverEvent) => {
       if (dragDisabled) return
-      if (!canMoveAppointments) return
+      const activeIdStr = String(event.active.id)
+      const dragged = itemById.get(activeIdStr)
+      if (!dragged || !allowDragCard(dragged)) return
       const { active, over } = event
       if (!over || active.id === over.id) return
-      const activeIdStr = String(active.id)
       const overIdStr = String(over.id)
 
       setColumnOrderMap((prev) => {
         const activeCol = findColumnForItemId(prev, stageIds, activeIdStr)
         const overCol = findColumnForItemId(prev, stageIds, overIdStr)
         if (!activeCol || !overCol) return prev
+
+        if (!canBulkReorderKanban && activeCol === overCol) return prev
 
         if (activeCol !== overCol) {
           const next: Record<string, string[]> = {}
@@ -2723,7 +2713,7 @@ export function WorkBoardKanbanView({
         return { ...prev, [activeCol]: arrayMove(c, oldI, newI) }
       })
     },
-    [canMoveAppointments, stageIds, dragDisabled]
+    [allowDragCard, canBulkReorderKanban, stageIds, dragDisabled, itemById]
   )
 
   const handleDragEnd = useCallback(
@@ -2738,7 +2728,8 @@ export function WorkBoardKanbanView({
         return
       }
 
-      if (!canMoveAppointments) {
+      const draggedItem = itemById.get(activeIdStr)
+      if (!draggedItem || !allowDragCard(draggedItem)) {
         dragSnapshotRef.current = null
         return
       }
@@ -2765,6 +2756,18 @@ export function WorkBoardKanbanView({
 
       const nextItems = applyColumnMapToItems(localItems, mapAtEnd, localStages)
       const prevItems = localItems
+      const prevDragged = prevItems.find((i) => i.id === activeIdStr)
+      const nextDragged = nextItems.find((i) => i.id === activeIdStr)
+      const draggedStageChanged = prevDragged?.pipeline_stage_id !== nextDragged?.pipeline_stage_id
+
+      if (!canBulkReorderKanban && !draggedStageChanged) {
+        if (dragSnapshotRef.current) {
+          setColumnOrderMap(dragSnapshotRef.current)
+          dragSnapshotRef.current = null
+        }
+        return
+      }
+
       const prevSig = prevItems
         .map((i) => `${i.id}:${i.pipeline_stage_id}:${i.board_sort_order ?? 'n'}`)
         .join('|')
@@ -2778,13 +2781,15 @@ export function WorkBoardKanbanView({
 
       setLocalItems(nextItems)
 
+      const patchBody =
+        canBulkReorderKanban && orderedIds.length > 0
+          ? { pipeline_stage_id: targetCol, column_item_ids: orderedIds }
+          : { pipeline_stage_id: targetCol }
+
       const res = await fetch(`/api/work-items/${activeIdStr}/stage`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          pipeline_stage_id: targetCol,
-          column_item_ids: orderedIds,
-        }),
+        body: JSON.stringify(patchBody),
       })
 
       if (!res.ok) {
@@ -2795,8 +2800,10 @@ export function WorkBoardKanbanView({
       onStageUpdated?.()
     },
     [
-      canMoveAppointments,
+      allowDragCard,
+      canBulkReorderKanban,
       dragDisabled,
+      itemById,
       localItems,
       localStages,
       onStageUpdated,
@@ -2899,10 +2906,13 @@ export function WorkBoardKanbanView({
                   {colIdsVisible.map((itemId) => {
                     const item = itemById.get(itemId)
                     if (!item) return null
+                    const editAllowed = canEditAppointmentCard(item)
+                    const moveAllowed = canMoveAppointmentCard(item)
                     const showMarkDone =
+                      moveAllowed &&
                       canMarkTaskDone &&
                       !isTerminalWorkItemStage(item.stage_slug, item.stage_category)
-                    const showEdit = canEditAppointments || Boolean(onItemOpen)
+                    const showEdit = editAllowed
                     const kanbanActions: WorkBoardCardKanbanActions = {
                       showMarkDone,
                       showEdit,
@@ -2916,9 +2926,10 @@ export function WorkBoardKanbanView({
                         key={itemId}
                         item={item}
                         columnColor={stage.color}
-                        sortDisabled={dragDisabled || !canMoveAppointments}
+                        sortDisabled={dragDisabled || !allowDragCard(item)}
                         onOpen={handleCardOpen}
-                        quickEdit={cardQuickEdit}
+                        quickEdit={editAllowed ? cardQuickEdit : undefined}
+                        kanbanInteractionLocked={!editAllowed}
                         kanbanActions={kanbanActions}
                         inlineEditing={inlineEditId === item.id}
                         onCloseInlineEdit={closeInlineEdit}

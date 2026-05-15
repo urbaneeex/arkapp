@@ -19,7 +19,6 @@ import {
   Check,
   Flag,
   Loader2,
-  Lock,
   Plus,
   Search,
   User,
@@ -767,14 +766,6 @@ export function WorkBoardCardInlineChips({
 
   return (
     <div className={cn('mt-2.5 flex flex-wrap items-center', compact ? 'gap-1.5' : 'gap-2')}>
-      {item.visibility === 'personal' ? (
-        <span
-          className="inline-flex shrink-0 items-center gap-1 rounded-md border border-amber-700/50 bg-amber-950/30 px-1.5 py-0.5"
-          title="Visibilidad personal (solo asignado)"
-        >
-          <Lock className={cn(chipIconClass(compact), 'text-amber-400/95')} aria-hidden />
-        </span>
-      ) : null}
       <KanbanQuickDatePicker
         open={dateMenuOpen}
         onOpenChange={handleDateOpenChange}
@@ -800,16 +791,16 @@ export function WorkBoardCardInlineChips({
               data-kanban-chip
               disabled={saving}
               onPointerDown={stopDrag}
-              className={cn(WORK_BOARD_KANBAN_CHIP_CLASS)}
+              className={cn(WORK_BOARD_KANBAN_CHIP_CLASS, !assignChipDisplaySummary && 'px-2')}
               title={
-                assignChipDisplaySummary ? `Asignación: ${assignChipDisplaySummary}` : 'Añadir asignación'
+                assignChipDisplaySummary ? `Asignación: ${assignChipDisplaySummary}` : 'Asignar empleado o equipo'
               }
-              aria-label={assignChipDisplaySummary ?? 'Añadir asignación'}
+              aria-label={assignChipDisplaySummary ?? 'Asignar empleado o equipo'}
             >
               <AtSign className={cn(chipIconClass(compact), 'text-zinc-400')} aria-hidden />
-              <span className={chipTextClass(compact)}>
-                {assignChipDisplaySummary ?? 'Añadir asignación'}
-              </span>
+              {assignChipDisplaySummary ? (
+                <span className={chipTextClass(compact)}>{assignChipDisplaySummary}</span>
+              ) : null}
             </button>
           </PopoverTrigger>
           <PopoverContent
@@ -1036,11 +1027,12 @@ export function WorkBoardCardInlineChips({
           className={cn(
             WORK_BOARD_KANBAN_CHIP_CLASS,
             KANBAN_QUICK_ADD_ROW_MUTED,
-            'cursor-not-allowed opacity-60'
+            'cursor-not-allowed px-2 opacity-60'
           )}
+          title="Sin personas ni equipos disponibles"
+          aria-label="Sin opciones de asignación"
         >
           <AtSign className={cn(chipIconClass(compact), 'text-zinc-400')} aria-hidden />
-          <span className={chipTextClass(compact)}>Añadir asignación</span>
         </span>
       )}
 

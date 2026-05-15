@@ -15,7 +15,6 @@ function bootstrapFetchUrl(sp: WorkBoardSearchParams): string {
   if (sp.view) q.set('view', sp.view)
   if (sp.new) q.set('new', sp.new)
   if (sp.period) q.set('period', sp.period)
-  if (sp.scope) q.set('scope', sp.scope)
   const s = q.toString()
   return s ? `/api/work-board/bootstrap?${s}` : '/api/work-board/bootstrap'
 }
@@ -58,9 +57,7 @@ export function WorkBoardQueryBridge({ searchParams }: { searchParams: WorkBoard
       businessCountry={data.businessCountry}
       shiftsByDay={data.shiftsByDay}
       teamsForKanban={data.teamsForKanban}
-      canTasksViewAll={data.canTasksViewAll}
       myTeamIds={data.myTeamIds}
-      initialKanbanScope={data.initialKanbanScope}
       onInvalidateBoard={invalidateBoard}
     />
   )

@@ -13,9 +13,9 @@ import {
   Users,
   Briefcase,
   Contact,
-  BarChart3,
   DollarSign,
   Settings,
+  ChartColumnIncreasing,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { usePermissions } from '@/hooks/usePermissions'
@@ -33,6 +33,7 @@ const overflowMenuItems: {
   label: string
   icon: typeof Home
   permission?: PermissionKey
+  requireOwner?: boolean
 }[] = [
   {
     href: '/dashboard/work-board?view=calendar&period=week',
@@ -43,7 +44,13 @@ const overflowMenuItems: {
   { href: '/dashboard/clients', label: 'Clientes', icon: Users, permission: 'clients_view' },
   { href: '/dashboard/services', label: 'Servicios', icon: Briefcase, permission: 'services_view' },
   { href: '/dashboard/staff', label: 'Equipo', icon: Contact, permission: 'staff_view' },
-  { href: '/dashboard/reports', label: 'Reportes', icon: BarChart3, permission: 'reports_view' },
+  {
+    href: '/dashboard/work-board/productividad',
+    label: 'Productividad',
+    icon: ChartColumnIncreasing,
+    permission: 'tasks_metrics_view',
+    requireOwner: true,
+  },
   { href: '/dashboard/finances', label: 'Finanzas', icon: DollarSign, permission: 'finances_view' },
   { href: '/dashboard/settings', label: 'Configuración', icon: Settings, permission: 'settings_manage' },
 ]
@@ -62,9 +69,9 @@ const primaryBar: {
   {
     key: 'newTask',
     href: '/dashboard/work-board?view=calendar&period=week&new=1',
-    label: 'Nueva tarea',
+    label: 'Tarea',
     icon: CirclePlus,
-    permission: 'appointments_create',
+    permission: 'work_board_view',
   },
   { key: 'fichar', href: '/dashboard/fichar', label: 'Fichar', icon: Clock },
 ]
@@ -76,13 +83,16 @@ function pathMatches(pathname: string, path: string) {
 export function MobileBottomNav() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
-  const { hasPermission, loading } = usePermissions()
+  const { hasPermission, loading, isOwner } = usePermissions()
   const [moreOpen, setMoreOpen] = useState(false)
 
   const visibleOverflow = useMemo(() => {
-    if (loading) return overflowMenuItems
-    return overflowMenuItems.filter((item) => !item.permission || hasPermission(item.permission))
-  }, [hasPermission, loading])
+    if (loading) return overflowMenuItems.filter((i) => !i.requireOwner)
+    return overflowMenuItems.filter((item) => {
+      if (item.requireOwner && !isOwner) return false
+      return !item.permission || hasPermission(item.permission)
+    })
+  }, [hasPermission, loading, isOwner])
 
   const isPrimaryActive = (key: PrimaryKey) => {
     if (key === 'dashboard') return pathname === '/dashboard'
@@ -92,13 +102,15 @@ export function MobileBottomNav() {
     if (key === 'newTask') {
       return (
         pathMatches(pathname, '/dashboard/work-board') &&
+        !pathname.startsWith('/dashboard/work-board/productividad') &&
         searchParams.get('new') === '1'
       )
     }
 
     if (key === 'workBoard') {
       if (!pathMatches(pathname, '/dashboard/work-board')) return false
-      // No marcar Tablero si está el flujo «Nueva tarea»
+      if (pathname.startsWith('/dashboard/work-board/productividad')) return false
+      // No marcar Tablero si está el flujo «Tarea»
       if (searchParams.get('new') === '1') return false
       return true
     }
@@ -127,7 +139,7 @@ export function MobileBottomNav() {
   return (
     <>
       <nav
-        className="lg:hidden fixed bottom-0 left-0 right-0 z-50 pointer-events-none pb-[max(0.5rem,env(safe-area-inset-bottom))] px-3 pt-2"
+        className="lg:hidden fixed bottom-0 left-0 right-0 z-50 pointer-events-none pb-[max(0.375rem,env(safe-area-inset-bottom))] px-3 pt-1.5"
         aria-label="Navegación principal"
       >
         <div
@@ -137,10 +149,12 @@ export function MobileBottomNav() {
             'backdrop-blur-md supports-[backdrop-filter]:bg-zinc-950/90'
           )}
         >
-          <ul className="grid grid-cols-5 gap-0 px-1 py-2">
+          <ul className="grid grid-cols-5 gap-0 px-1 py-1.5">
             {primaryBar.map(({ key, href, label, icon: Icon, permission }) => {
               const allowed = canUse(permission)
               const active = allowed && isPrimaryActive(key)
+              const itemClass =
+                'flex w-full max-w-[5.5rem] flex-col items-center gap-1 rounded-xl px-1 py-1.5 text-xs font-semibold leading-tight transition-colors'
               return (
                 <li key={key} className="flex min-w-0 justify-center">
                   {allowed ? (
@@ -149,19 +163,19 @@ export function MobileBottomNav() {
                       aria-current={active ? 'page' : undefined}
                       aria-label={label}
                       className={cn(
-                        'flex w-full max-w-[4.5rem] flex-col items-center gap-1 rounded-xl px-1 py-1.5 text-[10px] font-semibold leading-tight transition-colors',
+                        itemClass,
                         active ? 'text-brand' : 'text-zinc-400 active:text-zinc-200'
                       )}
                     >
-                      <Icon className={cn('h-5 w-5 shrink-0', active && 'text-brand')} aria-hidden />
+                      <Icon className={cn('h-6 w-6 shrink-0', active && 'text-brand')} aria-hidden />
                       <span className="line-clamp-2 text-center">{label}</span>
                     </Link>
                   ) : (
                     <span
-                      className="flex w-full max-w-[4.5rem] flex-col items-center gap-1 rounded-xl px-1 py-1.5 text-[10px] font-semibold text-zinc-600 opacity-60"
+                      className={cn(itemClass, 'text-zinc-600 opacity-60')}
                       title="Sin permiso"
                     >
-                      <Icon className="h-5 w-5 shrink-0" aria-hidden />
+                      <Icon className="h-6 w-6 shrink-0" aria-hidden />
                       <span className="line-clamp-2 text-center">{label}</span>
                     </span>
                   )}
@@ -175,12 +189,12 @@ export function MobileBottomNav() {
                 aria-expanded={moreOpen}
                 onClick={() => setMoreOpen(true)}
                 className={cn(
-                  'flex w-full max-w-[4.5rem] flex-col items-center gap-1 rounded-xl px-1 py-1.5 text-[10px] font-semibold leading-tight transition-colors',
+                  'flex w-full max-w-[5.5rem] flex-col items-center gap-1 rounded-xl px-1 py-1.5 text-xs font-semibold leading-tight transition-colors',
                   cuentaActive ? 'text-brand' : 'text-zinc-400 active:text-zinc-200'
                 )}
               >
                 <UserCircle
-                  className={cn('h-5 w-5 shrink-0', cuentaActive && 'text-brand')}
+                  className={cn('h-6 w-6 shrink-0', cuentaActive && 'text-brand')}
                   aria-hidden
                 />
                 <span className="line-clamp-2 text-center">Cuenta</span>

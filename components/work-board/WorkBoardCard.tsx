@@ -1,7 +1,7 @@
 'use client'
 
 import type { PointerEventHandler } from 'react'
-import { AtSign, Calendar, Check, Flag, Lock, Pencil, Trash2, User, Wrench } from 'lucide-react'
+import { AtSign, Calendar, Check, Flag, Pencil, Trash2, User, Wrench } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
   kanbanPriorityFlagClass,
@@ -32,6 +32,9 @@ function chipTextClass(compact?: boolean) {
   return cn('min-w-0 max-w-[140px] truncate leading-snug', compact ? 'text-xs' : 'text-sm')
 }
 
+const KANBAN_CHIP_READONLY_CLASS =
+  'inline-flex max-w-full shrink-0 items-center justify-center gap-1.5 rounded-lg border border-zinc-600/70 bg-zinc-900/50 px-2 py-1.5 font-medium text-zinc-400 shadow-sm cursor-default'
+
 export function WorkBoardCard({
   item,
   compact,
@@ -39,6 +42,8 @@ export function WorkBoardCard({
   onFieldFocus,
   quickEdit,
   kanbanActions,
+  /** Sin clic en título ni chips (p. ej. miembro del equipo sin permiso de edición en esa tarjeta). */
+  kanbanInteractionLocked,
   /** Color de columna (`pipeline_stages.color`): borde y tinte de tarjeta. */
   columnColor,
 }: {
@@ -51,6 +56,7 @@ export function WorkBoardCard({
   quickEdit?: WorkBoardCardQuickEditContext
   /** Iconos hecho / editar / eliminar (solo vista Kanban). */
   kanbanActions?: WorkBoardCardKanbanActions
+  kanbanInteractionLocked?: boolean
   columnColor?: string | null
 }) {
   const now = new Date()
@@ -71,6 +77,7 @@ export function WorkBoardCard({
   }
 
   const chipClick = (field: WorkBoardCardFieldFocus) => {
+    if (kanbanInteractionLocked) return
     onFieldFocus?.(item, field)
   }
 
@@ -90,20 +97,33 @@ export function WorkBoardCard({
       style={accentStyle}
     >
       <div className="flex items-start gap-1">
-        <button
-          type="button"
-          onClick={() => onOpen?.(item)}
-          className="min-w-0 flex-1 cursor-pointer rounded-md text-left transition-opacity hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
-        >
-          <p
-            className={cn(
-              'truncate font-semibold leading-snug text-zinc-100',
-              compact ? 'text-[15px]' : 'text-base'
-            )}
+        {kanbanInteractionLocked || !onOpen ? (
+          <div className="min-w-0 flex-1 cursor-default rounded-md text-left">
+            <p
+              className={cn(
+                'truncate font-semibold leading-snug text-zinc-100',
+                compact ? 'text-[15px]' : 'text-base'
+              )}
+            >
+              {item.displayTitle}
+            </p>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => onOpen(item)}
+            className="min-w-0 flex-1 cursor-pointer rounded-md text-left transition-opacity hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
           >
-            {item.displayTitle}
-          </p>
-        </button>
+            <p
+              className={cn(
+                'truncate font-semibold leading-snug text-zinc-100',
+                compact ? 'text-[15px]' : 'text-base'
+              )}
+            >
+              {item.displayTitle}
+            </p>
+          </button>
+        )}
         {showKanbanToolbar ? (
           <div
             className="pointer-events-none flex shrink-0 items-center gap-0.5 rounded-md border border-zinc-700/70 bg-zinc-950/60 p-0.5 opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100"
@@ -177,111 +197,183 @@ export function WorkBoardCard({
             compact ? 'gap-1.5' : 'gap-2'
           )}
         >
-          {item.visibility === 'personal' ? (
+          {kanbanInteractionLocked ? (
             <span
-              className="inline-flex shrink-0 items-center gap-1 rounded-md border border-amber-700/50 bg-amber-950/30 px-1.5 py-0.5"
-              title="Visibilidad personal (solo asignado)"
+              className={cn(
+                KANBAN_CHIP_READONLY_CLASS,
+                rangeOverdue && hasSchedule && 'border-red-500/40 bg-red-950/20 text-red-200'
+              )}
+              title={
+                hasSchedule
+                  ? `Inicio: ${item.start_time}\nFin: ${item.end_time}`
+                  : 'Sin fecha'
+              }
+              aria-label={rangeLabel ?? 'Fecha'}
             >
-              <Lock className={cn(chipIconClass(compact), 'text-amber-400/95')} aria-hidden />
-            </span>
-          ) : null}
-          <button
-            type="button"
-            data-kanban-chip
-            onPointerDown={stopDrag}
-            onClick={() => chipClick('schedule')}
-            className={cn(
-              WORK_BOARD_KANBAN_CHIP_CLASS,
-              rangeOverdue && hasSchedule && 'border-red-500/40 bg-red-950/20 text-red-200'
-            )}
-            title={
-              hasSchedule
-                ? `Inicio: ${item.start_time}\nFin: ${item.end_time}`
-                : 'Añadir o editar fecha'
-            }
-            aria-label={rangeLabel ?? 'Fecha: añadir o editar'}
-          >
-            <Calendar
-              className={cn(
-                chipIconClass(compact),
-                rangeOverdue && hasSchedule ? 'text-red-400' : 'text-zinc-400'
-              )}
-              aria-hidden
-            />
-            {rangeLabel ? (
-              <span
+              <Calendar
                 className={cn(
-                  chipTextClass(compact),
-                  'tabular-nums',
-                  rangeOverdue ? 'text-red-200' : 'text-emerald-400/95'
+                  chipIconClass(compact),
+                  rangeOverdue && hasSchedule ? 'text-red-400' : 'text-zinc-400'
                 )}
-              >
-                {rangeLabel}
-              </span>
-            ) : null}
-          </button>
-
-          <button
-            type="button"
-            data-kanban-chip
-            onPointerDown={stopDrag}
-            onClick={() => chipClick('staff')}
-            className={cn(WORK_BOARD_KANBAN_CHIP_CLASS, !assignee && 'px-2')}
-            title={assignee ? `Responsable: ${assignee}` : 'Asignar empleado'}
-            aria-label={assignee ?? 'Empleado: asignar'}
-          >
-            <AtSign className={cn(chipIconClass(compact), 'text-zinc-400')} aria-hidden />
-            {assignee ? (
-              <span className={chipTextClass(compact)}>{assignee}</span>
-            ) : null}
-          </button>
-
-          <button
-            type="button"
-            data-kanban-chip
-            onPointerDown={stopDrag}
-            onClick={() => chipClick('priority')}
-            className={cn(WORK_BOARD_KANBAN_CHIP_CLASS, !priorityText && 'px-2')}
-            title={priorityText ?? 'Añadir prioridad'}
-            aria-label={priorityText ?? 'Prioridad: añadir'}
-          >
-            <Flag
+                aria-hidden
+              />
+              {rangeLabel ? (
+                <span
+                  className={cn(
+                    chipTextClass(compact),
+                    'tabular-nums',
+                    rangeOverdue ? 'text-red-200' : 'text-emerald-400/95'
+                  )}
+                >
+                  {rangeLabel}
+                </span>
+              ) : null}
+            </span>
+          ) : (
+            <button
+              type="button"
+              data-kanban-chip
+              onPointerDown={stopDrag}
+              onClick={() => chipClick('schedule')}
               className={cn(
-                chipIconClass(compact),
-                priority ? kanbanPriorityFlagClass(priority) : 'text-zinc-400'
+                WORK_BOARD_KANBAN_CHIP_CLASS,
+                rangeOverdue && hasSchedule && 'border-red-500/40 bg-red-950/20 text-red-200'
               )}
-              aria-hidden
-            />
-            {priorityText ? (
-              <span className={chipTextClass(compact)}>{priorityText}</span>
-            ) : null}
-          </button>
+              title={
+                hasSchedule
+                  ? `Inicio: ${item.start_time}\nFin: ${item.end_time}`
+                  : 'Añadir o editar fecha'
+              }
+              aria-label={rangeLabel ?? 'Fecha: añadir o editar'}
+            >
+              <Calendar
+                className={cn(
+                  chipIconClass(compact),
+                  rangeOverdue && hasSchedule ? 'text-red-400' : 'text-zinc-400'
+                )}
+                aria-hidden
+              />
+              {rangeLabel ? (
+                <span
+                  className={cn(
+                    chipTextClass(compact),
+                    'tabular-nums',
+                    rangeOverdue ? 'text-red-200' : 'text-emerald-400/95'
+                  )}
+                >
+                  {rangeLabel}
+                </span>
+              ) : null}
+            </button>
+          )}
 
-          <button
-            type="button"
-            data-kanban-chip
-            onPointerDown={stopDrag}
-            onClick={() => chipClick('client')}
-            className={cn(WORK_BOARD_KANBAN_CHIP_CLASS, !client && 'px-2')}
-            title={client ? `Cliente: ${client}` : 'Añadir cliente'}
-            aria-label={client ?? 'Cliente: añadir'}
-          >
-            <User className={cn(chipIconClass(compact), 'text-zinc-400')} aria-hidden />
-            {client ? <span className={chipTextClass(compact)}>{client}</span> : null}
-          </button>
+          {kanbanInteractionLocked ? (
+            <span
+              className={cn(KANBAN_CHIP_READONLY_CLASS, !assignee && 'px-2')}
+              title={assignee ? `Responsable: ${assignee}` : 'Responsable'}
+              aria-label={assignee ?? 'Empleado'}
+            >
+              <AtSign className={cn(chipIconClass(compact), 'text-zinc-400')} aria-hidden />
+              {assignee ? <span className={chipTextClass(compact)}>{assignee}</span> : null}
+            </span>
+          ) : (
+            <button
+              type="button"
+              data-kanban-chip
+              onPointerDown={stopDrag}
+              onClick={() => chipClick('staff')}
+              className={cn(WORK_BOARD_KANBAN_CHIP_CLASS, !assignee && 'px-2')}
+              title={assignee ? `Responsable: ${assignee}` : 'Asignar empleado'}
+              aria-label={assignee ?? 'Empleado: asignar'}
+            >
+              <AtSign className={cn(chipIconClass(compact), 'text-zinc-400')} aria-hidden />
+              {assignee ? <span className={chipTextClass(compact)}>{assignee}</span> : null}
+            </button>
+          )}
 
-          <button
-            type="button"
-            data-kanban-chip
-            onPointerDown={stopDrag}
-            onClick={() => chipClick('service')}
-            className={cn(WORK_BOARD_KANBAN_CHIP_CLASS, !service && 'px-2')}
-            title={service ? `Servicio: ${service}` : 'Añadir servicio'}
-            aria-label={service ?? 'Servicio: añadir'}
-          >
-            <Wrench className={cn(chipIconClass(compact), 'text-zinc-400')} aria-hidden />
-            {service ? <span className={chipTextClass(compact)}>{service}</span> : null}
-          </button>
+          {kanbanInteractionLocked ? (
+            <span
+              className={cn(KANBAN_CHIP_READONLY_CLASS, !priorityText && 'px-2')}
+              title={priorityText ?? 'Prioridad'}
+              aria-label={priorityText ?? 'Prioridad'}
+            >
+              <Flag
+                className={cn(
+                  chipIconClass(compact),
+                  priority ? kanbanPriorityFlagClass(priority) : 'text-zinc-400'
+                )}
+                aria-hidden
+              />
+              {priorityText ? <span className={chipTextClass(compact)}>{priorityText}</span> : null}
+            </span>
+          ) : (
+            <button
+              type="button"
+              data-kanban-chip
+              onPointerDown={stopDrag}
+              onClick={() => chipClick('priority')}
+              className={cn(WORK_BOARD_KANBAN_CHIP_CLASS, !priorityText && 'px-2')}
+              title={priorityText ?? 'Añadir prioridad'}
+              aria-label={priorityText ?? 'Prioridad: añadir'}
+            >
+              <Flag
+                className={cn(
+                  chipIconClass(compact),
+                  priority ? kanbanPriorityFlagClass(priority) : 'text-zinc-400'
+                )}
+                aria-hidden
+              />
+              {priorityText ? <span className={chipTextClass(compact)}>{priorityText}</span> : null}
+            </button>
+          )}
+
+          {kanbanInteractionLocked ? (
+            <span
+              className={cn(KANBAN_CHIP_READONLY_CLASS, !client && 'px-2')}
+              title={client ? `Cliente: ${client}` : 'Cliente'}
+              aria-label={client ?? 'Cliente'}
+            >
+              <User className={cn(chipIconClass(compact), 'text-zinc-400')} aria-hidden />
+              {client ? <span className={chipTextClass(compact)}>{client}</span> : null}
+            </span>
+          ) : (
+            <button
+              type="button"
+              data-kanban-chip
+              onPointerDown={stopDrag}
+              onClick={() => chipClick('client')}
+              className={cn(WORK_BOARD_KANBAN_CHIP_CLASS, !client && 'px-2')}
+              title={client ? `Cliente: ${client}` : 'Añadir cliente'}
+              aria-label={client ?? 'Cliente: añadir'}
+            >
+              <User className={cn(chipIconClass(compact), 'text-zinc-400')} aria-hidden />
+              {client ? <span className={chipTextClass(compact)}>{client}</span> : null}
+            </button>
+          )}
+
+          {kanbanInteractionLocked ? (
+            <span
+              className={cn(KANBAN_CHIP_READONLY_CLASS, !service && 'px-2')}
+              title={service ? `Servicio: ${service}` : 'Servicio'}
+              aria-label={service ?? 'Servicio'}
+            >
+              <Wrench className={cn(chipIconClass(compact), 'text-zinc-400')} aria-hidden />
+              {service ? <span className={chipTextClass(compact)}>{service}</span> : null}
+            </span>
+          ) : (
+            <button
+              type="button"
+              data-kanban-chip
+              onPointerDown={stopDrag}
+              onClick={() => chipClick('service')}
+              className={cn(WORK_BOARD_KANBAN_CHIP_CLASS, !service && 'px-2')}
+              title={service ? `Servicio: ${service}` : 'Añadir servicio'}
+              aria-label={service ?? 'Servicio: añadir'}
+            >
+              <Wrench className={cn(chipIconClass(compact), 'text-zinc-400')} aria-hidden />
+              {service ? <span className={chipTextClass(compact)}>{service}</span> : null}
+            </button>
+          )}
         </div>
       )}
     </div>

@@ -137,12 +137,12 @@ export function mapAppointmentRowToWorkItem(row: AppointmentRowInput): WorkItemC
   }
 
   const createdBy = row.created_by ?? null
-  const teamIds =
-    teamsLinked.length > 0
-      ? teamsLinked.map((t) => t.id)
-      : row.team_id
-        ? [row.team_id]
-        : []
+  const teamIdsSet = new Set<string>()
+  for (const t of teamsLinked) {
+    teamIdsSet.add(t.id)
+  }
+  if (row.team_id) teamIdsSet.add(row.team_id)
+  const teamIds = teamIdsSet.size > 0 ? [...teamIdsSet] : []
 
   return {
     id: row.id,

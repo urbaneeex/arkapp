@@ -9,8 +9,6 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { cn } from '@/lib/utils'
 import type { KanbanFiltersState, KanbanPriorityFilterId } from '@/lib/work-board/kanbanFilters'
 import { countActiveKanbanFilters, defaultKanbanFilters } from '@/lib/work-board/kanbanFilters'
-import type { KanbanScope } from '@/lib/work-board/kanbanScope'
-import { KanbanScopePicker } from './KanbanScopePicker'
 
 type StaffOpt = { id: string; name: string }
 type ClientOpt = { id: string; name: string }
@@ -34,19 +32,12 @@ export function KanbanFiltersPanel({
   services,
   filters,
   onFiltersChange,
-  kanbanScope,
-  onKanbanScopeChange,
-  showKanbanScopePicker = false,
 }: {
   staffList: StaffOpt[]
   clients: ClientOpt[]
   services: ServiceOpt[]
   filters: KanbanFiltersState
   onFiltersChange: (next: KanbanFiltersState) => void
-  /** Todo / Mi equipo / Mis tareas (solo usuarios con permiso ver todo el tablero). */
-  kanbanScope?: KanbanScope
-  onKanbanScopeChange?: (next: KanbanScope) => void
-  showKanbanScopePicker?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const [clientSearch, setClientSearch] = useState('')
@@ -90,7 +81,7 @@ export function KanbanFiltersPanel({
       </PopoverTrigger>
       <PopoverContent
         align="start"
-        className="max-h-[min(85vh,560px)] w-[min(100vw-2rem,380px)] overflow-y-auto border border-zinc-700 bg-[#1c1c1e] p-0 text-sm text-zinc-200 shadow-2xl"
+        className="z-[120] max-h-[min(85vh,560px)] w-[min(100vw-2rem,380px)] overflow-y-auto border border-zinc-700 bg-[#1c1c1e] p-0 text-sm text-zinc-200 shadow-2xl"
       >
         <div className="border-b border-zinc-700 px-3 py-2.5 flex items-center justify-between gap-2">
           <p className="font-medium text-zinc-100">Filtros</p>
@@ -110,18 +101,6 @@ export function KanbanFiltersPanel({
         </div>
 
         <div className="space-y-4 px-3 py-3">
-          {showKanbanScopePicker && kanbanScope != null && onKanbanScopeChange ? (
-            <section className="space-y-2">
-              <Label className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                Ver
-              </Label>
-              <KanbanScopePicker value={kanbanScope} onChange={onKanbanScopeChange} />
-              <p className="text-[11px] leading-snug text-zinc-500">
-                Define qué citas entran en el tablero antes del resto de filtros.
-              </p>
-            </section>
-          ) : null}
-
           <section className="space-y-2">
             <Label className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
               Ver archivadas

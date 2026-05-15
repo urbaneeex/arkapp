@@ -25,7 +25,6 @@ export async function GET(req: Request) {
     view: url.searchParams.get('view') ?? undefined,
     new: url.searchParams.get('new') ?? undefined,
     period: url.searchParams.get('period') ?? undefined,
-    scope: url.searchParams.get('scope') ?? undefined,
   }
 
   const businessCountry =

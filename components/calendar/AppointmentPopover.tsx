@@ -41,6 +41,7 @@ export function AppointmentPopover({
   onEdit,
   onToast,
   canEdit,
+  canChangeStage = true,
 }: {
   appointment: AppointmentForPopover | null
   open: boolean
@@ -50,6 +51,8 @@ export function AppointmentPopover({
   onEdit: (id: string) => void
   onToast: (message: string, type: 'success' | 'error') => void
   canEdit?: boolean
+  /** Si false, no puede cambiar etapa (solo creador/asignado/equipo pueden mover estado). */
+  canChangeStage?: boolean
 }) {
   const router = useRouter()
   const anchorRef = useRef<HTMLDivElement>(null)
@@ -113,7 +116,9 @@ export function AppointmentPopover({
             <select
               value={appointment.status}
               onChange={handleStatusSelect}
-              className="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 cursor-pointer"
+              disabled={!canChangeStage}
+              title={!canChangeStage ? 'No tienes permiso para cambiar el estado' : undefined}
+              className="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
             >
               {STATUS_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>

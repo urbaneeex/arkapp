@@ -211,7 +211,7 @@ export function StaffClient({
                             {level.label}
                             {level.id === 'propietario' && (
                               <span className="block text-xs font-normal text-zinc-400 mt-0.5">
-                                (siempre todo)
+                                (fijos)
                               </span>
                             )}
                           </TableHead>

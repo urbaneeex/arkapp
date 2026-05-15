@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { z } from 'zod'
-import { resolveUserBusinessAndPermissions, hasServerPermission } from '@/lib/user-permissions.server'
-import { userParticipatesInAppointmentRow } from '@/lib/work-board/appointmentParticipation'
+import { resolveUserBusinessAndPermissions } from '@/lib/user-permissions.server'
 import { isPipelineStageSlug } from '@/lib/work-items/constants'
+import { createServiceRoleClient } from '@/lib/supabase/admin'
 
 const BodySchema = z
   .object({
@@ -20,6 +20,18 @@ const BodySchema = z
     (d) => !d.column_item_ids?.length || Boolean(d.pipeline_stage_id),
     { message: 'column_item_ids requires pipeline_stage_id' }
   )
+
+type AptMoveRow = {
+  id: string
+  business_id: string
+  pipeline_stage_id: string | null
+  board_sort_order: number | null
+  created_by?: string | null
+  staff_id?: string | null
+  metadata?: unknown
+  team_id?: string | null
+  appointment_teams?: { team_id: string }[] | null
+}
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params
@@ -42,38 +54,18 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     return NextResponse.json({ error: 'forbidden' }, { status: 403 })
   }
 
-  const canEdit = hasServerPermission(access, 'appointments_edit')
-  const canMove = hasServerPermission(access, 'appointments_move')
-
   const { data: apt, error: aptErr } = await supabase
     .from('appointments')
-    .select('id, business_id, pipeline_stage_id, board_sort_order, created_by, staff_id, metadata')
+    .select('id, business_id, pipeline_stage_id, board_sort_order')
     .eq('id', id)
     .maybeSingle()
 
-  if (aptErr || !apt || apt.business_id !== access.businessId) {
+  const aptRow = apt as AptMoveRow | null
+  if (aptErr || !aptRow || aptRow.business_id !== access.businessId) {
     return NextResponse.json({ error: 'not_found' }, { status: 404 })
   }
 
-  const participates = userParticipatesInAppointmentRow(
-    {
-      business_id: apt.business_id,
-      created_by: apt.created_by,
-      staff_id: apt.staff_id,
-      metadata: apt.metadata,
-    },
-    user.id,
-    access.businessId
-  )
-
   const columnIds = parsed.data.column_item_ids
-  if (columnIds && columnIds.length > 0 && !canEdit && !canMove) {
-    return NextResponse.json({ error: 'forbidden' }, { status: 403 })
-  }
-
-  if (!canEdit && !canMove && !participates) {
-    return NextResponse.json({ error: 'forbidden' }, { status: 403 })
-  }
 
   let targetStageId = parsed.data.pipeline_stage_id ?? null
   if (!targetStageId && parsed.data.status) {
@@ -105,13 +97,14 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       ? { completed_at: new Date().toISOString() }
       : { completed_at: null }
 
-  const sourceStageId = apt.pipeline_stage_id
+  const sourceStageId = aptRow.pipeline_stage_id
 
   if (columnIds && columnIds.length > 0) {
     if (!columnIds.includes(id)) {
       return NextResponse.json({ error: 'column_item_ids must include this appointment' }, { status: 400 })
     }
-    const { data: rows, error: rowsErr } = await supabase
+    const admin = createServiceRoleClient()
+    const { data: rows, error: rowsErr } = await admin
       .from('appointments')
       .select('id')
       .eq('business_id', access.businessId)
@@ -122,7 +115,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     }
 
     for (let i = 0; i < columnIds.length; i++) {
-      const { error: uErr } = await supabase
+      const { error: uErr } = await admin
         .from('appointments')
         .update({
           pipeline_stage_id: targetStageId,
@@ -136,8 +129,8 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       }
     }
 
-    if (sourceStageId !== targetStageId) {
-      const { data: remaining, error: remErr } = await supabase
+    if (sourceStageId && sourceStageId !== targetStageId) {
+      const { data: remaining, error: remErr } = await admin
         .from('appointments')
         .select('id')
         .eq('business_id', access.businessId)
@@ -147,7 +140,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
       if (!remErr && remaining?.length) {
         for (let i = 0; i < remaining.length; i++) {
-          const { error: rErr } = await supabase
+          const { error: rErr } = await admin
             .from('appointments')
             .update({ board_sort_order: i })
             .eq('id', remaining[i]!.id)

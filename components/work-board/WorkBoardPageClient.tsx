@@ -3,7 +3,6 @@
 import type { ReactNode } from 'react'
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import dynamic from 'next/dynamic'
-import { useRouter } from 'next/navigation'
 import { usePermissions } from '@/hooks/usePermissions'
 import type { WorkItemCard, WorkBoardStaffOption, PipelineStageRow } from '@/lib/work-items/types'
 import { normalizeStageCategoryRow } from '@/lib/work-items/seedPipelineStages'
@@ -25,8 +24,7 @@ import {
   parseKanbanFiltersFromStorage,
   type KanbanFiltersState,
 } from '@/lib/work-board/kanbanFilters'
-import type { KanbanScope } from './KanbanScopePicker'
-import { filterKanbanItemsByScope } from '@/lib/work-board/kanbanScopeFilter'
+import { userCanMoveAppointmentCardClient, userCanEditAppointmentCardClient } from '@/lib/work-board/appointmentParticipation'
 import {
   mapAppointmentRowToWorkItem,
   workItemCardToAppointmentRowInput,
@@ -116,15 +114,13 @@ export function WorkBoardPageClient({
   businessCountry,
   shiftsByDay,
   teamsForKanban = [],
-  canTasksViewAll = false,
   myTeamIds = [],
-  initialKanbanScope = 'todo',
   onInvalidateBoard,
 }: {
   businessId: string
   currentUserId: string
   initialStages: PipelineStageRow[]
-  /** Todas las citas activas visibles (RLS); el cliente filtra por pestaña sin nuevo fetch. */
+  /** Citas activas visibles (RLS); filtros del panel aplican sobre esta lista. */
   initialItems: WorkItemCard[]
   initialStaffOptions: WorkBoardStaffOption[]
   initialView?: WorkBoardViewMode
@@ -139,33 +135,11 @@ export function WorkBoardPageClient({
   businessCountry: string
   shiftsByDay: Record<number, Shift[]>
   teamsForKanban?: { id: string; name: string; color: string }[]
-  canTasksViewAll?: boolean
-  /** Equipos del usuario actual (filtrado «Mi equipo» en cliente). */
+  /** Equipos del usuario actual (mover tarjetas / permisos de equipo). */
   myTeamIds?: string[]
-  initialKanbanScope?: KanbanScope
   /** Tras mutaciones: revalidar datos del tablero (p. ej. React Query) sin `router.refresh`. */
   onInvalidateBoard?: () => void
 }) {
-  const router = useRouter()
-  const [kanbanScope, setKanbanScope] = useState<KanbanScope>(() => initialKanbanScope)
-
-  useEffect(() => {
-    setKanbanScope(initialKanbanScope)
-  }, [initialKanbanScope])
-
-  const syncKanbanScopeUrl = useCallback((next: KanbanScope) => {
-    if (typeof window === 'undefined') return
-    const u = new URL(window.location.href)
-    u.searchParams.set('scope', next)
-    window.history.replaceState(window.history.state, '', `${u.pathname}${u.search}${u.hash}`)
-  }, [])
-  const handleKanbanScopeChange = useCallback(
-    (next: KanbanScope) => {
-      setKanbanScope(next)
-      syncKanbanScopeUrl(next)
-    },
-    [syncKanbanScopeUrl]
-  )
   const [catalogClients, setCatalogClients] = useState(initialCatalogClients)
   const [catalogServices, setCatalogServices] = useState(initialCatalogServices)
 
@@ -191,21 +165,23 @@ export function WorkBoardPageClient({
     }
   }, [])
 
-  const { hasPermission, loading, isOwner, accessLevel } = usePermissions()
+  const { hasPermission, loading } = usePermissions()
   const canView = hasPermission('work_board_view')
   const canManageStages = hasPermission('pipeline_stages_manage')
-  const canCreateAppointments = hasPermission('appointments_create')
-  const canEditAppointments = hasPermission('appointments_edit')
-  const canMoveAppointments = hasPermission('appointments_move')
-  const canDeleteBusinessAppointments =
-    (isOwner || accessLevel === 'alto') && hasPermission('appointments_delete')
-
+  const canCreateAppointments = hasPermission('work_board_view')
+  const canMoveAppointmentCard = useCallback(
+    (item: WorkItemCard) =>
+      userCanMoveAppointmentCardClient(item, currentUserId, businessId, myTeamIds),
+    [businessId, currentUserId, myTeamIds]
+  )
+  const canEditAppointmentCard = useCallback(
+    (item: WorkItemCard) =>
+      userCanEditAppointmentCardClient(item, currentUserId, businessId),
+    [businessId, currentUserId]
+  )
   const canDeleteWorkBoardItem = useCallback(
-    (item: WorkItemCard) => {
-      if (canDeleteBusinessAppointments) return true
-      return item.created_by != null && item.created_by === currentUserId
-    },
-    [canDeleteBusinessAppointments, currentUserId]
+    (item: WorkItemCard) => item.created_by != null && item.created_by === currentUserId,
+    [currentUserId]
   )
 
   const [viewMode, setViewMode] = useState<WorkBoardViewMode>(initialView)
@@ -278,20 +254,10 @@ export function WorkBoardPageClient({
     }
   }, [kanbanFilters.showArchivedOnly])
 
-  const scopedKanbanItems = useMemo(
-    () =>
-      filterKanbanItemsByScope(initialItems, kanbanScope, {
-        canTasksViewAll,
-        currentUserId,
-        myTeamIds,
-      }),
-    [initialItems, kanbanScope, canTasksViewAll, currentUserId, myTeamIds]
-  )
-
   const kanbanDisplayItems = useMemo(() => {
     if (kanbanFilters.showArchivedOnly) return archivedKanbanItems
-    return scopedKanbanItems
-  }, [kanbanFilters.showArchivedOnly, archivedKanbanItems, scopedKanbanItems])
+    return initialItems
+  }, [kanbanFilters.showArchivedOnly, archivedKanbanItems, initialItems])
 
   const calendarAppointmentsFiltered = useMemo((): AppointmentRowInput[] => {
     const rows = rawAppointments as unknown as AppointmentRowInput[]
@@ -315,10 +281,6 @@ export function WorkBoardPageClient({
 
   const addTaskStageId = stages[0]?.id
 
-  const openItemInFullPage = (item: WorkItemCard) => {
-    router.push(`/dashboard/appointments/${item.id}/edit`)
-  }
-
   const handleAddTask = useCallback(() => {
     if (!canCreateAppointments) return
     setAddTaskFormKey((k) => k + 1)
@@ -336,9 +298,6 @@ export function WorkBoardPageClient({
       services={catalogServices}
       filters={kanbanFilters}
       onFiltersChange={setKanbanFilters}
-      showKanbanScopePicker={canTasksViewAll}
-      kanbanScope={kanbanScope}
-      onKanbanScopeChange={handleKanbanScopeChange}
     />
   )
 
@@ -438,20 +397,23 @@ export function WorkBoardPageClient({
             kanbanClients={catalogClients}
             teams={teamsForKanban}
             canCreateAppointments={canCreateAppointments}
-            canEditAppointments={canEditAppointments}
-            canMoveAppointments={canMoveAppointments}
+            canMoveAppointmentCard={canMoveAppointmentCard}
             canDeleteWorkBoardItem={canDeleteWorkBoardItem}
-            onItemOpen={openItemInFullPage}
             onStageUpdated={() => onInvalidateBoard?.()}
             kanbanFilters={kanbanFilters}
             dragDisabled={kanbanFilters.showArchivedOnly}
+            canBulkReorderKanban={false}
+            canEditAppointmentCard={canEditAppointmentCard}
           />
         </>
       )}
 
       {isCalendar && (
         <CalendarView
+          onInvalidateBoard={onInvalidateBoard}
+          defaultStageId={stages[0]?.id}
           currentUserId={currentUserId}
+          myTeamIds={myTeamIds}
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           appointments={calendarAppointmentsFiltered as any}
           clients={catalogClients}

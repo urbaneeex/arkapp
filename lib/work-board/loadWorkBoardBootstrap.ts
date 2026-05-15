@@ -7,8 +7,6 @@ import {
 } from '@/lib/work-items/mapAppointmentRow'
 import { ensurePipelineStagesForBusiness, normalizeStageCategoryRow } from '@/lib/work-items/seedPipelineStages'
 import type { PipelineStageRow, WorkBoardStaffOption, WorkItemCard } from '@/lib/work-items/types'
-import { resolveUserBusinessAndPermissions, hasServerPermission } from '@/lib/user-permissions.server'
-import type { KanbanScope } from '@/lib/work-board/kanbanScope'
 
 export type ShiftSlot = { open_time: string; close_time: string; is_closed: boolean }
 
@@ -28,7 +26,6 @@ export type WorkBoardSearchParams = {
   view?: string
   new?: string
   period?: string
-  scope?: string
 }
 
 /** Citas + joins mínimos para Kanban/calendario. */
@@ -46,11 +43,6 @@ function parseCalendarPeriod(raw: string | undefined): CalendarPeriod | null {
   return null
 }
 
-function parseKanbanScope(raw: string | undefined): KanbanScope | null {
-  if (raw === 'mis' || raw === 'equipo' || raw === 'todo') return raw
-  return null
-}
-
 export type WorkBoardBootstrapPayload = {
   businessId: string
   currentUserId: string
@@ -65,9 +57,7 @@ export type WorkBoardBootstrapPayload = {
   businessCountry: string
   shiftsByDay: Record<number, ShiftSlot[]>
   teamsForKanban: { id: string; name: string; color: string }[]
-  canTasksViewAll: boolean
   myTeamIds: string[]
-  initialKanbanScope: KanbanScope
 }
 
 /**
@@ -96,7 +86,6 @@ export async function fetchWorkBoardBootstrapPayload(
 
   const [
     ,
-    access,
     { data: teamRows },
     { data: teamMemberRows },
     { data: appointmentRows, error: appointmentsError },
@@ -105,7 +94,6 @@ export async function fetchWorkBoardBootstrapPayload(
     { data: businessHours },
   ] = await Promise.all([
     ensurePipelineStagesForBusiness(supabase, businessId),
-    resolveUserBusinessAndPermissions(userId),
     supabase.from('teams').select('id, name, color').eq('business_id', businessId).order('name'),
     supabase.from('team_members').select('team_id').eq('staff_id', userId),
     baseAppointmentsQuery,
@@ -127,12 +115,6 @@ export async function fetchWorkBoardBootstrapPayload(
       .eq('business_id', businessId)
       .order('day_of_week', { ascending: true }),
   ])
-
-  const canTasksViewAll =
-    access !== null && hasServerPermission(access, 'tasks_view_all')
-  const parsedScope = parseKanbanScope(sp.scope)
-  const initialKanbanScope: KanbanScope =
-    canTasksViewAll && parsedScope ? parsedScope : 'todo'
 
   const myTeamIds = (teamMemberRows ?? []).map((r) => r.team_id).filter(Boolean) as string[]
 
@@ -198,9 +180,7 @@ export async function fetchWorkBoardBootstrapPayload(
       name: t.name,
       color: t.color,
     })),
-    canTasksViewAll,
     myTeamIds,
-    initialKanbanScope,
   }
 }
 

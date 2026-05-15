@@ -41,8 +41,8 @@ export type PermissionKey =
   | 'absences_manage'
   | 'teams_view'
   | 'teams_manage'
-  | 'tasks_view_all'
   | 'tasks_view_own'
+  | 'tasks_metrics_view'
 
 export type Permissions = Record<PermissionKey, boolean>
 
@@ -76,8 +76,8 @@ const baseKeys: PermissionKey[] = [
   'absences_manage',
   'teams_view',
   'teams_manage',
-  'tasks_view_all',
   'tasks_view_own',
+  'tasks_metrics_view',
 ]
 
 function makePermissions(overrides: Partial<Permissions>): Permissions {
@@ -150,7 +150,6 @@ export const DEFAULT_MATRIX: PermissionMatrix = {
     pipeline_stages_manage: true,
     teams_view: true,
     teams_manage: true,
-    tasks_view_all: true,
     tasks_view_own: true,
   }),
   propietario: makePermissions({
@@ -181,8 +180,8 @@ export const DEFAULT_MATRIX: PermissionMatrix = {
     pipeline_stages_manage: true,
     teams_view: true,
     teams_manage: true,
-    tasks_view_all: true,
     tasks_view_own: true,
+    tasks_metrics_view: true,
   }),
 }
 
@@ -192,7 +191,9 @@ export function mergeWithDefault(
   fromDb: Record<string, boolean> | null | undefined
 ): Permissions {
   const def = DEFAULT_MATRIX[level]
-  if (!fromDb || typeof fromDb !== 'object') return { ...def }
+  if (!fromDb || typeof fromDb !== 'object') {
+    return { ...def }
+  }
   const out = { ...def }
   baseKeys.forEach((k) => {
     if (typeof fromDb[k] === 'boolean') (out as Record<string, boolean>)[k] = fromDb[k]
@@ -238,8 +239,12 @@ export const PERMISSION_ROWS: { category: string; permission: string; key: Permi
   { category: 'Vacaciones', permission: 'Aprobar/rechazar ausencias', key: 'absences_manage' },
   { category: 'Equipos', permission: 'Ver equipos y «Mis equipos»', key: 'teams_view' },
   { category: 'Equipos', permission: 'Gestionar equipos', key: 'teams_manage' },
-  { category: 'Tablero', permission: 'Ver todas las tareas del negocio', key: 'tasks_view_all' },
   { category: 'Tablero', permission: 'Ámbito de tareas propias', key: 'tasks_view_own' },
+  {
+    category: 'Tablero',
+    permission: 'Resumen del equipo / métricas (solo propietario en la práctica)',
+    key: 'tasks_metrics_view',
+  },
 ]
 
 export const PERMISSION_LEVELS_UI = [

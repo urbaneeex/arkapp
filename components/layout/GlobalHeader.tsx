@@ -19,12 +19,17 @@ const ClockStatusButton = dynamic(
 type GlobalHeaderProps = {
   /** Datos pre-renderizados desde el layout server — elimina CLS */
   initialUserName?: string
+  initialUserEmail?: string
   initialBusinessName?: string
 }
 
-export function GlobalHeader({ initialUserName = '', initialBusinessName = '' }: GlobalHeaderProps) {
+export function GlobalHeader({
+  initialUserName = '',
+  initialUserEmail = '',
+  initialBusinessName = '',
+}: GlobalHeaderProps) {
   const user = initialUserName
-    ? { email: '', name: initialUserName }
+    ? { email: initialUserEmail, name: initialUserName }
     : null
 
   return (
@@ -49,14 +54,14 @@ export function GlobalHeader({ initialUserName = '', initialBusinessName = '' }:
         </span>
       </Link>
 
-      {/* Derecha: fichaje (lazy) + avatar */}
-      <div className="flex items-center gap-3">
-        <ClockStatusButton />
+      {/* flex-row-reverse: mismo orden visual; UserMenu antes en DOM evita desfase de useId con ClockStatusButton (dynamic ssr:false). */}
+      <div className="flex flex-row-reverse items-center gap-3">
         {user ? (
           <UserMenu user={user} />
         ) : (
           <div className="h-10 w-10 rounded-full bg-zinc-800 animate-pulse" />
         )}
+        <ClockStatusButton />
       </div>
     </header>
   )

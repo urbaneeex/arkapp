@@ -1004,7 +1004,7 @@ export function KanbanQuickDatePicker({
         sideOffset={popoverSide === 'right' || popoverSide === 'left' ? 10 : 6}
         collisionPadding={16}
         className={cn(
-          'w-[min(100vw-1.5rem,320px)] max-w-[320px] border-zinc-700 bg-zinc-950 p-0 text-zinc-100 shadow-2xl shadow-black/40 dark:border-zinc-600 dark:bg-zinc-950',
+          'z-[160] w-[min(100vw-1.5rem,320px)] max-w-[320px] border-zinc-700 bg-zinc-950 p-0 text-zinc-100 shadow-2xl shadow-black/40 dark:border-zinc-600 dark:bg-zinc-950',
           'max-h-[min(32rem,calc(100vh-1.5rem))] overflow-y-auto overflow-x-hidden',
           'data-[side=right]:slide-in-from-left-2 data-[side=right]:duration-200',
           'data-[side=left]:slide-in-from-right-2 data-[side=left]:duration-200',

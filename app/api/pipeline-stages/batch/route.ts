@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createServiceRoleClient } from '@/lib/supabase/admin'
 import { z } from 'zod'
 import { resolveUserBusinessAndPermissions, hasServerPermission } from '@/lib/user-permissions.server'
 import {
@@ -128,18 +129,33 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  for (const { from_id, to_id } of reassignments) {
-    const { error: moveErr } = await supabase
-      .from('appointments')
-      .update({ pipeline_stage_id: to_id })
-      .eq('pipeline_stage_id', from_id)
-      .eq('business_id', businessId)
-
-    if (moveErr) {
+  if (reassignments.length > 0) {
+    let admin: ReturnType<typeof createServiceRoleClient>
+    try {
+      admin = createServiceRoleClient()
+    } catch {
       return NextResponse.json(
-        { error: moveErr.message, message: 'Error al mover las tareas al nuevo estado.' },
+        {
+          error: 'server_config',
+          message: 'Falta configuración del servidor para migrar tareas entre estados.',
+        },
         { status: 500 }
       )
+    }
+
+    for (const { from_id, to_id } of reassignments) {
+      const { error: moveErr } = await admin
+        .from('appointments')
+        .update({ pipeline_stage_id: to_id })
+        .eq('pipeline_stage_id', from_id)
+        .eq('business_id', businessId)
+
+      if (moveErr) {
+        return NextResponse.json(
+          { error: moveErr.message, message: 'Error al mover las tareas al nuevo estado.' },
+          { status: 500 }
+        )
+      }
     }
   }
 

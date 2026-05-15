@@ -19,7 +19,7 @@ export async function GET(req: Request) {
   }
 
   const access = await resolveUserBusinessAndPermissions(user.id)
-  if (!access || !hasServerPermission(access, 'appointments_create')) {
+  if (!access || !hasServerPermission(access, 'work_board_view')) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 })
   }
 

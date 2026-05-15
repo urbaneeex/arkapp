@@ -50,6 +50,21 @@ export function stageColorClassForSlug(slug: string | null | undefined): string 
   return STAGE_SLUG_COLORS[slug] ?? 'bg-zinc-800 border-l-zinc-600'
 }
 
+/** Calendario: fondos opacos (sin /xx) para citas en semana/día/mes. */
+export const CALENDAR_STAGE_SLUG_COLORS: Record<string, string> = {
+  pending: 'bg-amber-950 border-l-amber-500',
+  confirmed: 'bg-zinc-900 border-l-brand',
+  in_progress: 'bg-violet-950 border-l-violet-500',
+  completed: 'bg-emerald-950 border-l-emerald-600',
+  cancelled: 'bg-zinc-800 border-l-zinc-500',
+  no_show: 'bg-red-950 border-l-red-500',
+}
+
+export function calendarStageColorClassForSlug(slug: string | null | undefined): string {
+  if (!slug) return 'bg-zinc-800 border-l-zinc-600'
+  return CALENDAR_STAGE_SLUG_COLORS[slug] ?? 'bg-zinc-800 border-l-zinc-600'
+}
+
 export const STAGE_SLUG_COMPACT_CARD_COLORS: Record<string, string> = {
   pending: 'bg-amber-800 border-amber-500 text-amber-100',
   confirmed: 'bg-brand/35 border-brand text-zinc-100',

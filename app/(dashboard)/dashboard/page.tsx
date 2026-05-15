@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import type { Metadata } from 'next'
 import { Suspense } from 'react'
 import { getCachedUser } from '@/lib/supabase/server'
+import { getAccountDisplayName } from '@/lib/user-display-name.server'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { DashboardDataSection } from './DashboardDataSection'
 import { DashboardInnerSkeleton } from '@/components/dashboard/DashboardPageSkeleton'
@@ -14,15 +15,11 @@ export default async function DashboardPage() {
   const user = await getCachedUser()
   if (!user) redirect('/login')
 
-  const authDisplayName =
-    (user.user_metadata?.full_name as string | undefined)?.trim() ||
-    (user.user_metadata?.name as string | undefined)?.trim() ||
-    user.email?.split('@')[0]?.trim() ||
-    'Usuario'
+  const displayName = await getAccountDisplayName(user.id, user.email)
 
   return (
     <div>
-      <PageHeader title={`Hola, ${authDisplayName}`} className="mb-8" />
+      <PageHeader title={`Hola, ${displayName}`} className="mb-8" />
       <Suspense fallback={<DashboardInnerSkeleton />}>
         <DashboardDataSection userId={user.id} userEmail={user.email ?? ''} />
       </Suspense>

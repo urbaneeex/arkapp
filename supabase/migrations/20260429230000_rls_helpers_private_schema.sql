@@ -396,30 +396,16 @@ CREATE POLICY appointments_delete ON public.appointments
   );
 
 -- ---------------------------------------------------------------------------
--- Políticas legacy (remoto): mismos nombres; pasan a private.check_business_access
+-- Políticas legacy (remoto): clients / services / business_hours con
+-- private.check_business_access. En appointments NO se recrean las de
+-- "Business members ...": harían OR con appointments_* y expondrían todas las
+-- citas a cualquier staff (bug). Solo DROP si quedaron de antes.
 -- ---------------------------------------------------------------------------
 
 DROP POLICY IF EXISTS "Business members can view appointments" ON public.appointments;
 DROP POLICY IF EXISTS "Business members can insert appointments" ON public.appointments;
 DROP POLICY IF EXISTS "Business members can update appointments" ON public.appointments;
 DROP POLICY IF EXISTS "Business members can delete appointments" ON public.appointments;
-
-CREATE POLICY "Business members can view appointments" ON public.appointments
-  FOR SELECT TO authenticated
-  USING (private.check_business_access(business_id));
-
-CREATE POLICY "Business members can insert appointments" ON public.appointments
-  FOR INSERT TO authenticated
-  WITH CHECK (private.check_business_access(business_id));
-
-CREATE POLICY "Business members can update appointments" ON public.appointments
-  FOR UPDATE TO authenticated
-  USING (private.check_business_access(business_id))
-  WITH CHECK (private.check_business_access(business_id));
-
-CREATE POLICY "Business members can delete appointments" ON public.appointments
-  FOR DELETE TO authenticated
-  USING (private.check_business_access(business_id));
 
 DROP POLICY IF EXISTS "Business members can view clients" ON public.clients;
 DROP POLICY IF EXISTS "Business members can insert clients" ON public.clients;
