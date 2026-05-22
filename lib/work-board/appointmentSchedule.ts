@@ -42,10 +42,8 @@ export function appointmentHasCalendarSchedule(row: RowWithSchedule): boolean {
 
 export function defaultAppointmentDurationMinutes(row: RowWithSchedule): number {
   const svc = Array.isArray(row.services) ? row.services[0] : row.services
-  const d =
-    svc && typeof svc === 'object' && typeof (svc as { duration?: unknown }).duration === 'number'
-      ? (svc as { duration: number }).duration
-      : NaN
+  const raw = svc && typeof svc === 'object' ? (svc as Record<string, unknown>).duration : undefined
+  const d = typeof raw === 'number' ? raw : NaN
   return Number.isFinite(d) && d > 0 ? Math.min(d, 24 * 60) : 60
 }
 
