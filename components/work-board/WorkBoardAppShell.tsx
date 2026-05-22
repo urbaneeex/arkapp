@@ -3,8 +3,8 @@
  */
 export function WorkBoardAppShell() {
   return (
-    <div className="mb-6 flex shrink-0 flex-col gap-3" aria-hidden>
-      <div className="h-8 w-28 rounded-md bg-zinc-800/60 sm:w-36" />
+    <div className="mb-3 flex shrink-0 flex-col gap-3 lg:mb-6" aria-hidden>
+      <div className="h-8 w-24 rounded-md bg-zinc-800/60" />
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex h-9 w-[200px] rounded-lg border border-zinc-800 bg-zinc-900/60 p-0.5">
           <span className="h-full w-1/2 rounded-md bg-zinc-800/90" />

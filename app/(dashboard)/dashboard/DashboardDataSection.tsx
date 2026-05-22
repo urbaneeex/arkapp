@@ -6,9 +6,11 @@ import { DashboardQueryBridge } from '@/components/dashboard/DashboardQueryBridg
 export async function DashboardDataSection({
   userId,
   userEmail,
+  displayName,
 }: {
   userId: string
   userEmail: string
+  displayName: string
 }) {
   const qc = new QueryClient({
     defaultOptions: {
@@ -23,7 +25,7 @@ export async function DashboardDataSection({
 
   return (
     <HydrationBoundary state={dehydrate(qc)}>
-      <DashboardQueryBridge />
+      <DashboardQueryBridge displayName={displayName} />
     </HydrationBoundary>
   )
 }

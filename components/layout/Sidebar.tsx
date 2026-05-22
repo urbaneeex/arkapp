@@ -48,7 +48,7 @@ const mainNavItems: {
   anyOf?: PermissionKey[]
   requireOwner?: boolean
 }[] = [
-  { href: '/dashboard', label: 'Dashboard', icon: Home },
+  { href: '/dashboard', label: 'Inicio', icon: Home },
   { href: '/dashboard/work-board', label: 'Tablero', icon: LayoutGrid, permission: 'work_board_view' },
   { href: '/dashboard/fichar', label: 'Fichar', icon: Clock },
   { href: '/dashboard/clients', label: 'Clientes', icon: Users, permission: 'clients_view' },

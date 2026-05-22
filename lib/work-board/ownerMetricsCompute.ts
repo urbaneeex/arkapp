@@ -173,9 +173,3 @@ export function computeOwnerMetrics(
     overdueTop: overdueList.slice(0, 10),
   }
 }
-
-export function workloadLabel(active: number): 'disponible' | 'ocupado' | 'sobrecargado' {
-  if (active <= 3) return 'disponible'
-  if (active <= 7) return 'ocupado'
-  return 'sobrecargado'
-}

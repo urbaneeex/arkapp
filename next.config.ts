@@ -24,8 +24,8 @@ const securityHeaders = [
       "style-src 'self' 'unsafe-inline'",
       // Imágenes: propio + data URIs + Supabase Storage
       "img-src 'self' data: blob: https://*.supabase.co",
-      // Fuentes propias únicamente
-      "font-src 'self'",
+      // Fuentes: solo propio (Clash Display y Space Grotesk self-hosted / next/font)
+      "font-src 'self' data:",
       // Iframes prohibidos (Google Maps, etc. pueden añadirse aquí)
       "frame-src 'none'",
       // Worker scripts para PWA service worker
@@ -41,7 +41,6 @@ const nextConfig: NextConfig = {
     optimizePackageImports: [
       "lucide-react",
       "date-fns",
-      "react-big-calendar",
     ],
   },
   async headers() {

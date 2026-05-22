@@ -23,7 +23,7 @@ export default async function SettingsPage() {
   const { data: business } = await supabase
     .from('businesses')
     .select(
-      'id, name, owner_name, owner_phone, address, whatsapp_number, slug, industry, booking_settings, notification_settings, plan, logo_url, wa_instance_name, wa_status, wa_connected_phone, country, clock_in_method, geofence_lat, geofence_lng, geofence_radius_meters'
+      'id, name, owner_name, owner_phone, address, whatsapp_number, slug, industry, booking_settings, notification_settings, plan, logo_url, wa_instance_name, wa_status, wa_connected_phone, country, clock_in_method, geofence_lat, geofence_lng, geofence_radius_meters, config_json'
     )
     .eq('id', businessId)
     .single()
@@ -78,6 +78,7 @@ export default async function SettingsPage() {
           industry: business.industry ?? '',
           booking_settings: business.booking_settings as Record<string, unknown> ?? {},
           notification_settings: business.notification_settings as Record<string, unknown> ?? {},
+          config_json: (business.config_json as Record<string, unknown> | null) ?? null,
           plan: business.plan ?? 'free',
           logo_url: business.logo_url ?? '',
           wa_instance_name: business.wa_instance_name ?? null,
@@ -89,6 +90,7 @@ export default async function SettingsPage() {
           geofence_lng: (business as { geofence_lng?: number | null }).geofence_lng ?? null,
           geofence_radius_meters: (business as { geofence_radius_meters?: number | null }).geofence_radius_meters ?? 200,
         }}
+        isOwner={businessResult.isOwner}
         ownerEmail={user.email ?? ''}
         daysWithShifts={daysWithShifts}
       />

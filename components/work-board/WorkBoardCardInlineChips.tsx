@@ -10,7 +10,7 @@ import {
   type PointerEventHandler,
   type ReactElement,
 } from 'react'
-import { format, parseISO } from 'date-fns'
+import { addMinutes, format, parseISO } from 'date-fns'
 import { es as esLocale } from 'date-fns/locale'
 import {
   AtSign,
@@ -250,6 +250,12 @@ export function WorkBoardCardInlineChips({
     if (!sd.trim() && !el?.trim()) {
       startIso = null
       endIso = null
+    }
+
+    if (startIso && !endIso && st.trim()) {
+      const svc = services.find((s) => s.id === item.service_id)
+      const durMin = svc?.duration && svc.duration > 0 ? svc.duration : 60
+      endIso = addMinutes(parseISO(startIso), durMin).toISOString()
     }
 
     const draft = dateDraftRef.current

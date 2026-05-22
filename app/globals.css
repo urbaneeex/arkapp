@@ -20,7 +20,7 @@
   --color-brand-hover: var(--brand-hover);
   /* UI general: Space Grotesk (next/font). Clash solo en `font-display` (marca, titulares, tooltips). */
   --font-sans: var(--font-space-grotesk), ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Clash Display", ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-clash-display), ui-sans-serif, system-ui, sans-serif;
   --font-mono: ui-monospace, "Cascadia Code", monospace;
 }
 
@@ -28,6 +28,104 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans);
+}
+
+/* Tablero: toolbar compacto en móvil (< lg) */
+@layer utilities {
+  .wb-header-label {
+    display: none;
+  }
+
+  @media (min-width: 1024px) {
+    .wb-header-label {
+      display: inline;
+    }
+  }
+
+  .wb-header-icon-btn {
+    height: 2.25rem;
+    width: 2.25rem;
+    flex-shrink: 0;
+    justify-content: center;
+    gap: 0;
+    padding: 0;
+    border-radius: 0.5rem;
+  }
+
+  @media (min-width: 1024px) {
+    .wb-header-icon-btn {
+      width: auto;
+      gap: 0.375rem;
+      padding-left: 1rem;
+      padding-right: 1rem;
+    }
+  }
+
+  .wb-header-toolbar-btn {
+    display: inline-flex;
+    height: 100%;
+    width: 2.25rem;
+    flex-shrink: 0;
+    cursor: pointer;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    border-radius: 0.375rem;
+    padding: 0;
+  }
+
+  @media (min-width: 1024px) {
+    .wb-header-toolbar-btn {
+      width: auto;
+      gap: 0.5rem;
+      padding-left: 0.75rem;
+      padding-right: 0.75rem;
+    }
+  }
+
+  .wb-header-row {
+    display: flex;
+    width: 100%;
+    flex-wrap: nowrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    overflow-x: auto;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .wb-header-row::-webkit-scrollbar {
+    display: none;
+  }
+
+  .wb-header-views {
+    flex-shrink: 0;
+  }
+
+  @media (min-width: 1024px) {
+    .wb-header-row {
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      overflow: visible;
+    }
+  }
+
+  .wb-header-actions {
+    display: flex;
+    flex-shrink: 0;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 0.25rem;
+    margin-left: auto;
+  }
+
+  @media (min-width: 1024px) {
+    .wb-header-actions {
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+  }
 }
 
 /* Controles tipo botón: mano (pointer); disabled:cursor-not-allowed en utilidades sigue ganando */

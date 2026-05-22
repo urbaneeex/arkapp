@@ -1,12 +1,12 @@
 'use client'
 
 import { useQuery } from '@tanstack/react-query'
-import type { DashboardBootstrapPayload } from '@/lib/dashboard/loadDashboardBootstrap'
+import type { DashboardBootstrapPayload } from '@/lib/dashboard/dashboardTypes'
 import { dashboardKeys } from '@/lib/dashboard/dashboardQueryKeys'
 import { DashboardHomeClient } from '@/components/dashboard/DashboardHomeClient'
 import { DashboardInnerSkeleton } from '@/components/dashboard/DashboardPageSkeleton'
 
-export function DashboardQueryBridge() {
+export function DashboardQueryBridge({ displayName }: { displayName: string }) {
   const { data, isError } = useQuery({
     queryKey: dashboardKeys.bootstrap(),
     queryFn: async (): Promise<DashboardBootstrapPayload> => {
@@ -22,5 +22,5 @@ export function DashboardQueryBridge() {
     return <DashboardInnerSkeleton />
   }
 
-  return <DashboardHomeClient data={data} />
+  return <DashboardHomeClient data={data} displayName={displayName} />
 }

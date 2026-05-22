@@ -954,47 +954,47 @@ export function KanbanQuickDatePicker({
       ) : null}
 
       {calendarPanel}
-    </div>
+          </div>
   )
 
   const body = layout === 'inline' ? inlineBody : popoverBody
 
   if (layout === 'inline') {
-    return (
+            return (
       <div
         ref={contentRef}
-        className={cn(
+                className={cn(
           'min-w-0 w-full max-w-none overflow-x-hidden border-zinc-700 bg-zinc-950 text-zinc-100',
           KANBAN_COLUMN_TITLE_TYPO,
           className,
         )}
       >
         {body}
-      </div>
-    )
+    </div>
+  )
   }
 
   return (
     <Popover modal={popoverModal} open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger asChild>
         {customTrigger ?? (
-          <button
-            type="button"
-            disabled={disabled}
-            className={cn(
-              KANBAN_QUICK_ADD_ROW_MUTED,
-              KANBAN_QUICK_ADD_ROW_TAP,
-              'group flex min-h-10 min-w-0 items-center gap-2 text-left leading-normal disabled:opacity-50'
-            )}
-          >
-            <Calendar
-              className="h-4 w-4 shrink-0 text-zinc-500 transition-colors group-hover:text-zinc-400 group-data-[state=open]:text-zinc-300"
-              aria-hidden
-            />
-            <span className="min-w-0 flex-1 truncate text-left">
-              {triggerSummary}
-            </span>
-          </button>
+        <button
+          type="button"
+          disabled={disabled}
+          className={cn(
+            KANBAN_QUICK_ADD_ROW_MUTED,
+            KANBAN_QUICK_ADD_ROW_TAP,
+            'group flex min-h-10 min-w-0 items-center gap-2 text-left leading-normal disabled:opacity-50'
+          )}
+        >
+          <Calendar
+            className="h-4 w-4 shrink-0 text-zinc-500 transition-colors group-hover:text-zinc-400 group-data-[state=open]:text-zinc-300"
+            aria-hidden
+          />
+          <span className="min-w-0 flex-1 truncate text-left">
+            {triggerSummary}
+          </span>
+        </button>
         )}
       </PopoverTrigger>
       <PopoverContent

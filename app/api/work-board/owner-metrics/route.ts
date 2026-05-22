@@ -8,9 +8,12 @@ import {
 } from '@/lib/user-permissions.server'
 import {
   computeOwnerMetrics,
-  workloadLabel,
   type AppointmentMetricsRow,
 } from '@/lib/work-board/ownerMetricsCompute'
+import {
+  parseWorkloadThresholdsFromConfigJson,
+  workloadLabel,
+} from '@/lib/business/workloadConfig'
 import { formatAppointmentAuditFeed } from '@/lib/work-board/formatAppointmentAuditFeed'
 
 export const runtime = 'nodejs'
@@ -49,7 +52,7 @@ export async function GET() {
   const weekAgo = subDays(new Date(), 7)
   const dayStart = startOfDay(new Date())
 
-  const [{ data: staffRows, error: staffErr }, { data: teamRows, error: teamErr }] =
+  const [{ data: staffRows, error: staffErr }, { data: teamRows, error: teamErr }, { data: businessCfg }] =
     await Promise.all([
       admin
         .from('staff')
@@ -58,6 +61,7 @@ export async function GET() {
         .is('deleted_at', null)
         .order('name'),
       admin.from('teams').select('id, name, color').eq('business_id', businessId).order('name'),
+      admin.from('businesses').select('config_json').eq('id', businessId).maybeSingle(),
     ])
 
   if (staffErr || teamErr) {
@@ -100,6 +104,7 @@ export async function GET() {
   }
 
   const computed = computeOwnerMetrics(appointmentRows, weekAgo, dayStart)
+  const workloadThresholds = parseWorkloadThresholdsFromConfigJson(businessCfg?.config_json)
   const staffNameMap = new Map((staffRows ?? []).map((s) => [s.id, s.name ?? '']))
 
   const staffList = (staffRows ?? []).map((s) => {
@@ -113,7 +118,7 @@ export async function GET() {
       active,
       completedThisWeek: doneWk,
       overdue,
-      load: workloadLabel(active),
+      load: workloadLabel(active, workloadThresholds),
     }
   })
   staffList.sort((a, b) => b.overdue - a.overdue || b.active - a.active)

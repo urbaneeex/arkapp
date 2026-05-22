@@ -26,6 +26,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  AccountMenuActions,
+  AccountMenuUserHeader,
+  type AccountMenuUser,
+} from '@/components/layout/AccountMenuActions'
 
 /** Rutas del menú «Cuenta»: apartados que no están en la barra de 5 (+ Agenda). */
 const overflowMenuItems: {
@@ -64,7 +69,7 @@ const primaryBar: {
   icon: typeof Home
   permission?: PermissionKey
 }[] = [
-  { key: 'dashboard', href: '/dashboard', label: 'Dashboard', icon: Home },
+  { key: 'dashboard', href: '/dashboard', label: 'Inicio', icon: Home },
   { key: 'workBoard', href: '/dashboard/work-board', label: 'Tablero', icon: LayoutGrid, permission: 'work_board_view' },
   {
     key: 'newTask',
@@ -80,7 +85,19 @@ function pathMatches(pathname: string, path: string) {
   return pathname === path || (path !== '/dashboard' && pathname.startsWith(path))
 }
 
-export function MobileBottomNav() {
+export function MobileBottomNav({
+  initialUserName = '',
+  initialUserEmail = '',
+  initialBusinessName = '',
+}: {
+  initialUserName?: string
+  initialUserEmail?: string
+  initialBusinessName?: string
+}) {
+  const accountUser: AccountMenuUser | null =
+    initialUserEmail || initialUserName
+      ? { name: initialUserName || undefined, email: initialUserEmail }
+      : null
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const { hasPermission, loading, isOwner } = usePermissions()
@@ -208,16 +225,28 @@ export function MobileBottomNav() {
         <DialogContent
           showClose
           className={cn(
-            'left-3 right-3 top-auto bottom-3 max-h-[min(70vh,calc(100dvh-6rem))] w-auto max-w-none translate-x-0 translate-y-0 gap-0 rounded-2xl p-0',
+            'left-3 right-3 top-auto bottom-3 max-h-[min(85vh,calc(100dvh-5rem))] w-auto max-w-none translate-x-0 translate-y-0 gap-0 overflow-y-auto rounded-2xl p-0',
             'border border-zinc-700 bg-zinc-900 text-zinc-100 shadow-2xl',
             'sm:left-[50%] sm:right-auto sm:top-[50%] sm:bottom-auto sm:max-w-md sm:translate-x-[-50%] sm:translate-y-[-50%]'
           )}
         >
           <DialogHeader className="border-b border-zinc-800 px-4 py-3 text-left">
-            <DialogTitle className="font-display text-base">Cuenta y más</DialogTitle>
-            <p className="text-xs font-normal text-zinc-500">Resto de secciones según tus permisos</p>
+            <DialogTitle className="font-display text-base">Cuenta</DialogTitle>
           </DialogHeader>
-          <ul className="max-h-[50vh] overflow-y-auto px-2 pb-3 pt-1">
+          {accountUser ? (
+            <>
+              <AccountMenuUserHeader
+                user={accountUser}
+                businessName={initialBusinessName || undefined}
+                compact
+              />
+              <AccountMenuActions variant="sheet" onAction={() => setMoreOpen(false)} />
+            </>
+          ) : null}
+          <p className="border-t border-zinc-800 px-4 py-2 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
+            Más secciones
+          </p>
+          <ul className="max-h-[40vh] overflow-y-auto px-2 pb-3 pt-1">
             {visibleOverflow.length === 0 ? (
               <li className="px-3 py-4 text-center text-sm text-zinc-500">No hay más secciones disponibles.</li>
             ) : (

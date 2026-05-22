@@ -1,0 +1,199 @@
+import type { PendingAction } from '@/components/dashboard/PendingActionsCard'
+
+export type DashboardRole = 'owner' | 'staff'
+
+export type OwnerTasksToday = {
+  total: number
+  pending: number
+  inProgress: number
+  completedToday: number
+}
+
+export type OwnerClientsWeek = {
+  thisWeek: number
+  previousWeek: number
+  delta: number
+}
+
+export type OwnerRevenueMonth = {
+  amount: number
+  previousAmount: number
+  delta: number
+  available: boolean
+}
+
+export type OwnerClockToday = {
+  clockedIn: number
+  totalStaff: number
+  notClockedStaffIds: string[]
+  available: boolean
+}
+
+export type OwnerWorkloadRow = {
+  staffId: string
+  name: string
+  color: string | null
+  activeCount: number
+  load: 'disponible' | 'ocupado' | 'sobrecargado'
+}
+
+export type OwnerAbsencesWeek = {
+  staffNames: string[]
+  available: boolean
+}
+
+export type OwnerUnassignedLeads = {
+  total: number
+  olderThan24h: number
+  available: boolean
+}
+
+export type OwnerNextAppointment = {
+  id: string
+  clientName: string
+  serviceName: string
+  startTime: string
+  minutesUntil: number
+} | null
+
+export type OwnerUrgentToday = {
+  noShowsThisWeek: number | null
+  completedToday: number | null
+  activeTotal: number | null
+  activity: Array<{ text: string; created_at: string }>
+}
+
+export type OwnerWeekChartDay = {
+  dayLabel: string
+  count: number
+  isToday: boolean
+}
+
+export type OwnerTodayTaskItem = {
+  id: string
+  title: string
+  /** Fecha / horario legible (chip del tablero). */
+  dateLabel: string
+  /** Cliente, servicio, precio… */
+  briefInfo?: string
+  /** Etiqueta de estado: En curso, Pendiente… */
+  stateLabel: string
+  stageSlug: string
+  stageColor: string | null
+}
+
+export type OwnerTasksTodayList = {
+  /** En curso primero, luego pendientes (máx. 3 visibles). */
+  items: OwnerTodayTaskItem[]
+  /** Tareas adicionales no mostradas (+N en UI). */
+  moreCount: number
+}
+
+export type StaffTeamAbsence = {
+  staffName: string
+  startDate: string
+  endDate: string
+}
+
+export type OwnerDashboardPayload = {
+  section1: {
+    tasksToday: OwnerTasksToday | null
+    clientsWeek: OwnerClientsWeek | null
+    overdueTasks: number | null
+    revenueMonth: OwnerRevenueMonth | null
+  }
+  section2: {
+    clockToday: OwnerClockToday | null
+    workload: OwnerWorkloadRow[] | null
+    /** Referencia barra "Carga del equipo" (desde config_json.workload.barMax). */
+    workloadBarMax: number
+    absencesWeek: OwnerAbsencesWeek | null
+    unassigned: OwnerUnassignedLeads | null
+  }
+  section3: {
+    nextAppointment: OwnerNextAppointment | null
+    urgent: OwnerUrgentToday
+  }
+  appointmentsWeekChart: OwnerWeekChartDay[] | null
+  tasksTodayList: OwnerTasksTodayList
+}
+
+export type StaffMyDay = {
+  appointmentsToday: number
+  nextAppointment: {
+    clientName: string
+    serviceName: string
+    startTime: string
+  } | null
+  pendingTasks: {
+    total: number
+    dueToday: number
+    overdue: number
+    thisWeek: number
+  } | null
+  clockToday: {
+    clockIn: string
+    hoursWorked: number
+    open: boolean
+  } | null
+  completedThisWeek: number | null
+  motivationalNote: string | null
+}
+
+export type StaffTimelineItem = {
+  id: string
+  startTime: string
+  status: string | null
+  clientName: string
+  serviceName: string
+}
+
+export type StaffUrgentTask = {
+  id: string
+  title: string
+  urgency: 'overdue' | 'today' | 'week'
+  endTime: string | null
+}
+
+export type StaffHoursWeek = {
+  hoursWorked: number
+  contractHoursPerWeek: number | null
+  available: boolean
+}
+
+export type StaffVacation = {
+  daysPerYear: number | null
+  daysUsedThisYear: number | null
+  daysRemaining: number | null
+  available: boolean
+}
+
+export type StaffDashboardPayload = {
+  section1: StaffMyDay
+  section2: {
+    timeline: StaffTimelineItem[]
+    hasMore: boolean
+  }
+  section3: {
+    urgent: StaffUrgentTask[]
+  }
+  section4: {
+    hoursWeek: StaffHoursWeek | null
+    vacation: StaffVacation | null
+  }
+  teamAbsencesWeek: StaffTeamAbsence[]
+}
+
+export type DashboardBootstrapPayload =
+  | { kind: 'no_business' }
+  | {
+      kind: 'ok'
+      role: DashboardRole
+      businessId: string
+      pendingActions: PendingAction[]
+      hasClock: boolean
+      canSeeLiveClockPanel: boolean
+      liveClockBetaEnabled: boolean
+      ownerHome?: OwnerDashboardPayload
+      staffHome?: StaffDashboardPayload
+    }

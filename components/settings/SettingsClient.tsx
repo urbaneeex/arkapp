@@ -32,6 +32,11 @@ import { useBusinessStore } from '@/stores/business'
 import { CountryCombobox } from '@/components/ui/country-combobox'
 import { QRCodeSVG } from 'qrcode.react'
 import { parsePublicBookingSettings } from '@/lib/public-booking/booking-settings'
+import {
+  mergeWorkloadIntoConfigJson,
+  normalizeWorkloadThresholds,
+  parseWorkloadThresholdsFromConfigJson,
+} from '@/lib/business/workloadConfig'
 const INDUSTRIES = ['Belleza', 'Salud', 'Consultoría', 'Fitness', 'Educación', 'Legal', 'Otro']
 const DAYS = [
   { label: 'Lunes', day: 1 },
@@ -59,6 +64,8 @@ interface BusinessData {
   industry: string
   booking_settings: Record<string, unknown>
   notification_settings: Record<string, unknown>
+  /** Otros ajustes JSON (p. ej. umbrales de carga del tablero). */
+  config_json: Record<string, unknown> | null
   plan: string
   logo_url: string
   wa_instance_name?: string | null
@@ -86,10 +93,12 @@ export function SettingsClient({
   business,
   ownerEmail,
   daysWithShifts,
+  isOwner,
 }: {
   business: BusinessData
   ownerEmail: string
   daysWithShifts: DayWithShifts[]
+  isOwner: boolean
 }) {
   const router = useRouter()
   const [activeTab, setActiveTab] = useState('general')
@@ -135,6 +144,16 @@ export function SettingsClient({
   const [widgetNotesVisible, setWidgetNotesVisible] = useState(parsedBooking.widget.notes_visible)
   const [snippetOrigin, setSnippetOrigin] = useState('')
 
+  const initialWorkload = parseWorkloadThresholdsFromConfigJson(business.config_json)
+  const [workloadDisponibleMax, setWorkloadDisponibleMax] = useState(initialWorkload.disponibleMax)
+  const [workloadOcupadoMax, setWorkloadOcupadoMax] = useState(initialWorkload.ocupadoMax)
+  const [workloadBarMax, setWorkloadBarMax] = useState(initialWorkload.barMax)
+
+  const workloadConfigSignature = useMemo(
+    () => JSON.stringify(parseWorkloadThresholdsFromConfigJson(business.config_json)),
+    [business.config_json]
+  )
+
   useEffect(() => {
     const p = parsePublicBookingSettings(business.booking_settings)
     setWidgetPrimary(p.widget.primary_color)
@@ -147,6 +166,13 @@ export function SettingsClient({
   useEffect(() => {
     setSnippetOrigin(typeof window !== 'undefined' ? window.location.origin : '')
   }, [])
+
+  useEffect(() => {
+    const t = parseWorkloadThresholdsFromConfigJson(business.config_json)
+    setWorkloadDisponibleMax(t.disponibleMax)
+    setWorkloadOcupadoMax(t.ocupadoMax)
+    setWorkloadBarMax(t.barMax)
+  }, [business.id, workloadConfigSignature])
 
   // Notifications
   const notif = (business.notification_settings || {}) as Record<string, unknown>
@@ -317,6 +343,17 @@ export function SettingsClient({
   const saveGeneral = async () => {
     setSaving('general')
     setError(null)
+    const workloadNormalized = isOwner
+      ? normalizeWorkloadThresholds({
+          disponibleMax: workloadDisponibleMax,
+          ocupadoMax: workloadOcupadoMax,
+          barMax: workloadBarMax,
+        })
+      : null
+    const workloadMerged =
+      workloadNormalized != null
+        ? mergeWorkloadIntoConfigJson(business.config_json, workloadNormalized)
+        : null
     const { error: e } = await supabase
       .from('businesses')
       .update({
@@ -328,10 +365,16 @@ export function SettingsClient({
         industry: industry || null,
         logo_url: logoUrl || null,
         country: country || null,
+        ...(workloadMerged ? { config_json: workloadMerged } : {}),
       })
       .eq('id', business.id)
     setSaving(null)
     if (e) return showFeedback('error', e.message)
+    if (workloadNormalized) {
+      setWorkloadDisponibleMax(workloadNormalized.disponibleMax)
+      setWorkloadOcupadoMax(workloadNormalized.ocupadoMax)
+      setWorkloadBarMax(workloadNormalized.barMax)
+    }
     setBusiness({
       name,
       logo_url: logoUrl || null,
@@ -791,6 +834,54 @@ export function SettingsClient({
                     <p className="text-xs text-zinc-400">Vista previa: {slugPath}</p>
                   </div>
                 </div>
+                {isOwner ? (
+                  <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-4 space-y-3">
+                    <h4 className="text-sm font-medium text-zinc-100">Carga del tablero (estimación)</h4>
+                    <p className="text-xs text-zinc-500 leading-relaxed">
+                      Umbrales según tareas activas por empleado en el tablero (no archivadas, etapa no
+                      final). Ajusta según tu tipo de negocio; los valores se guardan con &quot;Guardar
+                      cambios&quot;.
+                    </p>
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      <div>
+                        <Label htmlFor="workload_disponible">Disponible (máx.)</Label>
+                        <Input
+                          id="workload_disponible"
+                          type="number"
+                          min={0}
+                          className="mt-1 tabular-nums"
+                          value={workloadDisponibleMax}
+                          onChange={(e) => setWorkloadDisponibleMax(Number(e.target.value))}
+                        />
+                        <p className="text-[10px] text-zinc-500 mt-0.5">Tareas ≤ este número</p>
+                      </div>
+                      <div>
+                        <Label htmlFor="workload_ocupado">Ocupado (máx.)</Label>
+                        <Input
+                          id="workload_ocupado"
+                          type="number"
+                          min={1}
+                          className="mt-1 tabular-nums"
+                          value={workloadOcupadoMax}
+                          onChange={(e) => setWorkloadOcupadoMax(Number(e.target.value))}
+                        />
+                        <p className="text-[10px] text-zinc-500 mt-0.5">Entre disponible+1 y este</p>
+                      </div>
+                      <div>
+                        <Label htmlFor="workload_bar">Referencia barra</Label>
+                        <Input
+                          id="workload_bar"
+                          type="number"
+                          min={2}
+                          className="mt-1 tabular-nums"
+                          value={workloadBarMax}
+                          onChange={(e) => setWorkloadBarMax(Number(e.target.value))}
+                        />
+                        <p className="text-[10px] text-zinc-500 mt-0.5">100% del indicador</p>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
                 <Button onClick={saveGeneral} disabled={saving === 'general'} className="cursor-pointer">
                   {saving === 'general' ? 'Guardando…' : 'Guardar cambios'}
                 </Button>

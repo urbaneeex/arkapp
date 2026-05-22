@@ -37,7 +37,18 @@ import {
   useDndMonitor,
   type DragEndEvent,
 } from '@dnd-kit/core'
-import { Ban, ChevronLeft, ChevronRight, Loader2, Plus, Search, User, Wrench, X } from 'lucide-react'
+import {
+  Ban,
+  ChevronLeft,
+  ChevronRight,
+  Eye,
+  Loader2,
+  Plus,
+  Search,
+  User,
+  Wrench,
+  X,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -66,6 +77,12 @@ import {
 import { KanbanQuickAddAppointment, type KanbanService } from '@/components/work-board/WorkBoardKanbanView'
 import type { WorkBoardStaffOption } from '@/lib/work-items/types'
 import { userCanMoveAppointmentCardClient } from '@/lib/work-board/appointmentParticipation'
+import {
+  appointmentHasCalendarSchedule,
+  isCalendarTimeUnspecifiedMeta,
+  resolveAppointmentEndTime,
+  CALENDAR_TIME_UNSPECIFIED_KEY,
+} from '@/lib/work-board/appointmentSchedule'
 
 function formatSlotLabel(dateStr: string, timeStr: string): string {
   const formatted = new Intl.DateTimeFormat('es-ES', {
@@ -132,13 +149,6 @@ interface AppointmentNormalized {
   team_ids: string[]
   /** Citas con solo fecha en UI; ver `metadata.calendar_time_unspecified`. */
   time_unspecified?: boolean
-}
-
-const CALENDAR_TIME_UNSPECIFIED_KEY = 'calendar_time_unspecified'
-
-function isCalendarTimeUnspecifiedMeta(metadata: unknown): boolean {
-  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return false
-  return (metadata as Record<string, unknown>)[CALENDAR_TIME_UNSPECIFIED_KEY] === true
 }
 
 function mergeMetadataTimeUnspecified(metadata: unknown): Record<string, unknown> {
@@ -264,22 +274,19 @@ function calendarTaskPanelMetaLine(
   return parts.length > 0 ? parts.join(' · ') : null
 }
 
-// ─── View dropdown ────────────────────────────────────────────────────────────
+// ─── Período (día / semana / mes) ─────────────────────────────────────────────
 
-function ViewDropdown({
-  options,
-  value,
-  activeLabel,
-  onChange,
-}: {
-  options: { value: ViewType; label: string; key: string }[]
-  value: ViewType
-  activeLabel: string
-  onChange: (v: ViewType) => void
-}) {
-  const [open, setOpen] = useState(false)
+const CALENDAR_PERIOD_OPTIONS: { value: ViewType; label: string; key: string }[] = [
+  { value: 'day', label: 'Día', key: 'D' },
+  { value: 'week', label: 'Semana', key: 'S' },
+  { value: 'month', label: 'Mes', key: 'M' },
+]
 
-  // Atajos: D / S / M (código físico KeyD/KeyS/KeyM), sin modificadores, para evitar falsos positivos con e.key
+function useCalendarPeriodHotkeys(
+  options: { value: ViewType }[],
+  onChange: (v: ViewType) => void,
+  onAfterChange?: () => void
+) {
   useEffect(() => {
     const CODE_TO_VIEW: Partial<Record<string, ViewType>> = {
       KeyD: 'day',
@@ -296,21 +303,48 @@ function ViewDropdown({
       const mapped = CODE_TO_VIEW[e.code]
       if (!mapped || !options.some((o) => o.value === mapped)) return
       onChange(mapped)
-      setOpen(false)
+      onAfterChange?.()
     }
     document.addEventListener('keydown', handleKey)
     return () => document.removeEventListener('keydown', handleKey)
-  }, [options, onChange])
+  }, [options, onChange, onAfterChange])
+}
+
+/** Móvil: icono ojo + menú; desktop: etiqueta + menú. */
+function ViewDropdown({
+  options,
+  value,
+  activeLabel,
+  onChange,
+}: {
+  options: { value: ViewType; label: string; key: string }[]
+  value: ViewType
+  activeLabel: string
+  onChange: (v: ViewType) => void
+}) {
+  const [open, setOpen] = useState(false)
+
+  useCalendarPeriodHotkeys(options, onChange, () => setOpen(false))
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="flex h-7 cursor-pointer items-center gap-1.5 rounded-md border border-zinc-700 bg-zinc-900 px-2.5 text-xs font-medium text-zinc-400 transition-colors hover:border-zinc-500 hover:text-zinc-200"
+          className="flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-md border border-zinc-700 bg-zinc-900 text-zinc-400 transition-colors hover:border-zinc-500 hover:text-zinc-200 lg:w-auto lg:px-2.5"
+          aria-label={`Vista: ${activeLabel}`}
+          title={`Vista: ${activeLabel}`}
         >
-          {activeLabel}
-          <svg className="h-2.5 w-2.5 shrink-0 text-zinc-500" viewBox="0 0 10 6" fill="none" stroke="currentColor" strokeWidth="1.5">
+          <Eye className="h-3.5 w-3.5 shrink-0 lg:hidden" aria-hidden />
+          <span className="hidden text-xs font-medium lg:inline">{activeLabel}</span>
+          <svg
+            className="hidden h-2.5 w-2.5 shrink-0 text-zinc-500 lg:block"
+            viewBox="0 0 10 6"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            aria-hidden
+          >
             <path d="M1 1l4 4 4-4" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </button>
@@ -420,11 +454,14 @@ function CalendarTasksSidebar({
         <button
           type="button"
           onClick={onTogglePanel}
-          className="flex h-full min-h-[120px] w-9 flex-col items-center justify-center gap-2 border-0 bg-zinc-950 py-3 text-zinc-400 transition-colors hover:bg-zinc-900 hover:text-zinc-100"
+          className="flex h-full min-h-[8rem] w-10 flex-col items-center justify-center gap-3 border-0 bg-zinc-950 px-1 py-4 text-zinc-400 transition-colors hover:bg-zinc-900 hover:text-zinc-100"
           aria-label="Mostrar tareas"
         >
-          <ChevronLeft className="h-4 w-4" />
-          <span className="max-w-[10px] text-[10px] font-medium uppercase leading-tight tracking-wide break-words text-center">
+          <ChevronLeft className="h-4 w-4 shrink-0" aria-hidden />
+          <span
+            className="text-[10px] font-semibold uppercase tracking-[0.18em] text-current [text-orientation:mixed] [writing-mode:vertical-rl]"
+            aria-hidden
+          >
             Tareas
           </span>
         </button>
@@ -636,11 +673,22 @@ export function CalendarView({
   const [anchorPosition, setAnchorPosition] = useState<{ x: number; y: number } | null>(null)
   const [editModalAppointmentId, setEditModalAppointmentId] = useState<string | null>(null)
   const [selectedMonthDay, setSelectedMonthDay] = useState<Date | null>(null)
-  const [tasksPanelOpen, setTasksPanelOpen] = useState(true)
+  /** Móvil: panel cerrado al entrar; desktop (lg+): abierto por defecto. */
+  const [tasksPanelOpen, setTasksPanelOpen] = useState(false)
   const [scrollToNowNonce, setScrollToNowNonce] = useState(0)
   const [sidebarDragId, setSidebarDragId] = useState<string | null>(null)
   const calendarScrollRef = useRef<HTMLDivElement | null>(null)
   const pendingScrollRestoreRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 1024px)')
+    const syncPanel = () => {
+      setTasksPanelOpen(mq.matches)
+    }
+    syncPanel()
+    mq.addEventListener('change', syncPanel)
+    return () => mq.removeEventListener('change', syncPanel)
+  }, [])
 
   /** Cada entrada a calendario (o cambio a día/semana): centrar línea “ahora”. */
   useLayoutEffect(() => {
@@ -679,11 +727,16 @@ export function CalendarView({
     return appointments.find((a) => a.id === popoverAppointment.id) ?? null
   }, [popoverAppointment, appointments])
 
-  /** Solo citas con horario: el calendario no puede colocar filas sin start/end. */
+  /** Citas con fecha (y hora o fin inferido); el panel «sin programar» usa `appointmentHasCalendarSchedule`. */
   const appointmentsScheduled = useMemo((): AppointmentRowScheduled[] => {
-    return appointments.filter((a): a is AppointmentRowScheduled =>
-      Boolean(a.start_time && a.end_time)
-    )
+    return appointments
+      .filter((a): a is AppointmentRow & { start_time: string } =>
+        appointmentHasCalendarSchedule(a)
+      )
+      .map((a) => ({
+        ...a,
+        end_time: resolveAppointmentEndTime(a),
+      }))
   }, [appointments])
 
   const normalizedForViews = useMemo(
@@ -700,7 +753,7 @@ export function CalendarView({
   const appointmentsUnscheduledBase = useMemo(() => {
     return appointments.filter((a) => {
       if (a.status === 'completed' || a.status === 'cancelled') return false
-      if (a.start_time && a.end_time) return false
+      if (appointmentHasCalendarSchedule(a)) return false
       return true
     })
   }, [appointments])
@@ -934,14 +987,14 @@ export function CalendarView({
         style={{ zIndex: CALENDAR_TOOLBAR_Z }}
       >
         {headerSlot}
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-nowrap items-center gap-1.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] lg:flex-wrap lg:gap-2 lg:overflow-visible [&::-webkit-scrollbar]:hidden">
           {/* Fecha */}
-          <h2 className="mr-2 text-base font-semibold text-zinc-100 capitalize tabular-nums sm:mr-3">
+          <h2 className="mr-1 min-w-0 shrink truncate text-sm font-semibold capitalize tabular-nums text-zinc-100 lg:mr-3 lg:text-base">
             {title()}
           </h2>
 
           {/* Flechas */}
-          <div className="inline-flex h-7 items-stretch rounded-md border border-zinc-700 bg-zinc-900/80 p-0.5">
+          <div className="inline-flex h-7 shrink-0 items-stretch rounded-md border border-zinc-700 bg-zinc-900/80 p-0.5">
             <button
               type="button"
               onClick={goPrev}
@@ -960,29 +1013,20 @@ export function CalendarView({
             </button>
           </div>
 
-          {/* Selector de vista — dropdown */}
-          {(() => {
-            const VIEW_OPTIONS = [
-              { value: 'day'   as ViewType, label: 'Día',    key: 'D' },
-              { value: 'week'  as ViewType, label: 'Semana', key: 'S' },
-              { value: 'month' as ViewType, label: 'Mes',    key: 'M' },
-            ]
-            const activeLabel = VIEW_OPTIONS.find((o) => o.value === view)?.label ?? 'Vista'
-            return (
-              <ViewDropdown
-                options={VIEW_OPTIONS}
-                value={view}
-                activeLabel={activeLabel}
-                onChange={setView}
-              />
-            )
-          })()}
+          <ViewDropdown
+            options={CALENDAR_PERIOD_OPTIONS}
+            value={view}
+            activeLabel={
+              CALENDAR_PERIOD_OPTIONS.find((o) => o.value === view)?.label ?? 'Vista'
+            }
+            onChange={setView}
+          />
 
           {/* Hoy */}
           <button
             type="button"
             onClick={goToday}
-            className="flex h-7 cursor-pointer items-center rounded-md border border-zinc-700 bg-zinc-900/80 px-2.5 text-xs font-medium text-zinc-400 transition-colors hover:border-zinc-500 hover:text-zinc-200"
+            className="flex h-7 shrink-0 cursor-pointer items-center rounded-md border border-zinc-700 bg-zinc-900/80 px-2.5 text-xs font-medium text-zinc-400 transition-colors hover:border-zinc-500 hover:text-zinc-200"
           >
             Hoy
           </button>

@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { z } from 'zod'
 import { resolveUserBusinessAndPermissions } from '@/lib/user-permissions.server'
 import { isPipelineStageSlug } from '@/lib/work-items/constants'
+import { appointmentStatusPatchForStageSlug } from '@/lib/work-items/appointmentStatusForStage'
 import { createServiceRoleClient } from '@/lib/supabase/admin'
 
 const BodySchema = z
@@ -97,6 +98,17 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       ? { completed_at: new Date().toISOString() }
       : { completed_at: null }
 
+  const statusPatch = appointmentStatusPatchForStageSlug(
+    stage.slug,
+    stage.slug !== 'completed'
+  )
+
+  const stageMovePatch = {
+    pipeline_stage_id: targetStageId,
+    ...completedAtPatch,
+    ...statusPatch,
+  }
+
   const sourceStageId = aptRow.pipeline_stage_id
 
   if (columnIds && columnIds.length > 0) {
@@ -118,9 +130,8 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       const { error: uErr } = await admin
         .from('appointments')
         .update({
-          pipeline_stage_id: targetStageId,
+          ...stageMovePatch,
           board_sort_order: i,
-          ...completedAtPatch,
         })
         .eq('id', columnIds[i]!)
         .eq('business_id', access.businessId)
@@ -157,7 +168,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
   const { error: updErr } = await supabase
     .from('appointments')
-    .update({ pipeline_stage_id: targetStageId, ...completedAtPatch })
+    .update(stageMovePatch)
     .eq('id', id)
 
   if (updErr) {

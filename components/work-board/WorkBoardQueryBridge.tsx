@@ -6,6 +6,7 @@ import type {
   WorkBoardBootstrapPayload,
   WorkBoardSearchParams,
 } from '@/lib/work-board/loadWorkBoardBootstrap'
+import { dashboardKeys } from '@/lib/dashboard/dashboardQueryKeys'
 import { workBoardKeys } from '@/lib/work-board/workBoardQueryKeys'
 import { WorkBoardPageClient } from '@/components/work-board/WorkBoardPageClient'
 import { WorkBoardKanbanPageSkeleton } from '@/components/work-board/WorkBoardKanbanPageSkeleton'
@@ -36,6 +37,7 @@ export function WorkBoardQueryBridge({ searchParams }: { searchParams: WorkBoard
 
   const invalidateBoard = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: workBoardKeys.all })
+    void queryClient.invalidateQueries({ queryKey: dashboardKeys.bootstrap() })
   }, [queryClient])
 
   if (!data || isError) {

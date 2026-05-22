@@ -6,6 +6,7 @@ import { MobileBottomNav } from '@/components/layout/MobileBottomNav'
 import { DashboardMain } from '@/components/layout/DashboardMain'
 import { PermissionsProvider } from '@/contexts/PermissionsContext'
 import { ReactQueryProvider } from '@/components/providers/ReactQueryProvider'
+import { SessionGuard } from '@/components/auth/SessionGuard'
 import { getCachedUser } from '@/lib/supabase/server'
 import { getBusinessForUser } from '@/lib/supabase/business'
 import { getAccountDisplayName } from '@/lib/user-display-name.server'
@@ -18,15 +19,19 @@ export default async function DashboardLayout({
   const user = await getCachedUser()
   if (!user) redirect('/login')
 
-  const result = await getBusinessForUser(user.id)
+  const [result, displayUserName] = await Promise.all([
+    getBusinessForUser(user.id),
+    getAccountDisplayName(user.id, user.email),
+  ])
+
   if (!result) {
     redirect('/onboarding')
   }
 
-  const displayUserName = await getAccountDisplayName(user.id, user.email)
   const businessName: string = result.business?.name ?? ''
 
   return (
+    <SessionGuard>
     <PermissionsProvider>
       <ReactQueryProvider>
         <div className="h-screen min-h-0 overflow-hidden flex flex-col bg-zinc-950">
@@ -40,10 +45,15 @@ export default async function DashboardLayout({
           <Suspense
             fallback={<div className="lg:hidden shrink-0 h-[calc(4.25rem+env(safe-area-inset-bottom))]" aria-hidden />}
           >
-            <MobileBottomNav />
+            <MobileBottomNav
+              initialUserName={displayUserName}
+              initialUserEmail={user.email ?? ''}
+              initialBusinessName={businessName}
+            />
           </Suspense>
         </div>
       </ReactQueryProvider>
     </PermissionsProvider>
+    </SessionGuard>
   )
 }

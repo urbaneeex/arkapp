@@ -1,54 +1,18 @@
 import { createClient } from '@/lib/supabase/server'
+import { createServiceRoleClient } from '@/lib/supabase/admin'
 import { getBusinessForUser } from '@/lib/supabase/business'
 import { DEFAULT_MATRIX, PERMISSION_LEVEL_IDS, type LevelId } from '@/lib/permissions'
 import type { ActionIconKey, PendingAction } from '@/components/dashboard/PendingActionsCard'
-import { WORK_BOARD_CALENDAR_PATH } from '@/lib/routes'
-import {
-  startOfToday,
-  endOfToday,
-  startOfWeek,
-  endOfWeek,
-  startOfMonth,
-  endOfMonth,
-} from 'date-fns'
+import type {
+  DashboardBootstrapPayload,
+  OwnerDashboardPayload,
+  StaffDashboardPayload,
+} from '@/lib/dashboard/dashboardTypes'
+import { startOfToday } from 'date-fns'
+import { fetchOwnerDashboard } from '@/lib/dashboard/fetchOwnerDashboard'
+import { fetchStaffDashboard } from '@/lib/dashboard/fetchStaffDashboard'
 
-/** Coincide con lucide usados en tarjetas KPI (cliente mapea a icono). */
-export type DashboardStatIconKey =
-  | 'calendar'
-  | 'clock'
-  | 'users'
-  | 'dollar'
-  | 'trending'
-  | 'user-x'
-
-export type DashboardBootstrapStat = {
-  title: string
-  value: string
-  href: string
-  iconKey: DashboardStatIconKey
-  colorClass: string
-}
-
-export type DashboardBootstrapNextAppointment = {
-  id: string
-  start_time: string
-  status: string | null
-  clientName: string
-  serviceName: string
-}
-
-export type DashboardBootstrapPayload =
-  | { kind: 'no_business' }
-  | {
-      kind: 'ok'
-      businessId: string
-      pendingActions: PendingAction[]
-      stats: DashboardBootstrapStat[]
-      nextAppointments: DashboardBootstrapNextAppointment[]
-      hasClock: boolean
-      canSeeLiveClockPanel: boolean
-      liveClockBetaEnabled: boolean
-    }
+export type { DashboardBootstrapPayload } from '@/lib/dashboard/dashboardTypes'
 
 const SIGNATURE_TYPE_SECTORS: Record<string, string> = {
   document: 'empresa',
@@ -78,19 +42,13 @@ export async function fetchDashboardBootstrapPayload(
 
   const business = businessResult.business
   const isOwner = businessResult.isOwner
+  const role = isOwner ? 'owner' : 'staff'
 
   const supabase = await createClient()
 
-  const todayStart = startOfToday().toISOString()
-  const todayEnd = endOfToday().toISOString()
-  const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 }).toISOString()
-  const weekEnd = endOfWeek(new Date(), { weekStartsOn: 1 }).toISOString()
-  const monthStart = startOfMonth(new Date()).toISOString()
-  const monthEnd = endOfMonth(new Date()).toISOString()
-
   const { data: myStaff } = await supabase
     .from('staff')
-    .select('id, access_level, name')
+    .select('id, access_level, name, contract_hours_per_week, vacation_days_per_year')
     .eq('business_id', business.id)
     .or(`id.eq.${userId},email.eq.${userEmail}`)
     .is('deleted_at', null)
@@ -99,65 +57,12 @@ export async function fetchDashboardBootstrapPayload(
   const myStaffId = myStaff?.id ?? userId
 
   const [
-    { count: todayCount },
-    { count: weekCount },
-    { count: clientsCount },
-    { data: revenueData },
-    { data: monthAppointments },
-    { count: noShowCount },
-    { data: nextAppointmentsRaw },
     { count: pendingAbsencesCount },
     { count: pendingSignaturesOwnerCount },
     { data: myPendingSignatures },
     { data: myPendingAbsences },
     { data: myOpenEntry },
   ] = await Promise.all([
-    supabase
-      .from('appointments')
-      .select('*', { count: 'exact', head: true })
-      .eq('business_id', business.id)
-      .gte('start_time', todayStart)
-      .lte('start_time', todayEnd)
-      .in('status', ['pending', 'confirmed', 'in_progress']),
-    supabase
-      .from('appointments')
-      .select('*', { count: 'exact', head: true })
-      .eq('business_id', business.id)
-      .gte('start_time', weekStart)
-      .lte('start_time', weekEnd)
-      .in('status', ['pending', 'confirmed', 'in_progress', 'completed']),
-    supabase
-      .from('clients')
-      .select('*', { count: 'exact', head: true })
-      .eq('business_id', business.id),
-    supabase
-      .from('appointments')
-      .select('price_total')
-      .eq('business_id', business.id)
-      .eq('status', 'completed')
-      .gte('start_time', monthStart)
-      .lte('start_time', monthEnd),
-    supabase
-      .from('appointments')
-      .select('id, status')
-      .eq('business_id', business.id)
-      .gte('start_time', monthStart)
-      .lte('start_time', monthEnd),
-    supabase
-      .from('appointments')
-      .select('*', { count: 'exact', head: true })
-      .eq('business_id', business.id)
-      .eq('status', 'no_show')
-      .gte('start_time', monthStart)
-      .lte('start_time', monthEnd),
-    supabase
-      .from('appointments')
-      .select('id, start_time, end_time, status, clients(name), services(name)')
-      .eq('business_id', business.id)
-      .gte('start_time', todayStart)
-      .in('status', ['pending', 'confirmed', 'in_progress'])
-      .order('start_time', { ascending: true })
-      .limit(5),
     supabase
       .from('staff_absence_requests')
       .select('*', { count: 'exact', head: true })
@@ -183,7 +88,7 @@ export async function fetchDashboardBootstrapPayload(
       .from('time_entries')
       .select('id, clock_in')
       .eq('staff_id', myStaffId)
-      .gte('clock_in', todayStart)
+      .gte('clock_in', startOfToday().toISOString())
       .is('clock_out', null)
       .maybeSingle(),
   ])
@@ -197,9 +102,6 @@ export async function fetchDashboardBootstrapPayload(
     isOwner ||
     DEFAULT_MATRIX[normalizedLevel].time_tracking_view ||
     DEFAULT_MATRIX[normalizedLevel].time_tracking_manage
-
-  const revenue =
-    revenueData?.reduce((acc, row) => acc + (row.price_total ?? 0), 0) ?? 0
 
   const signatureTypeCounts = (myPendingSignatures ?? []).reduce<Record<string, number>>((acc, sig) => {
     const key = sig.document_type ?? 'document'
@@ -294,96 +196,42 @@ export async function fetchDashboardBootstrapPayload(
     })
   }
 
-  const totalMonth = monthAppointments?.length ?? 0
-  const completedMonth =
-    monthAppointments?.filter((a) => a.status === 'completed').length ?? 0
-  const occupancyRate =
-    totalMonth > 0 ? Math.round((completedMonth / totalMonth) * 100) : 0
-  const noShowRate =
-    totalMonth > 0 ? Math.round(((noShowCount ?? 0) / totalMonth) * 100) : 0
-
-  const stats: DashboardBootstrapStat[] = [
-    {
-      title: 'Citas hoy',
-      value: String(todayCount ?? 0),
-      iconKey: 'calendar',
-      href: WORK_BOARD_CALENDAR_PATH,
-      colorClass: 'bg-brand text-white',
-    },
-    {
-      title: 'Citas esta semana',
-      value: String(weekCount ?? 0),
-      iconKey: 'clock',
-      href: WORK_BOARD_CALENDAR_PATH,
-      colorClass: 'bg-brand text-white',
-    },
-    {
-      title: 'Clientes activos',
-      value: String(clientsCount ?? 0),
-      iconKey: 'users',
-      href: '/dashboard/clients',
-      colorClass: 'bg-emerald-600 text-white',
-    },
-    {
-      title: 'Ingresos del mes',
-      value: new Intl.NumberFormat('es-ES', {
-        style: 'currency',
-        currency: 'EUR',
-      }).format(revenue),
-      iconKey: 'dollar',
-      href: '/dashboard/finances',
-      colorClass: 'bg-amber-600 text-white',
-    },
-    {
-      title: 'Tasa de ocupación',
-      value: `${occupancyRate}%`,
-      iconKey: 'trending',
-      href: '/dashboard/reports',
-      colorClass: 'bg-violet-600 text-white',
-    },
-    {
-      title: 'Tasa no-show',
-      value: `${noShowRate}%`,
-      iconKey: 'user-x',
-      href: '/dashboard/reports',
-      colorClass: 'bg-gray-600 text-white',
-    },
-  ]
-
-  const nextAppointments: DashboardBootstrapNextAppointment[] = (nextAppointmentsRaw ?? []).map(
-    (apt: {
-      id: string
-      start_time: string | null
-      status: string | null
-      clients?: unknown
-      services?: unknown
-    }) => {
-      const clientName = Array.isArray(apt.clients)
-        ? (apt.clients[0] as { name?: string })?.name
-        : (apt.clients as { name?: string } | null)?.name
-      const serviceName = Array.isArray(apt.services)
-        ? (apt.services[0] as { name?: string })?.name
-        : (apt.services as { name?: string } | null)?.name
-      return {
-        id: apt.id,
-        start_time: apt.start_time ?? '',
-        status: apt.status,
-        clientName: clientName ?? 'Sin cliente',
-        serviceName: serviceName ?? 'Sin servicio',
-      }
-    }
-  )
-
   const liveClockBetaEnabled = process.env.NEXT_PUBLIC_DASHBOARD_LIVE_CLOCK_BETA === '1'
+
+  let ownerHome: OwnerDashboardPayload | undefined
+  let staffHome: StaffDashboardPayload | undefined
+
+  if (isOwner) {
+    try {
+      const admin = createServiceRoleClient()
+      ownerHome = await fetchOwnerDashboard(
+        admin,
+        business.id,
+        userId,
+        myStaff?.id ?? userId
+      )
+    } catch (e) {
+      console.error('[dashboard bootstrap] owner home', e)
+    }
+  } else {
+    staffHome = await fetchStaffDashboard(
+      supabase,
+      business.id,
+      myStaffId,
+      myStaff?.contract_hours_per_week ?? null,
+      myStaff?.vacation_days_per_year ?? null
+    )
+  }
 
   return {
     kind: 'ok',
+    role,
     businessId: business.id,
     pendingActions,
-    stats,
-    nextAppointments,
     hasClock,
     canSeeLiveClockPanel,
     liveClockBetaEnabled,
+    ownerHome,
+    staffHome,
   }
 }

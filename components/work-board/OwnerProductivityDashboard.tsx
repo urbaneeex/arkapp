@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Loader2, UsersRound, AlertCircle, CheckCircle2, ClipboardList } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -417,8 +418,8 @@ function OwnerProductivityDashboard() {
                   >
                     Fecha / asignación
                   </Button>
-                  <Button type="button" size="sm" className="bg-brand hover:bg-brand-hover" asChild>
-                    <a href={`/dashboard/appointments/${row.id}/edit`}>Editar cita</a>
+                  <Button size="sm" className="bg-brand hover:bg-brand-hover" asChild>
+                    <Link href={`/dashboard/appointments/${row.id}/edit`}>Editar cita</Link>
                   </Button>
                 </div>
               </div>

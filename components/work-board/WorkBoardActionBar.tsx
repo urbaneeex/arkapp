@@ -5,6 +5,12 @@ import { useState } from 'react'
 import { Plus, ArrowDownUp, Settings2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { cn } from '@/lib/utils'
+import {
+  workBoardHeaderActionsClass,
+  workBoardHeaderIconButtonClass,
+  workBoardHeaderLabelClass,
+} from '@/lib/work-board/workBoardHeaderClasses'
 
 export function WorkBoardActionBar({
   kanbanFiltersSlot,
@@ -23,30 +29,35 @@ export function WorkBoardActionBar({
   const [sortOpen, setSortOpen] = useState(false)
 
   return (
-    <div
-      className="flex flex-wrap items-center gap-2"
-      role="toolbar"
-      aria-label="Acciones del tablero"
-    >
+    <div className={workBoardHeaderActionsClass} role="toolbar" aria-label="Acciones del tablero">
       <Button
         type="button"
         variant="default"
         size="sm"
-        className="gap-1.5 rounded-lg h-9"
+        className={cn(workBoardHeaderIconButtonClass, 'rounded-lg')}
         onClick={onAddTask}
         disabled={addTaskDisabled}
+        aria-label="Añadir tarea"
+        title="Añadir tarea"
       >
-        <Plus className="h-4 w-4" aria-hidden />
-        Añadir tarea
+        <Plus className="h-4 w-4 shrink-0" aria-hidden />
+        <span className={workBoardHeaderLabelClass}>Añadir tarea</span>
       </Button>
 
       {kanbanFiltersSlot ? kanbanFiltersSlot : null}
 
       <Popover open={sortOpen} onOpenChange={setSortOpen}>
         <PopoverTrigger asChild>
-          <Button type="button" variant="outline" size="sm" className="gap-1.5 rounded-lg h-9">
-            <ArrowDownUp className="h-4 w-4" aria-hidden />
-            Ordenar
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className={cn(workBoardHeaderIconButtonClass, 'rounded-lg')}
+            aria-label="Ordenar"
+            title="Ordenar"
+          >
+            <ArrowDownUp className="h-4 w-4 shrink-0" aria-hidden />
+            <span className={workBoardHeaderLabelClass}>Ordenar</span>
           </Button>
         </PopoverTrigger>
         <PopoverContent align="start" className="z-[120] w-72 text-sm text-zinc-300">
@@ -62,12 +73,13 @@ export function WorkBoardActionBar({
           type="button"
           variant="outline"
           size="sm"
-          className="gap-1.5 rounded-lg h-9"
+          className={cn(workBoardHeaderIconButtonClass, 'rounded-lg')}
           onClick={onSettingsClick}
+          aria-label="Ajustes del tablero"
           title="Ajustes del tablero"
         >
-          <Settings2 className="h-4 w-4" aria-hidden />
-          Ajustes
+          <Settings2 className="h-4 w-4 shrink-0" aria-hidden />
+          <span className={workBoardHeaderLabelClass}>Ajustes</span>
         </Button>
       )}
     </div>

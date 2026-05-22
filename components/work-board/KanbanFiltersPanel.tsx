@@ -9,6 +9,10 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { cn } from '@/lib/utils'
 import type { KanbanFiltersState, KanbanPriorityFilterId } from '@/lib/work-board/kanbanFilters'
 import { countActiveKanbanFilters, defaultKanbanFilters } from '@/lib/work-board/kanbanFilters'
+import {
+  workBoardHeaderIconButtonClass,
+  workBoardHeaderLabelClass,
+} from '@/lib/work-board/workBoardHeaderClasses'
 
 type StaffOpt = { id: string; name: string }
 type ClientOpt = { id: string; name: string }
@@ -68,12 +72,17 @@ export function KanbanFiltersPanel({
           type="button"
           variant="outline"
           size="sm"
-          className="relative gap-1.5 rounded-lg h-9 border-zinc-700 bg-zinc-900 text-zinc-200 hover:bg-zinc-800"
+          className={cn(
+            workBoardHeaderIconButtonClass,
+            'relative rounded-lg border-zinc-700 bg-zinc-900 text-zinc-200 hover:bg-zinc-800'
+          )}
+          aria-label={activeCount > 0 ? `Filtros (${activeCount} activos)` : 'Filtros'}
+          title="Filtros"
         >
           <ListFilter className="h-4 w-4 shrink-0" aria-hidden />
-          <span>Filtros</span>
+          <span className={workBoardHeaderLabelClass}>Filtros</span>
           {activeCount > 0 ? (
-            <span className="rounded-full bg-brand px-1.5 text-[10px] font-semibold text-white">
+            <span className="absolute -right-1 -top-1 min-w-[1.125rem] rounded-full bg-brand px-1 text-center text-[10px] font-semibold leading-4 text-white lg:static lg:min-w-0 lg:px-1.5 lg:leading-normal">
               {activeCount}
             </span>
           ) : null}

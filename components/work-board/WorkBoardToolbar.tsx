@@ -1,6 +1,10 @@
 'use client'
 
 import { cn } from '@/lib/utils'
+import {
+  workBoardHeaderLabelClass,
+  workBoardHeaderToolbarBtnClass,
+} from '@/lib/work-board/workBoardHeaderClasses'
 import { LayoutGrid, CalendarDays } from 'lucide-react'
 
 export type WorkBoardViewMode = 'kanban' | 'calendar'
@@ -14,7 +18,7 @@ export function WorkBoardToolbar({
 }) {
   return (
     <div
-      className="inline-flex h-9 items-stretch rounded-lg border border-zinc-700 bg-zinc-900/80 p-0.5"
+      className="inline-flex h-9 shrink-0 items-stretch rounded-lg border border-zinc-700 bg-zinc-900/80 p-0.5"
       role="group"
       aria-label="Vista del tablero"
     >
@@ -22,29 +26,35 @@ export function WorkBoardToolbar({
         type="button"
         onClick={() => onViewModeChange('kanban')}
         className={cn(
-          'inline-flex h-full cursor-pointer items-center gap-2 rounded-md px-3 text-sm font-medium transition-colors',
+          workBoardHeaderToolbarBtnClass,
+          'text-sm font-medium transition-colors',
           viewMode === 'kanban'
             ? 'bg-brand/15 text-brand ring-1 ring-brand/35 shadow-sm'
             : 'text-zinc-400 hover:text-brand'
         )}
         aria-pressed={viewMode === 'kanban'}
+        aria-label="Vista Kanban"
+        title="Kanban"
       >
-        <LayoutGrid className="h-4 w-4" aria-hidden />
-        Kanban
+        <LayoutGrid className="h-4 w-4 shrink-0" aria-hidden />
+        <span className={workBoardHeaderLabelClass}>Kanban</span>
       </button>
       <button
         type="button"
         onClick={() => onViewModeChange('calendar')}
         className={cn(
-          'inline-flex h-full cursor-pointer items-center gap-2 rounded-md px-3 text-sm font-medium transition-colors',
+          workBoardHeaderToolbarBtnClass,
+          'text-sm font-medium transition-colors',
           viewMode === 'calendar'
             ? 'bg-brand/15 text-brand ring-1 ring-brand/35 shadow-sm'
             : 'text-zinc-400 hover:text-brand'
         )}
         aria-pressed={viewMode === 'calendar'}
+        aria-label="Vista calendario"
+        title="Calendario"
       >
-        <CalendarDays className="h-4 w-4" aria-hidden />
-        Calendario
+        <CalendarDays className="h-4 w-4 shrink-0" aria-hidden />
+        <span className={workBoardHeaderLabelClass}>Calendario</span>
       </button>
     </div>
   )

@@ -243,18 +243,18 @@ function ItemMenu({
           />
           {canDelete && onDelete ? (
             <>
-              <div className="my-1 border-t border-zinc-800" />
-              <button
-                type="button"
+          <div className="my-1 border-t border-zinc-800" />
+          <button
+            type="button"
                 onClick={() => {
                   onDelete()
                   setOpen(false)
                 }}
                 className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-red-400 transition-colors hover:bg-zinc-700/60"
-              >
-                <Trash2 className="h-3.5 w-3.5 shrink-0" />
-                Eliminar estado
-              </button>
+          >
+            <Trash2 className="h-3.5 w-3.5 shrink-0" />
+            Eliminar estado
+          </button>
             </>
           ) : null}
         </div>
@@ -492,14 +492,14 @@ export function WorkBoardConfigPanel({
   useEffect(() => {
     if (open) {
       const mapped: LocalStage[] = stages.map((s) => ({
-        uid: s.id,
-        id: s.id,
+          uid: s.id,
+          id: s.id,
         slug: s.slug,
         stage_category: enforcedCategoryForSlug(s.slug, s.stage_category),
-        label: s.label,
-        color: s.color || '#6366f1',
+          label: s.label,
+          color: s.color || '#6366f1',
         sort_order: s.sort_order ?? 0,
-      }))
+        }))
       setLocal(withSequentialSortOrder(sortStagesByCategory(mapped)))
       setDeletedIds([])
       setError(null)
@@ -739,7 +739,7 @@ export function WorkBoardConfigPanel({
 
         <div className="max-h-[min(60vh,32rem)] overflow-y-auto px-5 py-5">
           {step === 'edit' ? (
-            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
               <div className="space-y-6">
                 <div className="flex gap-3 rounded-lg border border-zinc-800/80 bg-zinc-950/30 px-3.5 py-3">
                   <LayoutList className="mt-0.5 h-4 w-4 shrink-0 text-brand" aria-hidden />
@@ -792,21 +792,21 @@ export function WorkBoardConfigPanel({
                             ) : null}
                             {catStages.map((stage) => (
                               <li key={stage.uid}>
-                                <SortableStageItem
-                                  stage={stage}
-                                  onUpdate={updateStage}
-                                  onDelete={deleteStage}
-                                />
+                    <SortableStageItem
+                      stage={stage}
+                      onUpdate={updateStage}
+                      onDelete={deleteStage}
+                    />
                               </li>
-                            ))}
+                  ))}
                           </ul>
-                        </SortableContext>
+                </SortableContext>
                       </CategoryDroppable>
                     </section>
                   )
                 })}
               </div>
-            </DndContext>
+              </DndContext>
           ) : (
             <ReassignStep
               conflicts={conflicts}

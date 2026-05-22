@@ -145,31 +145,31 @@ function KanbanColumnHeader({
 }) {
   return (
     <div className="border-b border-zinc-800 px-3 py-1.5 shrink-0 rounded-t-xl">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex min-w-0 flex-1 items-center gap-1.5">
-          <span
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex min-w-0 flex-1 items-center gap-1.5">
+              <span
             className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-zinc-700/80"
             style={{ backgroundColor: stage.color?.trim() || '#6366f1' }}
           />
-          <h2 className="min-w-0 flex-1 truncate text-sm font-semibold uppercase tracking-wide leading-tight text-zinc-200">
-            {stage.label}
-          </h2>
-          <span className="shrink-0 text-xs font-medium tabular-nums leading-none text-zinc-500">
-            {count}
-          </span>
-        </div>
-        {canCreateAppointments ? (
-          <Button
-            type="button"
-            variant="ghost"
-            className="h-8 w-8 shrink-0 rounded-md p-0 text-zinc-400 hover:bg-zinc-800/90 hover:text-zinc-100"
-            aria-label="Añadir tarea en esta columna"
-            onClick={onQuickAdd}
-          >
-            <Plus className="h-3.5 w-3.5" />
-          </Button>
-        ) : null}
-      </div>
+              <h2 className="min-w-0 flex-1 truncate text-sm font-semibold uppercase tracking-wide leading-tight text-zinc-200">
+                {stage.label}
+              </h2>
+            <span className="shrink-0 text-xs font-medium tabular-nums leading-none text-zinc-500">
+              {count}
+            </span>
+          </div>
+              {canCreateAppointments ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="h-8 w-8 shrink-0 rounded-md p-0 text-zinc-400 hover:bg-zinc-800/90 hover:text-zinc-100"
+                  aria-label="Añadir tarea en esta columna"
+                  onClick={onQuickAdd}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                </Button>
+              ) : null}
+            </div>
     </div>
   )
 }
@@ -444,24 +444,24 @@ export function KanbanQuickAddAppointment({
   }, [clientMode, selectedClient, newClientName])
 
   const resetNewTaskDraft = useCallback(() => {
-    const d = calcInitialDate()
-    const t = calcInitialTime()
-    setTitle('')
-    setStartDate(d)
-    setStartTime(t)
-    setEndLocal(calcInitialEnd(d, t))
-    setPriority('none')
-    setStaffIds([])
+      const d = calcInitialDate()
+      const t = calcInitialTime()
+      setTitle('')
+      setStartDate(d)
+      setStartTime(t)
+      setEndLocal(calcInitialEnd(d, t))
+      setPriority('none')
+      setStaffIds([])
     setSelectedTeamIds([])
-    setStaffAvail({})
-    setAssignOpen(false)
-    setAssignSearch('')
-    setPriorityMenuOpen(false)
-    setDateMenuOpen(false)
-    setError(null)
-    resetClientState()
-    setSelectedService(null)
-    setServicePopoverOpen(false)
+      setStaffAvail({})
+      setAssignOpen(false)
+      setAssignSearch('')
+      setPriorityMenuOpen(false)
+      setDateMenuOpen(false)
+      setError(null)
+      resetClientState()
+      setSelectedService(null)
+      setServicePopoverOpen(false)
   }, [])
 
   /** Modal / apertura del panel: reinicio sin atar a `stageId` (el usuario puede cambiar columna sin perder el borrador). */
@@ -638,14 +638,14 @@ export function KanbanQuickAddAppointment({
       }
       metadata = Object.keys(base).length > 0 ? base : null
     } else {
-      const meta: Record<string, unknown> = {}
-      if (priority !== 'none') meta.kanban_priority = priority
-      if (staffIds.length > 0) {
-        meta.kanban_assignees = staffIds
-          .map((id) => staffOptions.find((s) => s.id === id))
-          .filter((s): s is WorkBoardStaffOption => !!s)
-          .map((s) => ({ id: s.id, name: s.name }))
-      }
+    const meta: Record<string, unknown> = {}
+    if (priority !== 'none') meta.kanban_priority = priority
+    if (staffIds.length > 0) {
+      meta.kanban_assignees = staffIds
+        .map((id) => staffOptions.find((s) => s.id === id))
+        .filter((s): s is WorkBoardStaffOption => !!s)
+        .map((s) => ({ id: s.id, name: s.name }))
+    }
       metadata = Object.keys(meta).length > 0 ? meta : null
     }
     const primaryStaffId = staffIds.length > 0 ? staffIds[0]! : null
@@ -688,7 +688,7 @@ export function KanbanQuickAddAppointment({
         const priceNext =
           selectedService?.price ?? editItem.price_total ?? null
         const { error: upErr } = await supabase
-          .from('appointments')
+        .from('appointments')
           .update({
             title: titleTrim,
             start_time: start?.toISOString() ?? null,
@@ -1052,11 +1052,11 @@ export function KanbanQuickAddAppointment({
                             const isMe = s.id === currentUserId
                             return (
                               <li key={`as-p-${s.id}`} className="list-none">
-                                <button
-                                  type="button"
+                    <button
+                      type="button"
                                   disabled={saving}
-                                  className={cn(
-                                    KANBAN_COLUMN_TITLE_TYPO,
+                      className={cn(
+                        KANBAN_COLUMN_TITLE_TYPO,
                                     'flex w-full items-center gap-2 rounded-md px-1 py-1.5 text-left transition-colors hover:bg-zinc-800/55 disabled:opacity-50'
                                   )}
                                   aria-label={`Quitar a ${isMe ? 'Yo' : s.name} de la asignación`}
@@ -1075,7 +1075,7 @@ export function KanbanQuickAddAppointment({
                                         aria-hidden
                                       />
                                     ) : null}
-                                  </span>
+                      </span>
                                   <span className="min-w-0 flex-1 truncate text-sm text-zinc-100">
                                     {isMe ? 'Yo' : s.name}
                                   </span>
@@ -1083,7 +1083,7 @@ export function KanbanQuickAddAppointment({
                                     Persona
                                   </span>
                                   <X className="h-3.5 w-3.5 shrink-0 text-zinc-500" aria-hidden />
-                                </button>
+                    </button>
                               </li>
                             )
                           })}
@@ -1137,21 +1137,21 @@ export function KanbanQuickAddAppointment({
                         ) : staffPickerOptions.length === 0 ? (
                           <p className={cn(KANBAN_QUICK_ADD_ROW_MUTED, 'px-3 py-2 text-xs')}>
                             Ya están en asignación.
-                          </p>
-                        ) : (
+                      </p>
+                    ) : (
                           staffPickerOptions.map((s) => {
-                            const isMe = s.id === currentUserId
+                        const isMe = s.id === currentUserId
                             const isOccupied =
                               !!selectedClient && startDate.trim().length > 0 && staffAvail[s.id] === false
-                            return (
-                              <button
-                                key={s.id}
-                                type="button"
-                                className={cn(
-                                  KANBAN_COLUMN_TITLE_TYPO,
-                                  'flex w-full items-center gap-2 px-2 py-2 text-left hover:bg-zinc-800/90',
-                                  isOccupied && 'opacity-75'
-                                )}
+                        return (
+                          <button
+                            key={s.id}
+                            type="button"
+                            className={cn(
+                              KANBAN_COLUMN_TITLE_TYPO,
+                              'flex w-full items-center gap-2 px-2 py-2 text-left hover:bg-zinc-800/90',
+                              isOccupied && 'opacity-75'
+                            )}
                                 onClick={() =>
                                   setStaffIds((prev) => (prev.includes(s.id) ? prev : [...prev, s.id]))
                                 }
@@ -1160,31 +1160,31 @@ export function KanbanQuickAddAppointment({
                                   className="relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white shadow-inner"
                                   style={{ backgroundColor: staffAvatarBackground(s.color) }}
                                 >
-                                  {staffInitials(s.name)}
-                                  {isMe ? (
-                                    <span
-                                      className="absolute bottom-0 right-0 h-2 w-2 rounded-full bg-emerald-500 ring-2 ring-zinc-900"
-                                      aria-hidden
-                                    />
-                                  ) : null}
-                                </span>
-                                <span className="min-w-0 flex-1 truncate text-zinc-100">
-                                  {isMe ? 'Yo' : s.name}
-                                </span>
-                                {isOccupied ? (
-                                  <span className="shrink-0 rounded bg-amber-900/60 px-1.5 py-0.5 text-[10px] font-semibold text-amber-400">
-                                    Ocupado
-                                  </span>
-                                ) : s.email ? (
-                                  <span className="hidden max-w-[40%] truncate text-xs text-zinc-500 sm:inline">
-                                    {s.email}
-                                  </span>
-                                ) : null}
+                              {staffInitials(s.name)}
+                              {isMe ? (
+                                <span
+                                  className="absolute bottom-0 right-0 h-2 w-2 rounded-full bg-emerald-500 ring-2 ring-zinc-900"
+                                  aria-hidden
+                                />
+                              ) : null}
+                            </span>
+                            <span className="min-w-0 flex-1 truncate text-zinc-100">
+                              {isMe ? 'Yo' : s.name}
+                            </span>
+                            {isOccupied ? (
+                              <span className="shrink-0 rounded bg-amber-900/60 px-1.5 py-0.5 text-[10px] font-semibold text-amber-400">
+                                Ocupado
+                              </span>
+                            ) : s.email ? (
+                              <span className="hidden max-w-[40%] truncate text-xs text-zinc-500 sm:inline">
+                                {s.email}
+                              </span>
+                            ) : null}
                                 <Plus className="h-4 w-4 shrink-0 text-zinc-500" aria-hidden />
-                              </button>
-                            )
-                          })
-                        )}
+                          </button>
+                        )
+                      })
+                    )}
                       </>
                     ) : null}
                     {teams.length > 0 ? (
@@ -1192,9 +1192,9 @@ export function KanbanQuickAddAppointment({
                         {staffOptions.length > 0 ? (
                           <div className="mx-2 border-t border-zinc-800/80" aria-hidden />
                         ) : null}
-                        <p
-                          className={cn(
-                            KANBAN_QUICK_ADD_ROW_MUTED,
+                    <p
+                      className={cn(
+                        KANBAN_QUICK_ADD_ROW_MUTED,
                             'px-3 pb-0.5 pt-2 text-[11px] uppercase tracking-wide'
                           )}
                         >
@@ -1214,7 +1214,7 @@ export function KanbanQuickAddAppointment({
                               key={t.id}
                               type="button"
                               disabled={saving}
-                              className={cn(
+                      className={cn(
                                 KANBAN_COLUMN_TITLE_TYPO,
                                 'flex w-full items-center gap-2 px-2 py-2 text-left hover:bg-zinc-800/90'
                               )}
@@ -2679,7 +2679,7 @@ export function WorkBoardKanbanView({
       const activeIdStr = String(event.active.id)
       const dragged = itemById.get(activeIdStr)
       if (!dragged || !allowDragCard(dragged)) return
-      const { active, over } = event
+    const { active, over } = event
       if (!over || active.id === over.id) return
       const overIdStr = String(over.id)
 
@@ -2725,8 +2725,8 @@ export function WorkBoardKanbanView({
 
       if (dragDisabled) {
         dragSnapshotRef.current = null
-        return
-      }
+      return
+    }
 
       const draggedItem = itemById.get(activeIdStr)
       if (!draggedItem || !allowDragCard(draggedItem)) {
@@ -2946,12 +2946,12 @@ export function WorkBoardKanbanView({
               </KanbanColumn>
             )
           })}
-        </div>
+                </div>
         <DragOverlay dropAnimation={null}>
           {activeItem ? (
             <div className="pointer-events-none w-[264px] max-w-[264px] rotate-1 cursor-grabbing shadow-2xl">
               <WorkBoardCard item={activeItem} compact columnColor={overlayColumnColor} />
-            </div>
+                  </div>
           ) : null}
         </DragOverlay>
       </DndContext>
