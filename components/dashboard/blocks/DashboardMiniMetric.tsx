@@ -5,16 +5,19 @@ export function DashboardMiniMetric({
   value,
   hint,
   highlight,
+  centered,
   className,
 }: {
   label: string
   value: string
   hint?: string
   highlight?: 'danger' | 'amber' | 'success'
+  /** Centra label, valor e hint (p. ej. rejilla «Esta semana»). */
+  centered?: boolean
   className?: string
 }) {
   return (
-    <div className={cn('min-w-0', className)}>
+    <div className={cn('min-w-0', centered && 'text-center', className)}>
       <p className="text-[11px] leading-tight text-zinc-500">{label}</p>
       <p
         className={cn(

@@ -56,7 +56,7 @@ export function DashboardHomeClient({
       {role === 'owner' && ownerHome ? <DashboardOwnerSections data={ownerHome} /> : null}
       {role === 'staff' && staffHome ? <DashboardStaffSections data={staffHome} /> : null}
 
-      <div className="mt-6">
+      <div className="mt-3 md:mt-4">
         <PendingActionsCard actions={pendingActions} hasClock={hasClock} />
       </div>
 

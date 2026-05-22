@@ -23,7 +23,7 @@ export function WeekAppointmentsBarChart({
     <svg
       viewBox={`0 0 ${w} ${h}`}
       className="w-full h-[100px]"
-      preserveAspectRatio="xMidYMid meet"
+      preserveAspectRatio="none"
       role="img"
       aria-label="Citas por día de la semana"
     >

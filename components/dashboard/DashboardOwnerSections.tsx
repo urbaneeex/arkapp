@@ -73,10 +73,11 @@ export function DashboardOwnerSections({ data }: { data: OwnerDashboardPayload }
           className="flex h-full w-full flex-col"
           contentClassName="flex min-h-0 flex-1 flex-col"
         >
-          <div className="flex min-h-0 flex-1 flex-col gap-4 md:flex-row md:items-stretch">
-            <div className="flex shrink-0 flex-col justify-center md:max-w-[48%] md:pr-4 md:border-r md:border-zinc-800/80">
-              <div className="grid min-w-0 grid-cols-2 gap-3">
+          <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 md:grid-cols-2 md:items-start md:gap-x-6">
+            <div className="min-w-0 md:border-r md:border-zinc-800/80 md:pr-5">
+              <div className="grid w-full grid-cols-2 gap-x-4 gap-y-3">
               <DashboardMiniMetric
+                centered
                 label="Nuevos clientes"
                 value={s1.clientsWeek != null ? String(s1.clientsWeek.thisWeek) : '--'}
                 hint={
@@ -86,11 +87,13 @@ export function DashboardOwnerSections({ data }: { data: OwnerDashboardPayload }
                 }
               />
               <DashboardMiniMetric
+                centered
                 label="Tareas vencidas"
                 value={s1.overdueTasks != null ? String(s1.overdueTasks) : '--'}
                 highlight="danger"
               />
               <DashboardMiniMetric
+                centered
                 label="Sin asignar"
                 value={s2.unassigned != null ? String(s2.unassigned.total) : '--'}
                 hint={
@@ -103,6 +106,7 @@ export function DashboardOwnerSections({ data }: { data: OwnerDashboardPayload }
                 }
               />
               <DashboardMiniMetric
+                centered
                 label="Facturado mes"
                 value={revenueValue}
                 hint={
@@ -114,9 +118,13 @@ export function DashboardOwnerSections({ data }: { data: OwnerDashboardPayload }
               </div>
             </div>
 
-            <div className="flex min-w-0 flex-1 flex-col justify-center border-t border-zinc-800/80 pt-4 md:border-t-0 md:pl-4">
-              <p className="mb-2 text-[11px] text-zinc-500">Citas esta semana</p>
-              <WeekAppointmentsBarChart data={data.appointmentsWeekChart} />
+            <div className="flex min-w-0 flex-col border-t border-zinc-800/80 pt-4 md:border-t-0 md:pt-0 md:pl-5">
+              <p className="mb-2 text-[11px] leading-tight text-zinc-500 md:mb-2">
+                Citas esta semana
+              </p>
+              <div className="w-full">
+                <WeekAppointmentsBarChart data={data.appointmentsWeekChart} />
+              </div>
             </div>
           </div>
         </DashboardSurfaceCard>

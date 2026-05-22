@@ -2,10 +2,11 @@ import { NextResponse } from 'next/server'
 import { createServiceRoleClient } from '@/lib/supabase/admin'
 
 /**
- * Cron externo (Coolify, etc.): POST cada hora con Authorization: Bearer CRON_SECRET
+ * Vercel Cron: GET cada hora — Vercel inyecta Authorization: Bearer CRON_SECRET automáticamente.
+ * También acepta POST para invocación manual externa.
  * Ejecuta archive_completed_appointments() en Postgres.
  */
-export async function POST(request: Request) {
+async function handler(request: Request) {
   const secret = process.env.CRON_SECRET
   if (!secret) {
     return NextResponse.json({ error: 'CRON_SECRET no configurado' }, { status: 503 })
@@ -30,3 +31,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'internal_error' }, { status: 500 })
   }
 }
+
+export const GET = handler
+export const POST = handler
