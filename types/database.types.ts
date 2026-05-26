@@ -176,6 +176,48 @@ export type Database = {
           },
         ]
       }
+      appointment_comments: {
+        Row: {
+          id: string
+          appointment_id: string
+          business_id: string
+          author_id: string
+          content: Json
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          appointment_id: string
+          business_id: string
+          author_id: string
+          content: Json
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          appointment_id?: string
+          business_id?: string
+          author_id?: string
+          content?: Json
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "appointment_comments_appointment_id_fkey"
+            columns: ["appointment_id"]
+            isOneToOne: false
+            referencedRelation: "appointments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "appointment_comments_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       appointment_teams: {
         Row: {
           appointment_id: string

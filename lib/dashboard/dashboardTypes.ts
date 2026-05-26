@@ -119,12 +119,7 @@ export type OwnerDashboardPayload = {
 }
 
 export type StaffMyDay = {
-  appointmentsToday: number
-  nextAppointment: {
-    clientName: string
-    serviceName: string
-    startTime: string
-  } | null
+  tasksToday: OwnerTasksToday | null
   pendingTasks: {
     total: number
     dueToday: number
@@ -138,14 +133,6 @@ export type StaffMyDay = {
   } | null
   completedThisWeek: number | null
   motivationalNote: string | null
-}
-
-export type StaffTimelineItem = {
-  id: string
-  startTime: string
-  status: string | null
-  clientName: string
-  serviceName: string
 }
 
 export type StaffUrgentTask = {
@@ -170,10 +157,6 @@ export type StaffVacation = {
 
 export type StaffDashboardPayload = {
   section1: StaffMyDay
-  section2: {
-    timeline: StaffTimelineItem[]
-    hasMore: boolean
-  }
   section3: {
     urgent: StaffUrgentTask[]
   }
@@ -181,8 +164,30 @@ export type StaffDashboardPayload = {
     hoursWeek: StaffHoursWeek | null
     vacation: StaffVacation | null
   }
+  tasksTodayList: OwnerTasksTodayList
   teamAbsencesWeek: StaffTeamAbsence[]
 }
+
+export type DashboardMetricsPayload = {
+  ownerHome?: OwnerDashboardPayload
+  staffHome?: StaffDashboardPayload
+}
+
+export type DashboardShellPayload =
+  | { kind: 'no_business' }
+  | {
+      kind: 'ok'
+      role: DashboardRole
+      businessId: string
+      pendingActions: PendingAction[]
+      hasClock: boolean
+      canSeeLiveClockPanel: boolean
+      liveClockBetaEnabled: boolean
+      /** Solo servidor: fetch métricas. */
+      myStaffId: string
+      contractHoursPerWeek: number | null
+      vacationDaysPerYear: number | null
+    }
 
 export type DashboardBootstrapPayload =
   | { kind: 'no_business' }

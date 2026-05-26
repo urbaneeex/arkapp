@@ -1,11 +1,12 @@
 'use client'
 
+import { useEffect } from 'react'
 import dynamic from 'next/dynamic'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useRouter } from 'next/navigation'
 import { PendingActionsCard } from '@/components/dashboard/PendingActionsCard'
-import { DashboardHomeHeader } from '@/components/dashboard/blocks/DashboardHomeHeader'
-import { DashboardOwnerSections } from '@/components/dashboard/DashboardOwnerSections'
-import { DashboardStaffSections } from '@/components/dashboard/DashboardStaffSections'
 import type { DashboardBootstrapPayload } from '@/lib/dashboard/dashboardTypes'
+import { dashboardKeys } from '@/lib/dashboard/dashboardQueryKeys'
 
 const LiveClockPanelBeta = dynamic(
   () =>
@@ -20,30 +21,49 @@ const LiveClockPanelBeta = dynamic(
   }
 )
 
+async function fetchDashboardBootstrap(): Promise<DashboardBootstrapPayload> {
+  const res = await fetch('/api/dashboard/bootstrap')
+  if (!res.ok) throw new Error('dashboard bootstrap')
+  return res.json()
+}
+
 export function DashboardHomeClient({
-  data,
-  displayName,
+  initialData,
 }: {
-  data: DashboardBootstrapPayload
-  displayName: string
+  initialData: DashboardBootstrapPayload
 }) {
+  const router = useRouter()
+  const queryClient = useQueryClient()
+
+  const { data = initialData } = useQuery({
+    queryKey: dashboardKeys.bootstrap(),
+    queryFn: fetchDashboardBootstrap,
+    initialData,
+    staleTime: 60_000,
+    gcTime: 30 * 60_000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+  })
+
+  useEffect(() => {
+    return queryClient.getQueryCache().subscribe((event) => {
+      if (
+        event.type === 'updated' &&
+        event.action.type === 'success' &&
+        event.query.queryKey[0] === dashboardKeys.bootstrap()[0]
+      ) {
+        router.refresh()
+      }
+    })
+  }, [queryClient, router])
+
   if (data.kind === 'no_business') {
-    return (
-      <div className="rounded-lg border border-amber-200 bg-amber-950/50 p-6 text-amber-200">
-        <p className="font-medium">No tienes un negocio configurado</p>
-        <p className="mt-1 text-sm">
-          Contacta al administrador para asociar tu cuenta a un negocio.
-        </p>
-      </div>
-    )
+    return null
   }
 
   const {
-    role,
     businessId,
     pendingActions,
-    ownerHome,
-    staffHome,
     hasClock,
     canSeeLiveClockPanel,
     liveClockBetaEnabled,
@@ -51,11 +71,6 @@ export function DashboardHomeClient({
 
   return (
     <>
-      <DashboardHomeHeader displayName={displayName} />
-
-      {role === 'owner' && ownerHome ? <DashboardOwnerSections data={ownerHome} /> : null}
-      {role === 'staff' && staffHome ? <DashboardStaffSections data={staffHome} /> : null}
-
       <div className="mt-3 md:mt-4">
         <PendingActionsCard actions={pendingActions} hasClock={hasClock} />
       </div>

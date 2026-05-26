@@ -47,6 +47,30 @@ export function userCanEditAppointmentCardClient(
   return item.business_id === businessId && item.created_by === userId
 }
 
+/** Abrir detalle (formulario solo lectura + actividad): creador o asignado principal / kanban_assignees. */
+export function userCanOpenAppointmentDetailClient(
+  item: {
+    business_id: string
+    created_by?: string | null
+    staff_id?: string | null
+    metadata?: unknown | null
+  },
+  userId: string,
+  businessId: string
+): boolean {
+  if (userCanEditAppointmentCardClient(item, userId, businessId)) return true
+  return userParticipatesInAppointmentRow(
+    {
+      business_id: businessId,
+      created_by: item.created_by,
+      staff_id: item.staff_id,
+      metadata: item.metadata,
+    },
+    userId,
+    businessId
+  )
+}
+
 /** Mover columna / marcar completado: creador, staff principal, kanban_assignees o equipo de la tarjeta. */
 export function userCanMoveAppointmentCardClient(
   item: {

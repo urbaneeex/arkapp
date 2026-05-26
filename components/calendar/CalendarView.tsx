@@ -43,14 +43,13 @@ import {
   ChevronRight,
   Eye,
   Loader2,
+  Menu,
   Plus,
-  Search,
   User,
   Wrench,
   X,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
 import { ClientOnlyDnd } from '@/components/calendar/ClientOnlyDnd'
@@ -336,7 +335,7 @@ function ViewDropdown({
           title={`Vista: ${activeLabel}`}
         >
           <Eye className="h-3.5 w-3.5 shrink-0 lg:hidden" aria-hidden />
-          <span className="hidden text-xs font-medium lg:inline">{activeLabel}</span>
+          <span className="hidden text-sm font-medium lg:inline">{activeLabel}</span>
           <svg
             className="hidden h-2.5 w-2.5 shrink-0 text-zinc-500 lg:block"
             viewBox="0 0 10 6"
@@ -396,6 +395,54 @@ function ViewDropdown({
 
 type CalendarTasksTab = 'unscheduled' | 'overdue'
 
+function CalendarTasksCountBadge({
+  count,
+  variant,
+  className,
+}: {
+  count: number
+  variant: 'brand' | 'danger'
+  className?: string
+}) {
+  if (count <= 0) return null
+  return (
+    <span
+      className={cn(
+        'inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full px-1 text-[10px] font-semibold tabular-nums text-white',
+        variant === 'brand' ? 'bg-brand' : 'bg-red-500',
+        className
+      )}
+      aria-hidden
+    >
+      {count > 99 ? '99+' : count}
+    </span>
+  )
+}
+
+/** Rail contraído (estilo ClickUp): número + etiqueta en columna vertical. */
+function CalendarTasksCollapsedRailLabel({
+  count,
+  label,
+  countClassName,
+}: {
+  count: number
+  label: string
+  countClassName: string
+}) {
+  const n = count > 99 ? '99+' : count
+  return (
+    <span
+      className="inline-flex items-center gap-1 [writing-mode:vertical-rl] rotate-180 select-none"
+      aria-hidden
+    >
+      <span className={cn('text-sm font-semibold tabular-nums leading-none', countClassName)}>
+        {n}
+      </span>
+      <span className="whitespace-nowrap text-xs font-medium leading-none text-zinc-400">{label}</span>
+    </span>
+  )
+}
+
 function stageDotClass(slug: string | null | undefined): string {
   if (!slug || slug === 'pending') return 'bg-amber-500'
   if (slug === 'confirmed') return 'bg-brand'
@@ -424,21 +471,11 @@ function CalendarTasksSidebar({
   onSidebarDragEnd?: () => void
 }) {
   const [tab, setTab] = useState<CalendarTasksTab>('unscheduled')
-  const [search, setSearch] = useState('')
   const [sortAsc, setSortAsc] = useState(true)
 
   const source = tab === 'unscheduled' ? unscheduled : overdue
   const rows = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    let list = source
-    if (q) {
-      list = source.filter((r) => {
-        const w = mapAppointmentRowToWorkItem(r as unknown as AppointmentRowInput)
-        const hay = `${w.displayTitle} ${w.client_name ?? ''} ${w.service_name ?? ''} ${w.stage_slug}`.toLowerCase()
-        return hay.includes(q)
-      })
-    }
-    return [...list].sort((a, b) => {
+    return [...source].sort((a, b) => {
       const wa = mapAppointmentRowToWorkItem(a as unknown as AppointmentRowInput)
       const wb = mapAppointmentRowToWorkItem(b as unknown as AppointmentRowInput)
       const byStage = wa.stage_slug.localeCompare(wb.stage_slug)
@@ -446,24 +483,36 @@ function CalendarTasksSidebar({
       const byTitle = wa.displayTitle.localeCompare(wb.displayTitle, 'es')
       return sortAsc ? byTitle : -byTitle
     })
-  }, [source, search, sortAsc])
+  }, [source, sortAsc])
 
   if (!panelOpen) {
     return (
-      <div className="flex shrink-0 flex-col border-l border-zinc-800 bg-zinc-950">
+      <div className="flex w-11 shrink-0 border-l border-zinc-800 bg-zinc-950">
         <button
           type="button"
           onClick={onTogglePanel}
-          className="flex h-full min-h-[8rem] w-10 flex-col items-center justify-center gap-3 border-0 bg-zinc-950 px-1 py-4 text-zinc-400 transition-colors hover:bg-zinc-900 hover:text-zinc-100"
-          aria-label="Mostrar tareas"
+          className="flex min-h-[12rem] w-full flex-col items-center gap-2 border-0 bg-transparent px-1 pb-4 pt-3 text-zinc-500 transition-colors hover:bg-zinc-900/80 hover:text-zinc-300"
+          aria-label={`Mostrar tareas. Sin programar: ${unscheduled.length}. Vencidas: ${overdue.length}.`}
         >
-          <ChevronLeft className="h-4 w-4 shrink-0" aria-hidden />
-          <span
-            className="text-[10px] font-semibold uppercase tracking-[0.18em] text-current [text-orientation:mixed] [writing-mode:vertical-rl]"
-            aria-hidden
-          >
-            Tareas
-          </span>
+          <Menu className="h-4 w-4 shrink-0" aria-hidden />
+          <div className="flex w-full flex-col items-center gap-3 pt-1">
+            <CalendarTasksCollapsedRailLabel
+              count={unscheduled.length}
+              label="Sin programar"
+              countClassName="text-brand"
+            />
+            <span
+              className="inline-block rotate-90 text-lg font-light leading-none text-zinc-500"
+              aria-hidden
+            >
+              |
+            </span>
+            <CalendarTasksCollapsedRailLabel
+              count={overdue.length}
+              label="Vencidas"
+              countClassName="text-red-400"
+            />
+          </div>
         </button>
       </div>
     )
@@ -472,28 +521,15 @@ function CalendarTasksSidebar({
   return (
     <aside className="flex w-[min(100%,18rem)] shrink-0 flex-col border-l border-zinc-800 bg-zinc-950">
       <div className="flex items-center justify-between gap-2 border-b border-zinc-800 px-3 py-2.5">
-        <h3 className="font-display text-sm font-semibold text-zinc-100">Tareas</h3>
-        <div className="flex items-center gap-0.5">
-          <span className="sr-only">Buscar en la lista</span>
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar…"
-              className="h-8 w-36 border-zinc-700 bg-zinc-900 pl-7 text-xs text-zinc-200 placeholder:text-zinc-500"
-              aria-label="Buscar tareas"
-            />
-          </div>
-          <button
-            type="button"
-            onClick={onTogglePanel}
-            className="rounded p-1.5 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-100"
-            aria-label="Ocultar panel de tareas"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </button>
-        </div>
+        <h3 className="text-lg font-semibold tracking-tight text-zinc-100">Tareas</h3>
+        <button
+          type="button"
+          onClick={onTogglePanel}
+          className="rounded p-1.5 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-100"
+          aria-label="Ocultar panel de tareas"
+        >
+          <ChevronRight className="h-4 w-4" />
+        </button>
       </div>
 
       <div className="flex border-b border-zinc-800 px-2">
@@ -501,24 +537,26 @@ function CalendarTasksSidebar({
           type="button"
           onClick={() => setTab('unscheduled')}
           className={cn(
-            'flex-1 border-b-2 py-2 text-center text-xs font-medium transition-colors',
+            'flex flex-1 items-center justify-center gap-1.5 border-b-2 py-2 text-xs font-medium transition-colors',
             tab === 'unscheduled'
               ? 'border-zinc-100 text-zinc-100'
               : 'border-transparent text-zinc-500 hover:text-zinc-300'
           )}
         >
+          <CalendarTasksCountBadge count={unscheduled.length} variant="brand" />
           Sin programar
         </button>
         <button
           type="button"
           onClick={() => setTab('overdue')}
           className={cn(
-            'flex-1 border-b-2 py-2 text-center text-xs font-medium transition-colors',
+            'flex flex-1 items-center justify-center gap-1.5 border-b-2 py-2 text-xs font-medium transition-colors',
             tab === 'overdue'
               ? 'border-zinc-100 text-zinc-100'
               : 'border-transparent text-zinc-500 hover:text-zinc-300'
           )}
         >
+          <CalendarTasksCountBadge count={overdue.length} variant="danger" />
           Vencidas
         </button>
       </div>
@@ -988,12 +1026,23 @@ export function CalendarView({
       >
         {headerSlot}
         <div className="flex flex-nowrap items-center gap-1.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] lg:flex-wrap lg:gap-2 lg:overflow-visible [&::-webkit-scrollbar]:hidden">
-          {/* Fecha */}
-          <h2 className="mr-1 min-w-0 shrink truncate text-sm font-semibold capitalize tabular-nums text-zinc-100 lg:mr-3 lg:text-base">
-            {title()}
-          </h2>
+          <button
+            type="button"
+            onClick={goToday}
+            className="flex h-7 shrink-0 cursor-pointer items-center rounded-md border border-zinc-700 bg-zinc-900/80 px-2.5 text-sm font-medium text-zinc-400 transition-colors hover:border-zinc-500 hover:text-zinc-200"
+          >
+            Hoy
+          </button>
 
-          {/* Flechas */}
+          <ViewDropdown
+            options={CALENDAR_PERIOD_OPTIONS}
+            value={view}
+            activeLabel={
+              CALENDAR_PERIOD_OPTIONS.find((o) => o.value === view)?.label ?? 'Vista'
+            }
+            onChange={setView}
+          />
+
           <div className="inline-flex h-7 shrink-0 items-stretch rounded-md border border-zinc-700 bg-zinc-900/80 p-0.5">
             <button
               type="button"
@@ -1013,23 +1062,9 @@ export function CalendarView({
             </button>
           </div>
 
-          <ViewDropdown
-            options={CALENDAR_PERIOD_OPTIONS}
-            value={view}
-            activeLabel={
-              CALENDAR_PERIOD_OPTIONS.find((o) => o.value === view)?.label ?? 'Vista'
-            }
-            onChange={setView}
-          />
-
-          {/* Hoy */}
-          <button
-            type="button"
-            onClick={goToday}
-            className="flex h-7 shrink-0 cursor-pointer items-center rounded-md border border-zinc-700 bg-zinc-900/80 px-2.5 text-xs font-medium text-zinc-400 transition-colors hover:border-zinc-500 hover:text-zinc-200"
-          >
-            Hoy
-          </button>
+          <h2 className="min-w-0 shrink truncate text-sm font-semibold capitalize tabular-nums text-zinc-100 lg:text-base">
+            {title()}
+          </h2>
         </div>
       </div>
 
@@ -1242,6 +1277,8 @@ const ALL_DAY_ROW_HEIGHT_PX = 44
 const CALENDAR_WEEK_HEADER_Z = 100
 /** Barra superior (añadir tarea, filtros, período): por encima de cabeceras sticky del grid. */
 const CALENDAR_TOOLBAR_Z = 110
+/** Tarjeta rápida al clic en slot: por encima de cabeceras día / todo el día (100). */
+const CALENDAR_QUICK_ADD_Z = 120
 
 /** Vista semana: réplica de DayView (slots 15 min, 00:00–24:00; cerrado según horarios) */
 function scrollCalendarNowLineIntoView(el: HTMLElement | null) {
@@ -1637,24 +1674,6 @@ function WeekView({
             />
           )
         })}
-        {selectedWeekSlot && businessId && (
-          <KanbanQuickAddAppointment
-            defaultOpen
-            stageId={defaultStageId}
-            initialDay={days[selectedWeekSlot.dayIndex]!}
-            initialTimeMin={selectedWeekSlot.timeMin}
-            businessId={businessId}
-            currentUserId={currentUserId}
-            services={services ?? []}
-            staffOptions={staff ?? []}
-            teams={teams}
-            onClose={() => setSelectedWeekSlot(null)}
-            onSaved={onSlotSaved}
-            onToast={onSlotToast}
-            wrapperClassName="absolute z-30 pointer-events-auto w-72"
-            wrapperStyle={weekQuickAddCardStyle}
-          />
-        )}
         {sidebarScheduleHoverKey && sidebarDragRow && (() => {
           const match = sidebarScheduleHoverKey.match(/^week-(\d+)-(\d+)$/)
           if (!match) return null
@@ -1684,6 +1703,35 @@ function WeekView({
           )
         })()}
       </div>
+
+      {selectedWeekSlot && businessId ? (
+        <div
+          className="pointer-events-none absolute left-[56px] right-0 bottom-0 overflow-visible"
+          style={
+            {
+              top: weekTimeGridTopPx,
+              zIndex: CALENDAR_QUICK_ADD_Z,
+            } as React.CSSProperties
+          }
+        >
+          <KanbanQuickAddAppointment
+            defaultOpen
+            stageId={defaultStageId}
+            initialDay={days[selectedWeekSlot.dayIndex]!}
+            initialTimeMin={selectedWeekSlot.timeMin}
+            businessId={businessId}
+            currentUserId={currentUserId}
+            services={services ?? []}
+            staffOptions={staff ?? []}
+            teams={teams}
+            onClose={() => setSelectedWeekSlot(null)}
+            onSaved={onSlotSaved}
+            onToast={onSlotToast}
+            wrapperClassName="pointer-events-auto absolute w-72"
+            wrapperStyle={weekQuickAddCardStyle}
+          />
+        </div>
+      ) : null}
 
       {/* Línea “ahora” en la columna de hoy (misma pastilla HH:mm que vista día) */}
       {isTodayInWeek && currentTimeTop != null && (
@@ -2366,8 +2414,11 @@ function DayViewContent({
                   onClose={() => setSelectedSlotTime(null)}
                   onSaved={onSaved}
                   onToast={onToast}
-                  wrapperClassName="absolute z-50 pointer-events-auto w-72 right-0"
-                  wrapperStyle={calendarQuickAddSlotStyle}
+                  wrapperClassName="pointer-events-auto absolute w-72 right-0"
+                  wrapperStyle={{
+                    ...calendarQuickAddSlotStyle,
+                    zIndex: CALENDAR_QUICK_ADD_Z,
+                  }}
                 />
               )}
               {sidebarScheduleHoverSlotIndex !== null && sidebarDragRow && (

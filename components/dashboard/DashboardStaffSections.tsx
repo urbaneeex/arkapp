@@ -1,23 +1,18 @@
-'use client'
-
 import Link from 'next/link'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
-import {
-  AlertCircle,
-  BarChart2,
-  Calendar,
-  Palmtree,
-  Timer,
-} from 'lucide-react'
+import { AlertCircle, BarChart2, Calendar, Palmtree, Timer } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { DashboardBlockGrid } from '@/components/dashboard/blocks/DashboardBlockGrid'
 import { DashboardSurfaceCard } from '@/components/dashboard/blocks/DashboardSurfaceCard'
 import { DashboardMiniMetric } from '@/components/dashboard/blocks/DashboardMiniMetric'
-import { DashboardTimeline } from '@/components/dashboard/blocks/DashboardTimeline'
+import { DashboardOwnerTasksTodayList } from '@/components/dashboard/blocks/DashboardOwnerTasksTodayList'
 import { DashboardHoursProgress } from '@/components/dashboard/blocks/DashboardHoursProgress'
-import { WORK_BOARD_CALENDAR_PATH } from '@/lib/routes'
 import type { StaffDashboardPayload } from '@/lib/dashboard/dashboardTypes'
+import {
+  DASHBOARD_BLOCK_MUTED_CLASS,
+  DASHBOARD_BLOCK_VALUE_LARGE_CLASS,
+} from '@/components/dashboard/blocks/dashboardBlockTypography'
 
 const WORK_BOARD_PATH = '/dashboard/work-board'
 const URGENCY_LABEL = {
@@ -32,73 +27,84 @@ const URGENCY_CLASS = {
   week: 'text-zinc-400 bg-zinc-800/60 border-zinc-700',
 } as const
 
-function untilLabelFromNow(startTime: string) {
-  const minutes = Math.max(0, Math.round((new Date(startTime).getTime() - Date.now()) / 60000))
-  if (minutes < 60) return `en ${minutes} min`
-  const h = Math.floor(minutes / 60)
-  return `en ${h} h`
-}
-
 export function DashboardStaffSections({ data }: { data: StaffDashboardPayload }) {
   const s1 = data.section1
-  const tasks = s1.pendingTasks
+  const tasksToday = s1.tasksToday
+  const pendingMetrics = s1.pendingTasks
   const hours = data.section4.hoursWeek
   const targetHours = hours?.contractHoursPerWeek ?? 40
   const vacation = data.section4.vacation
 
   return (
     <div className="space-y-3 md:space-y-4">
-      <DashboardBlockGrid>
-        <DashboardSurfaceCard title="Mis citas hoy" titleIcon={Calendar}>
-          <p className="text-2xl font-medium tabular-nums text-zinc-100 md:text-[28px]">
-            {s1.appointmentsToday}
-          </p>
-          <div className="my-3 border-t border-zinc-800/80" />
-          {s1.nextAppointment ? (
-            <div>
-              <p className="text-[11px] text-zinc-500">
-                Próxima · {untilLabelFromNow(s1.nextAppointment.startTime)}
+      <DashboardBlockGrid matchRowHeight>
+        <DashboardSurfaceCard
+          title="Tareas hoy"
+          titleIcon={Calendar}
+          compact
+          className="flex h-full w-full flex-col"
+          contentClassName="flex min-h-0 flex-1 flex-col"
+        >
+          <div className="flex min-h-0 flex-1 flex-col gap-4 md:flex-row md:items-stretch">
+            <div className="flex shrink-0 flex-col items-center justify-center text-center md:max-w-[40%] md:pr-4 md:border-r md:border-zinc-800/80">
+              <p className={DASHBOARD_BLOCK_VALUE_LARGE_CLASS}>
+                {tasksToday != null ? tasksToday.total : '--'}
               </p>
-              <p className="mt-0.5 text-[13px] text-zinc-200">
-                {s1.nextAppointment.clientName} · {s1.nextAppointment.serviceName}
-              </p>
-              <p className="text-[11px] tabular-nums text-zinc-500">
-                {format(new Date(s1.nextAppointment.startTime), 'HH:mm', { locale: es })}
-              </p>
+              {tasksToday != null ? (
+                <p
+                  className={cn(
+                    'mt-1.5 flex flex-wrap justify-center gap-x-2 gap-y-0.5',
+                    DASHBOARD_BLOCK_MUTED_CLASS
+                  )}
+                >
+                  <span>{tasksToday.pending} pend.</span>
+                  <span>·</span>
+                  <span>{tasksToday.inProgress} en curso</span>
+                  <span>·</span>
+                  <span>{tasksToday.completedToday} complet.</span>
+                </p>
+              ) : null}
             </div>
-          ) : (
-            <p className="text-[13px] text-zinc-500">Sin citas hoy</p>
-          )}
+            <div className="min-w-0 flex-1 border-t border-zinc-800/80 pt-4 md:border-t-0 md:pl-4">
+              <DashboardOwnerTasksTodayList
+                items={data.tasksTodayList.items}
+                moreCount={data.tasksTodayList.moreCount}
+                workBoardHref={WORK_BOARD_PATH}
+              />
+            </div>
+          </div>
         </DashboardSurfaceCard>
 
-        <DashboardSurfaceCard title="Esta semana" titleIcon={BarChart2}>
+        <DashboardSurfaceCard
+          title="Esta semana"
+          titleIcon={BarChart2}
+          compact
+          className="flex h-full w-full flex-col"
+          contentClassName="flex min-h-0 flex-1 flex-col"
+        >
           <div className="grid grid-cols-2 gap-3">
             <DashboardMiniMetric
+              valueSize="large"
               label="Tareas pendientes"
-              value={tasks != null ? String(tasks.total) : '--'}
-              highlight={tasks != null && tasks.overdue > 0 ? 'danger' : undefined}
+              value={pendingMetrics != null ? String(pendingMetrics.total) : '--'}
+              highlight={pendingMetrics != null && pendingMetrics.overdue > 0 ? 'danger' : undefined}
             />
             <DashboardMiniMetric
+              valueSize="large"
               label="Vencen hoy"
-              value={tasks != null ? String(tasks.dueToday) : '--'}
-              highlight={tasks != null && tasks.dueToday > 0 ? 'amber' : undefined}
+              value={pendingMetrics != null ? String(pendingMetrics.dueToday) : '--'}
+              highlight={pendingMetrics != null && pendingMetrics.dueToday > 0 ? 'amber' : undefined}
             />
             <DashboardMiniMetric
+              valueSize="large"
               label="Completadas"
               value={s1.completedThisWeek != null ? String(s1.completedThisWeek) : '--'}
-              hint={s1.motivationalNote ?? undefined}
               highlight="success"
             />
             <DashboardMiniMetric
+              valueSize="large"
               label="Horas fichadas"
               value={s1.clockToday ? `${s1.clockToday.hoursWorked} h` : '—'}
-              hint={
-                s1.clockToday?.open
-                  ? `Entrada ${format(new Date(s1.clockToday.clockIn), 'HH:mm', { locale: es })}`
-                  : s1.clockToday
-                    ? 'Jornada cerrada'
-                    : 'Próximamente'
-              }
             />
           </div>
         </DashboardSurfaceCard>
@@ -145,33 +151,6 @@ export function DashboardStaffSections({ data }: { data: StaffDashboardPayload }
       </DashboardBlockGrid>
 
       <DashboardBlockGrid>
-        <DashboardSurfaceCard
-          title="Mi agenda hoy"
-          titleIcon={Calendar}
-          footer={
-            data.section2.hasMore ? (
-              <Link
-                href={WORK_BOARD_CALENDAR_PATH}
-                className="text-[13px] font-medium text-brand hover:underline"
-              >
-                Ver todas →
-              </Link>
-            ) : undefined
-          }
-        >
-          <DashboardTimeline
-            items={data.section2.timeline.map((item) => ({
-              id: item.id,
-              time: item.startTime,
-              status: item.status,
-              primary: item.clientName,
-              secondary: item.serviceName,
-              href: `/dashboard/appointments/${item.id}/edit`,
-            }))}
-            emptyMessage="No tienes citas hoy"
-          />
-        </DashboardSurfaceCard>
-
         <DashboardSurfaceCard title="Vacaciones y equipo" titleIcon={Palmtree}>
           {vacation?.available ? (
             <div className="mb-4">

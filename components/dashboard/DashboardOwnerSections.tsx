@@ -1,5 +1,3 @@
-'use client'
-
 import Link from 'next/link'
 import { Activity, BarChart2, Calendar, Users } from 'lucide-react'
 import { DashboardBlockGrid } from '@/components/dashboard/blocks/DashboardBlockGrid'
@@ -13,7 +11,12 @@ import {
 } from '@/components/dashboard/blocks/DashboardRecentActivityList'
 import { DashboardOwnerTasksTodayList } from '@/components/dashboard/blocks/DashboardOwnerTasksTodayList'
 import { WeekAppointmentsBarChart } from '@/components/dashboard/blocks/WeekAppointmentsBarChart'
+import {
+  DASHBOARD_BLOCK_MUTED_CLASS,
+  DASHBOARD_BLOCK_VALUE_LARGE_CLASS,
+} from '@/components/dashboard/blocks/dashboardBlockTypography'
 import type { OwnerDashboardPayload } from '@/lib/dashboard/dashboardTypes'
+import { cn } from '@/lib/utils'
 
 const WORK_BOARD_PATH = '/dashboard/work-board'
 
@@ -42,12 +45,17 @@ export function DashboardOwnerSections({ data }: { data: OwnerDashboardPayload }
           contentClassName="flex min-h-0 flex-1 flex-col"
         >
           <div className="flex min-h-0 flex-1 flex-col gap-4 md:flex-row md:items-stretch">
-            <div className="flex shrink-0 flex-col justify-center md:max-w-[40%] md:pr-4 md:border-r md:border-zinc-800/80">
-              <p className="text-2xl font-medium tabular-nums text-zinc-100 md:text-[28px]">
+            <div className="flex shrink-0 flex-col items-center justify-center text-center md:max-w-[40%] md:pr-4 md:border-r md:border-zinc-800/80">
+              <p className={DASHBOARD_BLOCK_VALUE_LARGE_CLASS}>
                 {tasks != null ? tasks.total : '--'}
               </p>
               {tasks != null ? (
-                <p className="mt-1.5 flex flex-wrap gap-x-2 gap-y-0.5 text-[11px] text-zinc-500">
+                <p
+                  className={cn(
+                    'mt-1.5 flex flex-wrap justify-center gap-x-2 gap-y-0.5',
+                    DASHBOARD_BLOCK_MUTED_CLASS
+                  )}
+                >
                   <span>{tasks.pending} pend.</span>
                   <span>·</span>
                   <span>{tasks.inProgress} en curso</span>
@@ -78,48 +86,37 @@ export function DashboardOwnerSections({ data }: { data: OwnerDashboardPayload }
               <div className="grid w-full grid-cols-2 gap-x-4 gap-y-3">
               <DashboardMiniMetric
                 centered
+                valueSize="large"
                 label="Nuevos clientes"
                 value={s1.clientsWeek != null ? String(s1.clientsWeek.thisWeek) : '--'}
-                hint={
-                  s1.clientsWeek != null
-                    ? `${s1.clientsWeek.delta >= 0 ? '+' : ''}${s1.clientsWeek.delta} vs ant.`
-                    : undefined
-                }
               />
               <DashboardMiniMetric
                 centered
+                valueSize="large"
                 label="Tareas vencidas"
                 value={s1.overdueTasks != null ? String(s1.overdueTasks) : '--'}
                 highlight="danger"
               />
               <DashboardMiniMetric
                 centered
+                valueSize="large"
                 label="Sin asignar"
                 value={s2.unassigned != null ? String(s2.unassigned.total) : '--'}
-                hint={
-                  s2.unassigned != null && s2.unassigned.olderThan24h > 0
-                    ? `${s2.unassigned.olderThan24h} +24h`
-                    : undefined
-                }
                 highlight={
                   s2.unassigned != null && s2.unassigned.olderThan24h > 0 ? 'amber' : undefined
                 }
               />
               <DashboardMiniMetric
                 centered
+                valueSize="large"
                 label="Facturado mes"
                 value={revenueValue}
-                hint={
-                  revenue?.available && revenue.previousAmount > 0
-                    ? `${revenue.delta >= 0 ? '+' : ''}${fmtEur(revenue.delta)}`
-                    : undefined
-                }
               />
               </div>
             </div>
 
             <div className="flex min-w-0 flex-col border-t border-zinc-800/80 pt-4 md:border-t-0 md:pt-0 md:pl-5">
-              <p className="mb-2 text-[11px] leading-tight text-zinc-500 md:mb-2">
+              <p className={cn('mb-2 md:mb-2', DASHBOARD_BLOCK_MUTED_CLASS)}>
                 Citas esta semana
               </p>
               <div className="w-full">

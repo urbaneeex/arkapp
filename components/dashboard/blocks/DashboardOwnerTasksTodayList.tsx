@@ -7,6 +7,10 @@ import {
   stageColorClassForSlug,
 } from '@/lib/work-items/stageColors'
 import type { OwnerTodayTaskItem } from '@/lib/dashboard/dashboardTypes'
+import {
+  DASHBOARD_BLOCK_BODY_CLASS,
+  DASHBOARD_BLOCK_MUTED_CLASS,
+} from '@/components/dashboard/blocks/dashboardBlockTypography'
 
 export function DashboardOwnerTasksTodayList({
   items,
@@ -19,7 +23,7 @@ export function DashboardOwnerTasksTodayList({
 }) {
   if (items.length === 0 && moreCount === 0) {
     return (
-      <p className="py-0.5 text-[13px] text-zinc-500">
+      <p className={cn('py-0.5', DASHBOARD_BLOCK_MUTED_CLASS)}>
         No tienes tareas en curso ni pendientes
       </p>
     )
@@ -34,7 +38,7 @@ export function DashboardOwnerTasksTodayList({
         <li className="list-none pt-0.5 text-right">
           <Link
             href={workBoardHref}
-            className="text-[11px] font-medium tabular-nums text-brand hover:underline"
+            className={cn(DASHBOARD_BLOCK_BODY_CLASS, 'font-medium tabular-nums text-brand hover:underline')}
           >
             +{moreCount} {moreCount === 1 ? 'tarea más' : 'tareas más'}
           </Link>
@@ -65,10 +69,15 @@ function TaskRow({ item, workBoardHref }: { item: OwnerTodayTaskItem; workBoardH
             : undefined
         }
       >
-        <span className="min-w-0 flex-1 truncate text-[12px] font-medium leading-tight text-zinc-100">
+        <span className={cn('min-w-0 flex-1 truncate font-medium', DASHBOARD_BLOCK_BODY_CLASS)}>
           {item.title}
         </span>
-        <span className="hidden shrink-0 text-[10px] tabular-nums text-zinc-500 xl:inline">
+        <span
+          className={cn(
+            'hidden shrink-0 tabular-nums xl:inline',
+            DASHBOARD_BLOCK_MUTED_CLASS
+          )}
+        >
           {item.dateLabel}
         </span>
         <span

@@ -3,12 +3,17 @@
 import type { ReactNode } from 'react'
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import dynamic from 'next/dynamic'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { usePermissions } from '@/hooks/usePermissions'
 import type { WorkItemCard, WorkBoardStaffOption, PipelineStageRow } from '@/lib/work-items/types'
 import { normalizeStageCategoryRow } from '@/lib/work-items/seedPipelineStages'
 import { PageHeader } from '@/components/layout/PageHeader'
+import { cn } from '@/lib/utils'
 import {
+  workBoardHeaderControlsWrapClass,
   workBoardHeaderRowClass,
+  workBoardHeaderStackClass,
+  workBoardPageHeaderClass,
   workBoardHeaderViewsClass,
 } from '@/lib/work-board/workBoardHeaderClasses'
 import { WorkBoardToolbar, type WorkBoardViewMode } from './WorkBoardToolbar'
@@ -28,7 +33,11 @@ import {
   parseKanbanFiltersFromStorage,
   type KanbanFiltersState,
 } from '@/lib/work-board/kanbanFilters'
-import { userCanMoveAppointmentCardClient, userCanEditAppointmentCardClient } from '@/lib/work-board/appointmentParticipation'
+import {
+  userCanMoveAppointmentCardClient,
+  userCanEditAppointmentCardClient,
+  userCanOpenAppointmentDetailClient,
+} from '@/lib/work-board/appointmentParticipation'
 import {
   mapAppointmentRowToWorkItem,
   workItemCardToAppointmentRowInput,
@@ -61,6 +70,19 @@ const KanbanQuickAddAppointment = dynamic(
   { ssr: false }
 )
 
+const TaskActivityPanel = dynamic(
+  () => import('./TaskActivityPanel').then((m) => m.TaskActivityPanel),
+  {
+    ssr: false,
+    loading: () => (
+      <div
+        className="h-48 w-full animate-pulse border-t border-zinc-800 bg-zinc-950/50 md:h-auto md:w-[320px] md:border-l md:border-t-0"
+        aria-hidden
+      />
+    ),
+  }
+)
+
 const WorkBoardConfigPanel = dynamic(
   () => import('./WorkBoardConfigPanel').then((m) => m.WorkBoardConfigPanel),
   { loading: () => null }
@@ -90,7 +112,7 @@ function BoardHeaderControls({
   kanbanFiltersSlot?: ReactNode
 }) {
   return (
-    <div className={workBoardHeaderRowClass}>
+    <div className={cn(workBoardHeaderRowClass, workBoardHeaderControlsWrapClass)}>
       <div className={workBoardHeaderViewsClass}>
         <WorkBoardToolbar viewMode={viewMode} onViewModeChange={onViewModeChange} />
       </div>
@@ -123,6 +145,7 @@ export function WorkBoardPageClient({
   teamsForKanban = [],
   myTeamIds = [],
   onInvalidateBoard,
+  initialOpenTaskId,
 }: {
   businessId: string
   currentUserId: string
@@ -146,7 +169,11 @@ export function WorkBoardPageClient({
   myTeamIds?: string[]
   /** Tras mutaciones: revalidar datos del tablero (p. ej. React Query) sin `router.refresh`. */
   onInvalidateBoard?: () => void
+  /** `?task=<id>` — abre el modal de edición al cargar (p. ej. desde Inicio). */
+  initialOpenTaskId?: string | null
 }) {
+  const router = useRouter()
+  const searchParams = useSearchParams()
   const [catalogClients, setCatalogClients] = useState(initialCatalogClients)
   const [catalogServices, setCatalogServices] = useState(initialCatalogServices)
 
@@ -186,6 +213,11 @@ export function WorkBoardPageClient({
       userCanEditAppointmentCardClient(item, currentUserId, businessId),
     [businessId, currentUserId]
   )
+  const canOpenAppointmentDetail = useCallback(
+    (item: WorkItemCard) =>
+      userCanOpenAppointmentDetailClient(item, currentUserId, businessId),
+    [businessId, currentUserId]
+  )
   const canDeleteWorkBoardItem = useCallback(
     (item: WorkItemCard) => item.created_by != null && item.created_by === currentUserId,
     [currentUserId]
@@ -203,7 +235,11 @@ export function WorkBoardPageClient({
   const [archivedKanbanItems, setArchivedKanbanItems] = useState<WorkItemCard[]>([])
   const [addTaskDialogOpen, setAddTaskDialogOpen] = useState(false)
   const [addTaskFormKey, setAddTaskFormKey] = useState(0)
+  const [editTaskDialogOpen, setEditTaskDialogOpen] = useState(false)
+  const [editTaskItem, setEditTaskItem] = useState<WorkItemCard | null>(null)
+  const [editTaskFormKey, setEditTaskFormKey] = useState(0)
   const openedInitialNewRef = useRef(false)
+  const openedInitialTaskRef = useRef(false)
 
   const initialStagesSig = useMemo(
     () => initialStages.map((s) => `${s.id}:${s.label}:${s.sort_order}:${s.color}`).join('|'),
@@ -276,6 +312,23 @@ export function WorkBoardPageClient({
     )
   }, [rawAppointments, kanbanFilters, archivedKanbanItems])
 
+  const openEditTaskDialog = useCallback((item: WorkItemCard) => {
+    setEditTaskItem(item)
+    setEditTaskFormKey((k) => k + 1)
+    setEditTaskDialogOpen(true)
+  }, [])
+
+  const closeEditTaskDialog = useCallback(() => {
+    setEditTaskDialogOpen(false)
+    setEditTaskItem(null)
+    if (searchParams.get('task')) {
+      const next = new URLSearchParams(searchParams.toString())
+      next.delete('task')
+      const q = next.toString()
+      router.replace(q ? `/dashboard/work-board?${q}` : '/dashboard/work-board', { scroll: false })
+    }
+  }, [router, searchParams])
+
   /** ?new=1 — misma UX que el botón «Añadir tarea» (Kanban y Calendario). */
   useEffect(() => {
     if (loading) return
@@ -285,6 +338,27 @@ export function WorkBoardPageClient({
       setAddTaskDialogOpen(true)
     }
   }, [loading, initialNewPanel, canCreateAppointments, stages.length])
+
+  /** `?task=<id>` desde Inicio u otro enlace. */
+  useEffect(() => {
+    if (loading || openedInitialTaskRef.current) return
+    const taskId = initialOpenTaskId?.trim()
+    if (!taskId) return
+    const item =
+      initialItems.find((i) => i.id === taskId) ??
+      kanbanDisplayItems.find((i) => i.id === taskId)
+    if (item && canOpenAppointmentDetail(item)) {
+      openedInitialTaskRef.current = true
+      openEditTaskDialog(item)
+    }
+  }, [
+    loading,
+    initialOpenTaskId,
+    initialItems,
+    kanbanDisplayItems,
+    canOpenAppointmentDetail,
+    openEditTaskDialog,
+  ])
 
   const addTaskStageId = stages[0]?.id
 
@@ -329,8 +403,8 @@ export function WorkBoardPageClient({
   return (
     <div className={isCalendar ? '-mx-4 -mt-4 lg:-mx-8 lg:-mt-6 flex flex-col flex-1 min-h-0 overflow-hidden bg-zinc-900' : 'flex min-h-0 flex-1 flex-col'}>
       {!isCalendar && (
-        <div className="mb-3 flex shrink-0 flex-col gap-3 lg:mb-6">
-          <PageHeader title="Tablero" className="mb-0" />
+        <div className={workBoardHeaderStackClass}>
+          <PageHeader title="Tablero" className={workBoardPageHeaderClass} />
           <BoardHeaderControls
             viewMode={viewMode}
             onViewModeChange={setViewMode}
@@ -387,6 +461,69 @@ export function WorkBoardPageClient({
         </DialogContent>
       </Dialog>
 
+      <Dialog
+        open={editTaskDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) closeEditTaskDialog()
+        }}
+      >
+        <DialogContent
+          showClose
+          className="flex max-h-[min(92vh,880px)] w-[min(100vw-1.5rem,1100px)] max-w-[1100px] flex-col gap-0 overflow-hidden border-zinc-700 bg-zinc-900 p-0 text-zinc-100 shadow-2xl"
+        >
+          <DialogHeader className="shrink-0 border-b border-zinc-800 px-6 py-5 pr-14 text-left">
+            <DialogTitle className="font-display text-xl font-semibold text-zinc-100">
+              {editTaskItem && !canEditAppointmentCard(editTaskItem)
+                ? 'Ver tarea'
+                : 'Editar tarea'}
+            </DialogTitle>
+            <DialogDescription className="text-sm text-zinc-400">
+              {editTaskItem?.displayTitle
+                ? editTaskItem && !canEditAppointmentCard(editTaskItem)
+                  ? 'Consulta los datos y comenta en Actividad.'
+                  : 'Datos de la tarea y actividad del equipo en un solo lugar.'
+                : 'Cargando…'}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+            <div className="min-h-0 min-w-0 flex-1 overflow-y-auto px-6 py-5">
+              {editTaskItem ? (
+                <KanbanQuickAddAppointment
+                  key={`${editTaskItem.id}-${editTaskFormKey}`}
+                  variant="modal"
+                  editItem={editTaskItem}
+                  readOnly={!canEditAppointmentCard(editTaskItem)}
+                  businessId={businessId}
+                  currentUserId={currentUserId}
+                  staffOptions={initialStaffOptions}
+                  services={catalogServices}
+                  teams={teamsForKanban}
+                  pipelineStages={stages}
+                  onEditClose={closeEditTaskDialog}
+                  onSaved={() => {
+                    closeEditTaskDialog()
+                    onInvalidateBoard?.()
+                  }}
+                  onCreated={() => {
+                    closeEditTaskDialog()
+                    onInvalidateBoard?.()
+                  }}
+                />
+              ) : (
+                <p className="text-sm text-zinc-500">Tarea no encontrada.</p>
+              )}
+            </div>
+
+            {editTaskItem ? (
+              <div className="flex min-h-[280px] w-full shrink-0 flex-col md:min-h-0 md:w-[320px] lg:w-[340px]">
+                <TaskActivityPanel appointmentId={editTaskItem.id} enabled={editTaskDialogOpen} />
+              </div>
+            ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {viewMode === 'kanban' && (
         <>
           {kanbanFilters.showArchivedOnly ? (
@@ -411,6 +548,8 @@ export function WorkBoardPageClient({
             dragDisabled={kanbanFilters.showArchivedOnly}
             canBulkReorderKanban={false}
             canEditAppointmentCard={canEditAppointmentCard}
+            canOpenAppointmentDetail={canOpenAppointmentDetail}
+            onOpenTaskEdit={openEditTaskDialog}
           />
         </>
       )}
@@ -432,8 +571,8 @@ export function WorkBoardPageClient({
           shiftsByDay={shiftsByDay}
           businessCountry={businessCountry}
           headerSlot={
-            <div className="flex flex-col gap-3">
-              <PageHeader title="Tablero" className="mb-0" />
+            <div className={cn(workBoardHeaderStackClass, 'mb-0')}>
+              <PageHeader title="Tablero" className={workBoardPageHeaderClass} />
               {kanbanFilters.showArchivedOnly ? (
                 <ArchivedKanbanBanner
                   onDismiss={() => setKanbanFilters(defaultKanbanFilters())}

@@ -60,7 +60,11 @@ function safeNumber(n: unknown): number {
   return 0
 }
 
-type MetricsRowWithCreated = AppointmentMetricsRow & { created_at?: string | null }
+type MetricsRowWithCreated = AppointmentMetricsRow & {
+  created_at?: string | null
+  start_time: string
+  status?: string | null
+}
 
 export async function fetchOwnerDashboard(
   admin: SupabaseClient,
@@ -84,8 +88,6 @@ export async function fetchOwnerDashboard(
   const clientsPrevEnd = subDays(now, 7)
   const dayStartIso = todayStart.toISOString()
   const dayEndIso = todayEnd.toISOString()
-  const weekStartIso = weekStart.toISOString()
-  const weekEndIso = weekEnd.toISOString()
   // Dashboard window: 90 days back + 30 days ahead prevents unbounded table scans.
   // Covers all relevant pending/overdue/workload data for an active business.
   const metricsWindowStart = subDays(now, 90).toISOString()
@@ -101,11 +103,8 @@ export async function fetchOwnerDashboard(
     clockRes,
     absencesRes,
     nextApptRes,
-    noShowRes,
     completedTodayRes,
-    activeCountRes,
     auditRes,
-    weekApptsRes,
     businessConfigRes,
   ] = await Promise.all([
     admin
@@ -160,36 +159,15 @@ export async function fetchOwnerDashboard(
       .from('appointments')
       .select('id', { count: 'exact', head: true })
       .eq('business_id', businessId)
-      .eq('status', 'no_show')
-      .gte('start_time', weekStartIso)
-      .lte('start_time', weekEndIso),
-    admin
-      .from('appointments')
-      .select('id', { count: 'exact', head: true })
-      .eq('business_id', businessId)
       .not('completed_at', 'is', null)
       .gte('completed_at', dayStartIso)
       .lte('completed_at', dayEndIso),
-    admin
-      .from('appointments')
-      .select('id', { count: 'exact', head: true })
-      .eq('business_id', businessId)
-      .is('archived_at', null)
-      .is('completed_at', null)
-      .gte('start_time', metricsWindowStart)
-      .lte('start_time', metricsWindowEnd),
     admin
       .from('appointment_audit_log')
       .select('actor_id, action, old_record, new_record, created_at')
       .eq('business_id', businessId)
       .order('created_at', { ascending: false })
       .limit(4),
-    admin
-      .from('appointments')
-      .select('start_time')
-      .eq('business_id', businessId)
-      .gte('start_time', weekStartIso)
-      .lte('start_time', weekEndIso),
     admin.from('businesses').select('config_json').eq('id', businessId).maybeSingle(),
   ])
 
@@ -318,13 +296,33 @@ export async function fetchOwnerDashboard(
       ? formatAppointmentAuditFeed(auditRes.data, staffNames)
       : []
 
-  const appointmentsWeekChart: OwnerWeekChartDay[] | null = weekApptsRes.error
-    ? null
-    : buildWeekChart(
-        (weekApptsRes.data ?? []) as { start_time: string }[],
-        weekStart,
-        now
-      )
+  let noShowsThisWeek: number | null = null
+  let activeTotal: number | null = null
+  let appointmentsWeekChart: OwnerWeekChartDay[] | null = null
+  if (!metricsApptsRes.error && metricsApptsRes.data) {
+    const rows = metricsApptsRes.data as unknown as MetricsRowWithCreated[]
+    const weekRows: { start_time: string }[] = []
+    let noShows = 0
+    let active = 0
+    for (const row of rows) {
+      const start = new Date(row.start_time)
+      if (!Number.isNaN(start.getTime()) && start >= weekStart && start <= weekEnd) {
+        weekRows.push({ start_time: row.start_time })
+        if (row.status === 'no_show') noShows++
+      }
+      if (row.archived_at || row.completed_at) continue
+      const ps = row.pipeline_stages
+      const one = Array.isArray(ps) ? ps[0] : ps
+      const slug = one?.slug ?? 'pending'
+      const cat = (one?.stage_category ?? null) as Parameters<typeof isTerminalStage>[1]
+      if (!isTerminalStage(slug, cat)) active++
+    }
+    noShowsThisWeek = noShows
+    activeTotal = active
+    appointmentsWeekChart = buildWeekChart(weekRows, weekStart, now)
+  } else if (metricsApptsRes.error) {
+    appointmentsWeekChart = null
+  }
 
   let tasksToday: OwnerDashboardPayload['section1']['tasksToday'] = null
   let tasksTodayList: OwnerDashboardPayload['tasksTodayList'] = {
@@ -359,9 +357,9 @@ export async function fetchOwnerDashboard(
     section3: {
       nextAppointment,
       urgent: {
-        noShowsThisWeek: noShowRes.error ? null : (noShowRes.count ?? 0),
+        noShowsThisWeek,
         completedToday: completedTodayRes.error ? null : (completedTodayRes.count ?? 0),
-        activeTotal: activeCountRes.error ? null : (activeCountRes.count ?? 0),
+        activeTotal,
         activity,
       },
     },

@@ -11,6 +11,29 @@ function SurfaceCardSkeleton({ tall }: { tall?: boolean }) {
   )
 }
 
+/** Skeleton métricas: 2 filas × 2 cards (sin header ni pending). */
+export function DashboardMetricsSkeleton() {
+  return (
+    <>
+      {Array.from({ length: 2 }).map((_, row) => (
+        <DashboardSkelRow key={row} index={row} />
+      ))}
+      <span className="sr-only">Cargando métricas…</span>
+    </>
+  )
+}
+
+export function DashboardNoBusinessNotice() {
+  return (
+    <div className="rounded-lg border border-amber-200 bg-amber-950/50 p-6 text-amber-200">
+      <p className="font-medium">No tienes un negocio configurado</p>
+      <p className="mt-1 text-sm">
+        Contacta al administrador para asociar tu cuenta a un negocio.
+      </p>
+    </div>
+  )
+}
+
 /** Placeholders: header + 2 filas × 2 cards (owner unificado). */
 export function DashboardInnerSkeleton() {
   return (

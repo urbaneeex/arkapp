@@ -1,4 +1,5 @@
 import {
+  addDays,
   endOfDay,
   endOfWeek,
   startOfDay,
@@ -9,12 +10,12 @@ import {
 } from 'date-fns'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { isTerminalStage, type AppointmentMetricsRow } from '@/lib/work-board/ownerMetricsCompute'
+import { computeOwnerTasksToday, type OwnerTasksTodayRow } from '@/lib/dashboard/ownerTasksToday'
 import type { StaffDashboardPayload, StaffTeamAbsence } from '@/lib/dashboard/dashboardTypes'
 
-const METRICS_SELECT = `id, title, staff_id, team_id, end_time, completed_at, archived_at, metadata, visibility, pipeline_stage_id,
-  pipeline_stages(slug, stage_category)`
-
-const TIMELINE_SELECT = `id, start_time, status, clients(name), services(name)`
+const METRICS_SELECT = `id, title, staff_id, team_id, start_time, end_time, completed_at, archived_at, metadata, visibility, pipeline_stage_id, created_by, status, price_total,
+  pipeline_stages(slug, stage_category, label, color),
+  clients(name), services(name)`
 
 function pickStage(row: AppointmentMetricsRow) {
   const ps = row.pipeline_stages
@@ -44,6 +45,7 @@ function isActiveRow(row: AppointmentMetricsRow): boolean {
 export async function fetchStaffDashboard(
   supabase: SupabaseClient,
   businessId: string,
+  viewerUserId: string,
   staffId: string,
   contractHoursPerWeek: number | null,
   vacationDaysPerYear: number | null
@@ -59,13 +61,13 @@ export async function fetchStaffDashboard(
   const dayEndIso = todayEnd.toISOString()
   const weekStartIso = weekStart.toISOString()
   const weekEndIso = weekEnd.toISOString()
+  const metricsWindowStart = subDays(now, 90).toISOString()
+  const metricsWindowEnd = addDays(now, 30).toISOString()
 
   const [
-    todayApptsRes,
     metricsApptsRes,
     clockRes,
     completedWeekRes,
-    timelineRes,
     hoursWeekRes,
     absencesYearRes,
     vacationBalanceRes,
@@ -73,17 +75,11 @@ export async function fetchStaffDashboard(
   ] = await Promise.all([
     supabase
       .from('appointments')
-      .select('id, start_time, status, clients(name), services(name)')
-      .eq('business_id', businessId)
-      .eq('staff_id', staffId)
-      .gte('start_time', dayStartIso)
-      .lte('start_time', dayEndIso)
-      .order('start_time', { ascending: true }),
-    supabase
-      .from('appointments')
       .select(METRICS_SELECT)
       .eq('business_id', businessId)
-      .is('archived_at', null),
+      .is('archived_at', null)
+      .gte('start_time', metricsWindowStart)
+      .lte('start_time', metricsWindowEnd),
     supabase
       .from('time_entries')
       .select('clock_in, clock_out, hours_worked')
@@ -101,15 +97,6 @@ export async function fetchStaffDashboard(
       .not('completed_at', 'is', null)
       .gte('completed_at', weekStartIso)
       .lte('completed_at', weekEndIso),
-    supabase
-      .from('appointments')
-      .select(TIMELINE_SELECT)
-      .eq('business_id', businessId)
-      .eq('staff_id', staffId)
-      .gte('start_time', dayStartIso)
-      .lte('start_time', dayEndIso)
-      .order('start_time', { ascending: true })
-      .limit(6),
     supabase
       .from('time_entries')
       .select('hours_worked, clock_in, clock_out')
@@ -140,23 +127,20 @@ export async function fetchStaffDashboard(
       .limit(5),
   ])
 
-  const todayRows = todayApptsRes.data ?? []
-  const appointmentsToday = todayApptsRes.error ? 0 : todayRows.length
-
-  let nextAppointment: StaffDashboardPayload['section1']['nextAppointment'] = null
-  const futureToday = todayRows.filter((r) => {
-    const st = r.start_time ? new Date(r.start_time as string) : null
-    return st && st > now
-  })
-  if (futureToday.length > 0) {
-    const row = futureToday[0]
-    const clients = row.clients as { name?: string } | null
-    const services = row.services as { name?: string } | null
-    nextAppointment = {
-      clientName: clients?.name ?? 'Cliente',
-      serviceName: services?.name ?? 'Cita',
-      startTime: row.start_time as string,
-    }
+  let tasksToday: StaffDashboardPayload['section1']['tasksToday'] = null
+  let tasksTodayList: StaffDashboardPayload['tasksTodayList'] = {
+    items: [],
+    moreCount: 0,
+  }
+  if (!metricsApptsRes.error) {
+    const computed = computeOwnerTasksToday(
+      metricsApptsRes.data as unknown as OwnerTasksTodayRow[] | null,
+      viewerUserId,
+      staffId,
+      now
+    )
+    tasksToday = computed.tasksToday
+    tasksTodayList = computed.tasksTodayList
   }
 
   let pendingTasks: StaffDashboardPayload['section1']['pendingTasks'] = null
@@ -228,22 +212,6 @@ export async function fetchStaffDashboard(
         ? 'Buen ritmo esta semana.'
         : null
 
-  const timeline: StaffDashboardPayload['section2']['timeline'] = []
-  if (!timelineRes.error && timelineRes.data) {
-    for (const row of timelineRes.data.slice(0, 5)) {
-      const clients = row.clients as { name?: string } | null
-      const services = row.services as { name?: string } | null
-      timeline.push({
-        id: row.id as string,
-        startTime: row.start_time as string,
-        status: row.status as string | null,
-        clientName: clients?.name ?? 'Cliente',
-        serviceName: services?.name ?? 'Cita',
-      })
-    }
-  }
-  const hasMore = (timelineRes.data?.length ?? 0) > 5
-
   let hoursWeek: StaffDashboardPayload['section4']['hoursWeek'] = null
   if (!hoursWeekRes.error && hoursWeekRes.data) {
     let total = 0
@@ -300,16 +268,15 @@ export async function fetchStaffDashboard(
 
   return {
     section1: {
-      appointmentsToday,
-      nextAppointment,
+      tasksToday,
       pendingTasks,
       clockToday,
       completedThisWeek,
       motivationalNote,
     },
-    section2: { timeline, hasMore },
     section3: { urgent },
     section4: { hoursWeek, vacation },
+    tasksTodayList,
     teamAbsencesWeek,
   }
 }

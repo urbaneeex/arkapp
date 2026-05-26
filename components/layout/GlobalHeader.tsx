@@ -35,7 +35,7 @@ export function GlobalHeader({
   return (
     <header
       className={cn(
-        'sticky top-0 left-0 right-0 z-50 hidden h-16 lg:flex',
+        'sticky top-0 left-0 right-0 z-[100] hidden h-16 lg:flex',
         'bg-white dark:bg-zinc-950 border-b border-zinc-200 dark:border-zinc-800',
         'items-center justify-between',
         'px-4 lg:pl-4 lg:pr-6'

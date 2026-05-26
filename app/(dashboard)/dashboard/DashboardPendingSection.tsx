@@ -1,17 +1,17 @@
 import { dehydrate, HydrationBoundary, QueryClient } from '@tanstack/react-query'
-import { fetchDashboardBootstrapPayload } from '@/lib/dashboard/loadDashboardBootstrap'
+import { getDashboardBootstrapCached } from '@/lib/dashboard/loadDashboardBootstrap'
 import { dashboardKeys } from '@/lib/dashboard/dashboardQueryKeys'
-import { DashboardQueryBridge } from '@/components/dashboard/DashboardQueryBridge'
+import { DashboardHomeClient } from '@/components/dashboard/DashboardHomeClient'
 
-export async function DashboardDataSection({
+export async function DashboardPendingSection({
   userId,
   userEmail,
-  displayName,
 }: {
   userId: string
   userEmail: string
-  displayName: string
 }) {
+  const data = await getDashboardBootstrapCached(userId, userEmail)
+
   const qc = new QueryClient({
     defaultOptions: {
       queries: {
@@ -20,12 +20,11 @@ export async function DashboardDataSection({
       },
     },
   })
-  const data = await fetchDashboardBootstrapPayload(userId, userEmail)
   qc.setQueryData(dashboardKeys.bootstrap(), data)
 
   return (
     <HydrationBoundary state={dehydrate(qc)}>
-      <DashboardQueryBridge displayName={displayName} />
+      <DashboardHomeClient initialData={data} />
     </HydrationBoundary>
   )
 }

@@ -2,6 +2,7 @@
 
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useMemo } from 'react'
+import { useSearchParams } from 'next/navigation'
 import type {
   WorkBoardBootstrapPayload,
   WorkBoardSearchParams,
@@ -22,6 +23,8 @@ function bootstrapFetchUrl(sp: WorkBoardSearchParams): string {
 
 export function WorkBoardQueryBridge({ searchParams }: { searchParams: WorkBoardSearchParams }) {
   const queryClient = useQueryClient()
+  const urlSearchParams = useSearchParams()
+  const initialOpenTaskId = urlSearchParams.get('task')
   const key = useMemo(() => workBoardKeys.bootstrap(searchParams), [searchParams])
 
   const { data, isError } = useQuery({
@@ -61,6 +64,7 @@ export function WorkBoardQueryBridge({ searchParams }: { searchParams: WorkBoard
       teamsForKanban={data.teamsForKanban}
       myTeamIds={data.myTeamIds}
       onInvalidateBoard={invalidateBoard}
+      initialOpenTaskId={initialOpenTaskId}
     />
   )
 }

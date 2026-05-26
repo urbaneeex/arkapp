@@ -1,3 +1,4 @@
+import { cache } from 'react'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceRoleClient } from '@/lib/supabase/admin'
 import { getBusinessForUser } from '@/lib/supabase/business'
@@ -5,6 +6,8 @@ import { DEFAULT_MATRIX, PERMISSION_LEVEL_IDS, type LevelId } from '@/lib/permis
 import type { ActionIconKey, PendingAction } from '@/components/dashboard/PendingActionsCard'
 import type {
   DashboardBootstrapPayload,
+  DashboardMetricsPayload,
+  DashboardShellPayload,
   OwnerDashboardPayload,
   StaffDashboardPayload,
 } from '@/lib/dashboard/dashboardTypes'
@@ -28,13 +31,32 @@ const SIGNATURE_TYPE_ACTIONS: Record<string, string> = {
   time_report: 'Pendiente de firmar',
 }
 
+type DashboardShellOk = Extract<DashboardShellPayload, { kind: 'ok' }>
+
+function mergeBootstrap(
+  shell: DashboardShellOk,
+  metrics: DashboardMetricsPayload
+): Extract<DashboardBootstrapPayload, { kind: 'ok' }> {
+  return {
+    kind: 'ok',
+    role: shell.role,
+    businessId: shell.businessId,
+    pendingActions: shell.pendingActions,
+    hasClock: shell.hasClock,
+    canSeeLiveClockPanel: shell.canSeeLiveClockPanel,
+    liveClockBetaEnabled: shell.liveClockBetaEnabled,
+    ownerHome: metrics.ownerHome,
+    staffHome: metrics.staffHome,
+  }
+}
+
 /**
- * Datos del Inicio (SSR + GET /api/dashboard/bootstrap). Sin redirects.
+ * Shell rápido: negocio, rol, pending actions. Sin métricas pesadas.
  */
-export async function fetchDashboardBootstrapPayload(
+export async function fetchDashboardShell(
   userId: string,
   userEmail: string
-): Promise<DashboardBootstrapPayload> {
+): Promise<DashboardShellPayload> {
   const businessResult = await getBusinessForUser(userId)
   if (!businessResult) {
     return { kind: 'no_business' }
@@ -198,31 +220,6 @@ export async function fetchDashboardBootstrapPayload(
 
   const liveClockBetaEnabled = process.env.NEXT_PUBLIC_DASHBOARD_LIVE_CLOCK_BETA === '1'
 
-  let ownerHome: OwnerDashboardPayload | undefined
-  let staffHome: StaffDashboardPayload | undefined
-
-  if (isOwner) {
-    try {
-      const admin = createServiceRoleClient()
-      ownerHome = await fetchOwnerDashboard(
-        admin,
-        business.id,
-        userId,
-        myStaff?.id ?? userId
-      )
-    } catch (e) {
-      console.error('[dashboard bootstrap] owner home', e)
-    }
-  } else {
-    staffHome = await fetchStaffDashboard(
-      supabase,
-      business.id,
-      myStaffId,
-      myStaff?.contract_hours_per_week ?? null,
-      myStaff?.vacation_days_per_year ?? null
-    )
-  }
-
   return {
     kind: 'ok',
     role,
@@ -231,7 +228,77 @@ export async function fetchDashboardBootstrapPayload(
     hasClock,
     canSeeLiveClockPanel,
     liveClockBetaEnabled,
-    ownerHome,
-    staffHome,
+    myStaffId,
+    contractHoursPerWeek: myStaff?.contract_hours_per_week ?? null,
+    vacationDaysPerYear: myStaff?.vacation_days_per_year ?? null,
   }
+}
+
+/**
+ * Métricas pesadas (owner/staff home). Separado del shell para streaming SSR.
+ */
+export async function fetchDashboardMetrics(
+  shell: DashboardShellOk,
+  userId: string,
+  userEmail: string
+): Promise<DashboardMetricsPayload> {
+  void userEmail
+
+  let ownerHome: OwnerDashboardPayload | undefined
+  let staffHome: StaffDashboardPayload | undefined
+
+  if (shell.role === 'owner') {
+    try {
+      const admin = createServiceRoleClient()
+      ownerHome = await fetchOwnerDashboard(
+        admin,
+        shell.businessId,
+        userId,
+        shell.myStaffId
+      )
+    } catch (e) {
+      console.error('[dashboard metrics] owner home', e)
+    }
+  } else {
+    const supabase = await createClient()
+    staffHome = await fetchStaffDashboard(
+      supabase,
+      shell.businessId,
+      userId,
+      shell.myStaffId,
+      shell.contractHoursPerWeek,
+      shell.vacationDaysPerYear
+    )
+  }
+
+  return { ownerHome, staffHome }
+}
+
+export const getDashboardShellCached = cache(fetchDashboardShell)
+
+export const getDashboardMetricsCached = cache(
+  async (userId: string, userEmail: string): Promise<DashboardMetricsPayload> => {
+    const shell = await getDashboardShellCached(userId, userEmail)
+    if (shell.kind !== 'ok') return {}
+    return fetchDashboardMetrics(shell, userId, userEmail)
+  }
+)
+
+export const getDashboardBootstrapCached = cache(
+  async (userId: string, userEmail: string): Promise<DashboardBootstrapPayload> => {
+    const shell = await getDashboardShellCached(userId, userEmail)
+    if (shell.kind !== 'ok') return shell
+    const metrics = await getDashboardMetricsCached(userId, userEmail)
+    return mergeBootstrap(shell, metrics)
+  }
+)
+
+/**
+ * Datos del Inicio (SSR + GET /api/dashboard/bootstrap). Sin redirects.
+ */
+export async function fetchDashboardBootstrapPayload(
+  userId: string,
+  userEmail: string
+): Promise<DashboardBootstrapPayload> {
+  return getDashboardBootstrapCached(userId, userEmail)
 }

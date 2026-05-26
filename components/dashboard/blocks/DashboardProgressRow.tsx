@@ -1,5 +1,6 @@
 import { cn } from '@/lib/utils'
 import { DEFAULT_WORKLOAD_THRESHOLDS } from '@/lib/business/workloadConfig'
+import { DASHBOARD_BLOCK_BODY_CLASS } from '@/components/dashboard/blocks/dashboardBlockTypography'
 
 const LOAD_BADGE = {
   disponible: 'bg-emerald-950/50 text-emerald-400 border-emerald-800/60',
@@ -39,7 +40,7 @@ export function DashboardProgressRow({
 
   return (
     <div className="grid grid-cols-[minmax(4.5rem,38%)_1fr_auto] items-center gap-x-2 py-1">
-      <span className="text-[13px] leading-tight text-zinc-200 break-words">{name}</span>
+      <span className={cn(DASHBOARD_BLOCK_BODY_CLASS, 'break-words')}>{name}</span>
       <div className="h-1.5 min-w-[2.5rem] overflow-hidden rounded-full bg-zinc-800">
         <div
           className={cn('h-full rounded-full transition-all', LOAD_BAR[load])}

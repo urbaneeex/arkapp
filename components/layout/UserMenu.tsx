@@ -18,7 +18,7 @@ export function UserMenu({ user }: UserMenuProps) {
   const displayName = user.name || user.email?.split('@')[0] || 'Usuario'
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={setOpen} modal>
       <PopoverTrigger asChild>
         <button
           type="button"
@@ -29,9 +29,11 @@ export function UserMenu({ user }: UserMenuProps) {
         </button>
       </PopoverTrigger>
       <PopoverContent
+        side="bottom"
         align="end"
         sideOffset={8}
-        className="w-80 overflow-hidden rounded-2xl border border-zinc-200 bg-white p-0 shadow-2xl shadow-black/20 dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-black/40"
+        collisionPadding={{ top: 72, right: 16, bottom: 16, left: 16 }}
+        className="z-[300] w-80 overflow-hidden rounded-2xl border border-zinc-200 bg-white p-0 shadow-2xl shadow-black/20 dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-black/40"
       >
         <AccountMenuUserHeader user={user} />
         <AccountMenuActions onAction={() => setOpen(false)} variant="popover" />

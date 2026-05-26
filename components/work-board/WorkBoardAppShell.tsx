@@ -1,9 +1,11 @@
+import { workBoardHeaderStackClass } from '@/lib/work-board/workBoardHeaderClasses'
+
 /**
  * Marco estático del tablero (sin datos Supabase): primera pintura inmediata junto al Suspense.
  */
 export function WorkBoardAppShell() {
   return (
-    <div className="mb-3 flex shrink-0 flex-col gap-3 lg:mb-6" aria-hidden>
+    <div className={workBoardHeaderStackClass} aria-hidden>
       <div className="h-8 w-24 rounded-md bg-zinc-800/60" />
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex h-9 w-[200px] rounded-lg border border-zinc-800 bg-zinc-900/60 p-0.5">

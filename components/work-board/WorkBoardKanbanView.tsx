@@ -14,6 +14,7 @@ import {
   X,
   Wrench,
   Loader2,
+  Columns3,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { format, parseISO } from 'date-fns'
@@ -251,9 +252,11 @@ export function KanbanQuickAddAppointment({
   wrapperClassName,
   wrapperStyle,
   editItem,
+  readOnly = false,
   onEditClose,
   variant = 'default',
   teams = [],
+  pipelineStages = [],
 }: {
   stageId?: string
   businessId: string
@@ -270,12 +273,16 @@ export function KanbanQuickAddAppointment({
   onToast?: (message: string, type: 'success' | 'error') => void
   wrapperClassName?: string
   wrapperStyle?: React.CSSProperties
-  /** Si está definido, el panel es edición inline (misma UI que crear). */
+  /** Si está definido, el panel es edición (modal o inline según variant). */
   editItem?: WorkItemCard | null
+  /** Solo consulta (asignado sin ser creador); actividad sigue en el padre. */
+  readOnly?: boolean
   onEditClose?: () => void
   /** `modal`: solo el formulario; el padre envuelve en Dialog (sin botón colapsable). */
   variant?: 'default' | 'modal'
   teams?: { id: string; name: string; color: string }[]
+  /** Columnas del tablero (selector de estado en edición modal). */
+  pipelineStages?: PipelineStageRow[]
 }) {
   const isEditMode = Boolean(editItem)
   const isCalendarMode = !!(defaultOpen && onClose)
@@ -317,6 +324,7 @@ export function KanbanQuickAddAppointment({
   const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const formLocked = readOnly || saving
 
   // ─── Disponibilidad de empleados (se activa solo si hay cliente + fecha) ───
   const [staffAvail, setStaffAvail] = useState<KanbanStaffAvail>({})
@@ -338,6 +346,7 @@ export function KanbanQuickAddAppointment({
 
   // ─── Servicio ─────────────────────────────────────────────────────────────
   const [selectedService, setSelectedService] = useState<KanbanService | null>(null)
+  const [editPipelineStageId, setEditPipelineStageId] = useState<string>('')
 
   /** Título vacío + servicio: mostrar el nombre del servicio en el input al momento (y si borra el título, volver a reflejarlo). */
   useEffect(() => {
@@ -497,6 +506,7 @@ export function KanbanQuickAddAppointment({
     }
     setEndLocal(editItem.end_time ?? null)
     setPriority(editItem.kanban_priority ?? 'none')
+    setEditPipelineStageId(editItem.pipeline_stage_id ?? '')
     setStaffIds(staffIdsFromWorkItem(editItem))
     setSelectedTeamIds(
       editItem.team_ids?.length
@@ -591,6 +601,7 @@ export function KanbanQuickAddAppointment({
   }, [startDate, startTime, endLocal])
 
   const handleSave = async () => {
+    if (readOnly) return
     setError(null)
     const titleInput = title.trim()
     const titleTrim =
@@ -698,7 +709,8 @@ export function KanbanQuickAddAppointment({
             staff_id: primaryStaffId,
             price_total: priceNext,
             metadata,
-            pipeline_stage_id: editItem.pipeline_stage_id,
+            pipeline_stage_id:
+              editPipelineStageId.trim() || editItem.pipeline_stage_id,
             visibility: visibilityNext,
             team_id: teamIdNext,
           })
@@ -855,7 +867,7 @@ export function KanbanQuickAddAppointment({
 
   const hasTitle = title.trim().length > 0
   const canSaveTitle = hasTitle || Boolean(selectedService?.name?.trim())
-  const saveDisabled = saving || !canSaveTitle
+  const saveDisabled = formLocked || !canSaveTitle
 
   const filteredStaff = useMemo(() => {
     const q = assignSearch.trim().toLowerCase()
@@ -916,18 +928,21 @@ export function KanbanQuickAddAppointment({
           onChange={(e) => setTitle(e.target.value)}
           placeholder="Nombre de la tarea…"
           maxLength={200}
-          disabled={saving}
+          disabled={formLocked}
           className={cn(
             'min-h-0 min-w-0 flex-1 border-0 bg-transparent px-0 shadow-none placeholder:text-zinc-500 focus-visible:ring-0 focus-visible:ring-offset-0',
-            isModalSurface ? 'h-11 text-base' : 'h-9'
+            isModalSurface ? 'h-11 text-base' : 'h-9',
+            readOnly && 'cursor-default opacity-90'
           )}
           onKeyDown={(e) => {
+            if (readOnly) return
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault()
               if (canSaveTitle) void handleSave()
             }
           }}
         />
+        {!readOnly ? (
         <Button
           type="button"
           variant="secondary"
@@ -943,6 +958,7 @@ export function KanbanQuickAddAppointment({
           {saving ? '…' : 'Guardar'}
           <CornerDownLeft className={cn('shrink-0 opacity-80', isModalSurface ? 'h-3.5 w-3.5' : 'h-3 w-3')} aria-hidden />
         </Button>
+        ) : null}
         {(isCalendarMode || isEditMode || (isModalSurface && onClose)) && (
           <button
             type="button"
@@ -1653,6 +1669,34 @@ export function KanbanQuickAddAppointment({
           </div>
           ) : (
           <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {isEditMode && pipelineStages.length > 0 ? (
+              <div className="sm:col-span-2 rounded-xl border border-zinc-800/90 bg-zinc-950/60 p-4">
+                <div className="mb-3 flex items-center gap-2">
+                  <Columns3 className="h-4 w-4 shrink-0 text-brand" aria-hidden />
+                  <span
+                    className={cn(
+                      KANBAN_QUICK_ADD_ROW_MUTED,
+                      'text-[11px] font-semibold uppercase tracking-wide text-zinc-400'
+                    )}
+                  >
+                    Estado / columna
+                  </span>
+                </div>
+                <select
+                  value={editPipelineStageId}
+                  disabled={saving}
+                  onChange={(e) => setEditPipelineStageId(e.target.value)}
+                  className="h-10 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 text-sm text-zinc-100 outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand/25"
+                >
+                  {pipelineStages.map((st) => (
+                    <option key={st.id} value={st.id}>
+                      {st.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
+
             <div className="sm:col-span-2 rounded-xl border border-zinc-800/90 bg-zinc-950/60 p-4">
               <div className="mb-3 flex items-center gap-2">
                 <Calendar className="h-4 w-4 shrink-0 text-brand" aria-hidden />
@@ -2245,14 +2289,25 @@ export function KanbanQuickAddAppointment({
     </>
   )
 
-  if (isModalSurface && !isEditMode) {
+  if (isModalSurface) {
     return (
       <div
         ref={panelRef}
         className={cn('w-full min-w-0 space-y-0 font-sans', wrapperClassName)}
         style={wrapperStyle}
       >
-        {cardBody}
+        {readOnly && isEditMode ? (
+          <p className="mb-4 rounded-lg border border-zinc-800 bg-zinc-950/80 px-3 py-2 text-[13px] text-zinc-400">
+            Solo lectura. Comenta en{' '}
+            <span className="font-medium text-zinc-300">Actividad</span>.
+          </p>
+        ) : null}
+        <fieldset
+          disabled={readOnly && isEditMode}
+          className="min-w-0 border-0 p-0 m-0 disabled:opacity-95"
+        >
+          {cardBody}
+        </fieldset>
       </div>
     )
   }
@@ -2499,6 +2554,10 @@ export function WorkBoardKanbanView({
   /** Si false, no se persisten reordenaciones intra-columna ni patch masivo (solo cambio de columna para la tarjeta arrastrada). */
   canBulkReorderKanban = true,
   canEditAppointmentCard,
+  /** Clic en título: creador edita; asignado abre solo lectura + actividad. */
+  canOpenAppointmentDetail,
+  /** Abre modal de edición en el padre (en lugar de panel inline en columna). */
+  onOpenTaskEdit,
 }: {
   businessId: string
   currentUserId: string
@@ -2523,6 +2582,8 @@ export function WorkBoardKanbanView({
   canBulkReorderKanban?: boolean
   /** Solo el creador edita chips/modal (coincide con RLS). */
   canEditAppointmentCard: (item: WorkItemCard) => boolean
+  canOpenAppointmentDetail: (item: WorkItemCard) => boolean
+  onOpenTaskEdit?: (item: WorkItemCard) => void
 }) {
   const [localItems, setLocalItems] = useState(items)
   const [localStages, setLocalStages] = useState(stages)
@@ -2571,10 +2632,15 @@ export function WorkBoardKanbanView({
 
   const handleCardOpen = useCallback(
     (item: WorkItemCard) => {
+      if (!canOpenAppointmentDetail(item)) return
+      if (onOpenTaskEdit) {
+        onOpenTaskEdit(item)
+        return
+      }
       if (!canEditAppointmentCard(item)) return
       setInlineEditId(item.id)
     },
-    [canEditAppointmentCard]
+    [canOpenAppointmentDetail, canEditAppointmentCard, onOpenTaskEdit]
   )
 
   const canMarkTaskDone = true
@@ -2907,6 +2973,7 @@ export function WorkBoardKanbanView({
                     const item = itemById.get(itemId)
                     if (!item) return null
                     const editAllowed = canEditAppointmentCard(item)
+                    const detailOpenAllowed = canOpenAppointmentDetail(item)
                     const moveAllowed = canMoveAppointmentCard(item)
                     const showMarkDone =
                       moveAllowed &&
@@ -2927,9 +2994,9 @@ export function WorkBoardKanbanView({
                         item={item}
                         columnColor={stage.color}
                         sortDisabled={dragDisabled || !allowDragCard(item)}
-                        onOpen={handleCardOpen}
+                        onOpen={detailOpenAllowed ? handleCardOpen : undefined}
                         quickEdit={editAllowed ? cardQuickEdit : undefined}
-                        kanbanInteractionLocked={!editAllowed}
+                        kanbanInteractionLocked={!detailOpenAllowed}
                         kanbanActions={kanbanActions}
                         inlineEditing={inlineEditId === item.id}
                         onCloseInlineEdit={closeInlineEdit}
