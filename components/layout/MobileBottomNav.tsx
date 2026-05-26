@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
-import { usePathname, useSearchParams } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import {
   Home,
   LayoutGrid,
@@ -31,20 +31,23 @@ import {
   AccountMenuUserHeader,
   type AccountMenuUser,
 } from '@/components/layout/AccountMenuActions'
+import { useAppTabShell } from '@/components/app-shell/AppTabShellProvider'
+import { WORK_BOARD_NEW_TASK_PARAMS } from '@/lib/app-shell/appTabRoutes'
 
-/** Rutas del menú «Cuenta»: apartados que no están en la barra de 5 (+ Agenda). */
 const overflowMenuItems: {
   href: string
   label: string
   icon: typeof Home
   permission?: PermissionKey
   requireOwner?: boolean
+  shellAgenda?: boolean
 }[] = [
   {
     href: '/dashboard/work-board?view=calendar&period=week',
     label: 'Agenda',
     icon: CalendarDays,
     permission: 'work_board_view',
+    shellAgenda: true,
   },
   { href: '/dashboard/clients', label: 'Clientes', icon: Users, permission: 'clients_view' },
   { href: '/dashboard/services', label: 'Servicios', icon: Briefcase, permission: 'services_view' },
@@ -64,21 +67,29 @@ type PrimaryKey = 'dashboard' | 'workBoard' | 'newTask' | 'fichar'
 
 const primaryBar: {
   key: PrimaryKey
-  href: string
+  tab: 'home' | 'workBoard' | 'fichar'
   label: string
   icon: typeof Home
   permission?: PermissionKey
+  newTask?: boolean
 }[] = [
-  { key: 'dashboard', href: '/dashboard', label: 'Inicio', icon: Home },
-  { key: 'workBoard', href: '/dashboard/work-board', label: 'Tablero', icon: LayoutGrid, permission: 'work_board_view' },
+  { key: 'dashboard', tab: 'home', label: 'Inicio', icon: Home },
+  {
+    key: 'workBoard',
+    tab: 'workBoard',
+    label: 'Tablero',
+    icon: LayoutGrid,
+    permission: 'work_board_view',
+  },
   {
     key: 'newTask',
-    href: '/dashboard/work-board?view=calendar&period=week&new=1',
+    tab: 'workBoard',
     label: 'Tarea',
     icon: CirclePlus,
     permission: 'work_board_view',
+    newTask: true,
   },
-  { key: 'fichar', href: '/dashboard/fichar', label: 'Fichar', icon: Clock },
+  { key: 'fichar', tab: 'fichar', label: 'Fichar', icon: Clock },
 ]
 
 function pathMatches(pathname: string, path: string) {
@@ -94,6 +105,7 @@ export function MobileBottomNav({
   initialUserEmail?: string
   initialBusinessName?: string
 }) {
+  const router = useRouter()
   const accountUser: AccountMenuUser | null =
     initialUserEmail || initialUserName
       ? { name: initialUserName || undefined, email: initialUserEmail }
@@ -101,6 +113,8 @@ export function MobileBottomNav({
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const { hasPermission, loading, isOwner } = usePermissions()
+  const { shellVisible, activeTab, workBoardParams, navigateAppTab, isAppTabActive } =
+    useAppTabShell()
   const [moreOpen, setMoreOpen] = useState(false)
 
   const visibleOverflow = useMemo(() => {
@@ -112,10 +126,24 @@ export function MobileBottomNav({
   }, [hasPermission, loading, isOwner])
 
   const isPrimaryActive = (key: PrimaryKey) => {
+    if (shellVisible) {
+      if (key === 'dashboard') return isAppTabActive('home')
+      if (key === 'fichar') return isAppTabActive('fichar')
+      if (key === 'newTask') {
+        return (
+          isAppTabActive('workBoard') &&
+          workBoardParams.new === '1' &&
+          workBoardParams.view === 'calendar'
+        )
+      }
+      if (key === 'workBoard') {
+        return isAppTabActive('workBoard') && workBoardParams.new !== '1'
+      }
+      return false
+    }
+
     if (key === 'dashboard') return pathname === '/dashboard'
-
     if (key === 'fichar') return pathMatches(pathname, '/dashboard/fichar')
-
     if (key === 'newTask') {
       return (
         pathMatches(pathname, '/dashboard/work-board') &&
@@ -123,15 +151,12 @@ export function MobileBottomNav({
         searchParams.get('new') === '1'
       )
     }
-
     if (key === 'workBoard') {
       if (!pathMatches(pathname, '/dashboard/work-board')) return false
       if (pathname.startsWith('/dashboard/work-board/productividad')) return false
-      // No marcar Tablero si está el flujo «Tarea»
       if (searchParams.get('new') === '1') return false
       return true
     }
-
     return false
   }
 
@@ -153,6 +178,27 @@ export function MobileBottomNav({
 
   const canUse = (permission?: PermissionKey) => !permission || loading || hasPermission(permission)
 
+  const handlePrimary = (key: PrimaryKey) => {
+    const item = primaryBar.find((p) => p.key === key)
+    if (!item) return
+    if (item.newTask) {
+      navigateAppTab('workBoard', { workBoardParams: WORK_BOARD_NEW_TASK_PARAMS })
+      return
+    }
+    navigateAppTab(item.tab)
+  }
+
+  const handleOverflowClick = (item: (typeof overflowMenuItems)[number]) => {
+    setMoreOpen(false)
+    if (item.shellAgenda) {
+      navigateAppTab('workBoard', {
+        workBoardParams: { view: 'calendar', period: 'week' },
+      })
+      return
+    }
+    router.push(item.href)
+  }
+
   return (
     <>
       <nav
@@ -167,7 +213,7 @@ export function MobileBottomNav({
           )}
         >
           <ul className="grid grid-cols-5 gap-0 px-1 py-1.5">
-            {primaryBar.map(({ key, href, label, icon: Icon, permission }) => {
+            {primaryBar.map(({ key, label, icon: Icon, permission }) => {
               const allowed = canUse(permission)
               const active = allowed && isPrimaryActive(key)
               const itemClass =
@@ -175,8 +221,9 @@ export function MobileBottomNav({
               return (
                 <li key={key} className="flex min-w-0 justify-center">
                   {allowed ? (
-                    <Link
-                      href={href}
+                    <button
+                      type="button"
+                      onClick={() => handlePrimary(key)}
                       aria-current={active ? 'page' : undefined}
                       aria-label={label}
                       className={cn(
@@ -186,7 +233,7 @@ export function MobileBottomNav({
                     >
                       <Icon className={cn('h-6 w-6 shrink-0', active && 'text-brand')} aria-hidden />
                       <span className="line-clamp-2 text-center">{label}</span>
-                    </Link>
+                    </button>
                   ) : (
                     <span
                       className={cn(itemClass, 'text-zinc-600 opacity-60')}
@@ -250,8 +297,30 @@ export function MobileBottomNav({
             {visibleOverflow.length === 0 ? (
               <li className="px-3 py-4 text-center text-sm text-zinc-500">No hay más secciones disponibles.</li>
             ) : (
-              visibleOverflow.map(({ href, label, icon: Icon }) => {
+              visibleOverflow.map((item) => {
+                const { href, label, icon: Icon, shellAgenda } = item
                 const active = hrefMatchesCurrent(href)
+                if (shellAgenda) {
+                  return (
+                    <li key={href}>
+                      <button
+                        type="button"
+                        onClick={() => handleOverflowClick(item)}
+                        className={cn(
+                          'flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium transition-colors',
+                          activeTab === 'workBoard' &&
+                            workBoardParams.view === 'calendar' &&
+                            !workBoardParams.new
+                            ? 'bg-zinc-800 text-brand'
+                            : 'text-zinc-200 hover:bg-zinc-800/80'
+                        )}
+                      >
+                        <Icon className="h-5 w-5 shrink-0 text-zinc-400" aria-hidden />
+                        {label}
+                      </button>
+                    </li>
+                  )
+                }
                 return (
                   <li key={href}>
                     <Link

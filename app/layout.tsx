@@ -1,10 +1,11 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Space_Grotesk } from "next/font/google";
 import localFont from "next/font/local";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { SonnerToaster } from "@/components/ui/sonner-toaster";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { Analytics } from "@vercel/analytics/next";
+import { SerwistRegister } from "@/components/pwa/SerwistRegister";
 import "./globals.css";
 
 const spaceGrotesk = Space_Grotesk({
@@ -30,11 +31,24 @@ export const metadata: Metadata = {
     template: "%s - Arkapp",
   },
   description: "Gestiona citas, clientes y servicios de cualquier tipo de negocio",
+  applicationName: "Arkapp",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "Arkapp",
+  },
   icons: {
     icon: "/logo%20arkapp%20final.svg",
     shortcut: "/logo%20arkapp%20final.svg",
     apple: "/logo%20arkapp%20final.svg",
   },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#09090b",
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
@@ -63,6 +77,7 @@ export default function RootLayout({
       >
         <ThemeProvider>
           {children}
+          <SerwistRegister />
           <SonnerToaster />
           <SpeedInsights />
           <Analytics />

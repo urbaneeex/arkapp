@@ -22,6 +22,8 @@ import { useBusinessStore } from '@/stores/business'
 import { Tooltip } from '@/components/ui/tooltip'
 import { usePermissions } from '@/hooks/usePermissions'
 import type { PermissionKey } from '@/lib/permissions'
+import { useAppTabShell } from '@/components/app-shell/AppTabShellProvider'
+import { isAppShellTabHref } from '@/lib/app-shell/appTabRoutes'
 
 const WORK_BOARD_HREF = '/dashboard/work-board'
 const PRODUCTIVIDAD_HREF = '/dashboard/work-board/productividad'
@@ -74,6 +76,7 @@ const iconSize = 'w-7 h-7'
 
 export function Sidebar() {
   const pathname = usePathname()
+  const { navigateAppTab, isAppTabActive } = useAppTabShell()
   const setBusiness = useBusinessStore((s) => s.setBusiness)
   const { hasPermission, loading: permissionsLoading, isOwner } = usePermissions()
   const supabase = createClient()
@@ -106,27 +109,45 @@ export function Sidebar() {
       <div className="flex flex-col h-full pt-1 pb-4">
         <nav className="flex-1 px-3 pt-2 space-y-2 overflow-y-hidden">
           {navItemsToShow.map(({ href, label, icon: Icon }) => {
-            const isActive = sidebarItemIsActive(pathname, href)
+            const shellTab = isAppShellTabHref(href)
+            const isActive = shellTab
+              ? isAppTabActive(shellTab)
+              : sidebarItemIsActive(pathname, href)
+            const itemClass = cn(
+              'cursor-pointer flex items-center justify-center rounded-lg text-sm font-medium transition-colors min-h-[2.5rem] relative px-2 py-2.5',
+              isActive
+                ? 'bg-zinc-200 text-zinc-900 dark:bg-zinc-800/80 dark:text-zinc-100'
+                : 'text-zinc-600 hover:bg-zinc-200 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/50 dark:hover:text-zinc-200'
+            )
             return (
               <Tooltip key={href} content={label} className="w-full flex items-center justify-center">
-                <Link
-                  href={href}
-                  aria-label={label}
-                  className={cn(
-                    'cursor-pointer flex items-center justify-center rounded-lg text-sm font-medium transition-colors min-h-[2.5rem] relative px-2 py-2.5',
-                    isActive
-                      ? 'bg-zinc-200 text-zinc-900 dark:bg-zinc-800/80 dark:text-zinc-100'
-                      : 'text-zinc-600 hover:bg-zinc-200 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/50 dark:hover:text-zinc-200'
-                  )}
-                >
-                  {isActive && (
-                    <span
-                      className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-r bg-brand"
-                      aria-hidden
-                    />
-                  )}
-                  <Icon className={cn('shrink-0', iconSize, isActive && 'text-brand dark:text-brand')} />
-                </Link>
+                {shellTab ? (
+                  <button
+                    type="button"
+                    aria-label={label}
+                    aria-current={isActive ? 'page' : undefined}
+                    onClick={() => navigateAppTab(shellTab)}
+                    className={itemClass}
+                  >
+                    {isActive && (
+                      <span
+                        className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-r bg-brand"
+                        aria-hidden
+                      />
+                    )}
+                    <Icon className={cn('shrink-0', iconSize, isActive && 'text-brand dark:text-brand')} />
+                  </button>
+                ) : (
+                  <Link href={href} aria-label={label} className={itemClass}>
+                    {isActive && (
+                      <span
+                        className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-r bg-brand"
+                        aria-hidden
+                      />
+                    )}
+                    <Icon className={cn('shrink-0', iconSize, isActive && 'text-brand dark:text-brand')} />
+                  </Link>
+                )}
               </Tooltip>
             )
           })}

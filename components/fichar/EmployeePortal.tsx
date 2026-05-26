@@ -23,6 +23,7 @@ type Props = {
   openEntry: { id: string; clock_in: string; source: string } | null
   canManageAbsences: boolean
   contractHoursPerWeek?: number | null
+  initialTab?: string
 }
 
 export function EmployeePortal({
@@ -35,16 +36,19 @@ export function EmployeePortal({
   openEntry,
   canManageAbsences,
   contractHoursPerWeek,
+  initialTab,
 }: Props) {
   const searchParams = useSearchParams()
   const [pendingCount, setPendingCount] = useState(0)
   const [pendingDocCount, setPendingDocCount] = useState(0)
-  const [activeTab, setActiveTab] = useState(() => searchParams.get('tab') ?? 'fichar')
+  const [activeTab, setActiveTab] = useState(
+    () => initialTab ?? searchParams.get('tab') ?? 'fichar'
+  )
 
   useEffect(() => {
-    const tab = searchParams.get('tab')
+    const tab = initialTab ?? searchParams.get('tab')
     if (tab) setActiveTab(tab)
-  }, [searchParams])
+  }, [initialTab, searchParams])
 
   useEffect(() => {
     fetch(`/api/staff/signatures?business_id=${businessId}&staff_id=${staffId}&status=pending`)
