@@ -7,7 +7,7 @@ import { RequirePermission } from '@/components/auth/RequirePermission'
 import { getBusinessForUser } from '@/lib/supabase/business'
 
 export const metadata: Metadata = {
-  title: 'Equipo',
+  title: 'Organización',
 }
 
 export default async function StaffPage() {
@@ -44,12 +44,13 @@ export default async function StaffPage() {
   }
 
   return (
-    <RequirePermission permission="staff_view">
+    <RequirePermission anyOf={['staff_view', 'teams_view', 'teams_manage']}>
       <Suspense fallback={<div className="flex items-center justify-center py-20 text-zinc-500 text-sm">Cargando...</div>}>
         <StaffClient
           staff={staffResult.data ?? []}
           businessId={businessId}
           roles={rolesResult.data ?? []}
+          staffForPicker={(staffResult.data ?? []).map((s) => ({ id: s.id, name: s.name }))}
         />
       </Suspense>
     </RequirePermission>

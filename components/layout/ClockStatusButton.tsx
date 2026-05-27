@@ -427,7 +427,7 @@ export function ClockStatusButton() {
             onClick={() => setOpen(false)}
             className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
           >
-            Ver mi jornada completa →
+            Ver jornada →
           </Link>
         </div>
       </PopoverContent>

@@ -38,6 +38,16 @@ const nextConfig: NextConfig = {
   experimental: {
     optimizePackageImports: ['lucide-react', 'date-fns'],
   },
+  async redirects() {
+    return [
+      {
+        source: '/:path*',
+        has: [{ type: 'host', value: 'panel.arkapp.es' }],
+        destination: 'https://partners.arkapp.es/:path*',
+        permanent: true,
+      },
+    ]
+  },
   async headers() {
     return [
       {

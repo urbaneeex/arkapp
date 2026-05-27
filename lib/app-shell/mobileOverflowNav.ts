@@ -15,13 +15,20 @@ export type MobileOverflowNavItem = {
   label: string
   icon: LucideIcon
   permission?: PermissionKey
+  anyOf?: PermissionKey[]
   requireOwner?: boolean
 }
 
 export const MOBILE_OVERFLOW_NAV_ITEMS: MobileOverflowNavItem[] = [
   { id: 'clients', href: '/dashboard/clients', label: 'Clientes', icon: Users, permission: 'clients_view' },
   { id: 'services', href: '/dashboard/services', label: 'Servicios', icon: Briefcase, permission: 'services_view' },
-  { id: 'staff', href: '/dashboard/staff', label: 'Equipo', icon: Contact, permission: 'staff_view' },
+  {
+    id: 'staff',
+    href: '/dashboard/staff',
+    label: 'Organización',
+    icon: Contact,
+    anyOf: ['staff_view', 'teams_view', 'teams_manage'],
+  },
   {
     id: 'productividad',
     href: '/dashboard/work-board/productividad',
@@ -36,6 +43,9 @@ export const MOBILE_OVERFLOW_NAV_ITEMS: MobileOverflowNavItem[] = [
 
 export function matchMobileOverflowPath(pathname: string, href: string): boolean {
   const path = href.split('?')[0]
+  if (path === '/dashboard/staff') {
+    return pathname === '/dashboard/staff' || pathname.startsWith('/dashboard/staff/') || pathname.startsWith('/dashboard/teams')
+  }
   if (pathname === path) return true
   if (path !== '/dashboard' && pathname.startsWith(`${path}/`)) return true
   return false

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -14,7 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Users, Clock, Shield, Plus, Check, Lock, UserCircle, Umbrella, FileText } from 'lucide-react'
+import { Users, Clock, Shield, Plus, Check, Lock, UserCircle, Umbrella, FileText, UsersRound } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { StaffList } from '@/components/staff/StaffList'
 import { RolesTab } from '@/components/staff/RolesTab'
@@ -22,6 +22,7 @@ import { ShiftsTab } from '@/components/staff/ShiftsTab'
 import { TimeTrackingTab } from '@/components/staff/TimeTrackingTab'
 import { VacationsTab } from '@/components/staff/VacationsTab'
 import { DocumentsTab } from '@/components/staff/DocumentsTab'
+import { TeamsPageClient } from '@/components/teams/TeamsPageClient'
 import {
   DEFAULT_MATRIX,
   PERMISSION_LEVELS_UI,
@@ -48,21 +49,18 @@ export function StaffClient({
   staff,
   businessId,
   roles,
+  staffForPicker,
 }: {
   staff: StaffRow[]
   businessId: string
   roles: Role[]
+  staffForPicker: { id: string; name: string }[]
 }) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { hasPermission } = usePermissions()
   const [activeTab, setActiveTab] = useState(() => searchParams.get('tab') ?? 'empleados')
 
-  // Jump to tab when ?tab= searchParam changes (e.g. navigating from dashboard)
-  useEffect(() => {
-    const tab = searchParams.get('tab')
-    if (tab) setActiveTab(tab)
-  }, [searchParams])
   const [matrix, setMatrix] = useState<PermissionMatrix>(DEFAULT_MATRIX)
   const [matrixLoading, setMatrixLoading] = useState(true)
   const [matrixSaving, setMatrixSaving] = useState(false)
@@ -119,26 +117,50 @@ export function StaffClient({
 
   const canManagePermissions = hasPermission('permissions_manage')
   const canInviteStaff = hasPermission('staff_invite')
+  const canViewStaff = hasPermission('staff_view')
+  const canViewTeams = hasPermission('teams_view') || hasPermission('teams_manage')
   const canViewTimeTracking = hasPermission('time_tracking_view')
   const canViewAbsences = hasPermission('absences_view')
   const canEditStaff = hasPermission('staff_edit')
 
-  const tabs = [
-    { value: 'empleados', icon: Users, label: 'Empleados' },
-    { value: 'turnos', icon: Clock, label: 'Turnos' },
-    ...(canViewTimeTracking ? [{ value: 'fichajes', icon: Clock, label: 'Fichajes' }] : []),
-    ...(canViewAbsences ? [{ value: 'vacaciones', icon: Umbrella, label: 'Vacaciones' }] : []),
-    ...(canEditStaff ? [{ value: 'documentos', icon: FileText, label: 'Documentos' }] : []),
-    { value: 'roles', icon: UserCircle, label: 'Roles' },
-    ...(canManagePermissions ? [{ value: 'permisos', icon: Shield, label: 'Permisos' }] : []),
-  ]
+  const tabs = useMemo(
+    () => [
+      ...(canViewStaff ? [{ value: 'empleados', icon: Users, label: 'Empleados' }] : []),
+      ...(canViewTeams ? [{ value: 'equipos', icon: UsersRound, label: 'Equipos' }] : []),
+      ...(canViewStaff ? [{ value: 'turnos', icon: Clock, label: 'Turnos' }] : []),
+      ...(canViewStaff && canViewTimeTracking ? [{ value: 'fichajes', icon: Clock, label: 'Fichajes' }] : []),
+      ...(canViewStaff && canViewAbsences ? [{ value: 'vacaciones', icon: Umbrella, label: 'Vacaciones' }] : []),
+      ...(canViewStaff && canEditStaff ? [{ value: 'documentos', icon: FileText, label: 'Documentos' }] : []),
+      ...(canViewStaff ? [{ value: 'roles', icon: UserCircle, label: 'Roles' }] : []),
+      ...(canViewStaff && canManagePermissions ? [{ value: 'permisos', icon: Shield, label: 'Permisos' }] : []),
+    ],
+    [
+      canViewStaff,
+      canViewTeams,
+      canViewTimeTracking,
+      canViewAbsences,
+      canEditStaff,
+      canManagePermissions,
+    ]
+  )
+
+  useEffect(() => {
+    const tab = searchParams.get('tab')
+    if (tab && tabs.some((t) => t.value === tab)) {
+      setActiveTab(tab)
+      return
+    }
+    if (!tabs.some((t) => t.value === activeTab) && tabs[0]) {
+      setActiveTab(tabs[0].value)
+    }
+  }, [searchParams, tabs, activeTab])
 
   return (
     <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
       <header className="mb-6">
         <div className="flex justify-between items-center">
-          <h1 className="font-display text-2xl font-bold text-zinc-100">Equipo</h1>
-          {canInviteStaff && (
+          <h1 className="font-display text-2xl font-bold text-zinc-100">Organización</h1>
+          {canInviteStaff && activeTab === 'empleados' && (
             <Link href="/dashboard/staff/new" className="cursor-pointer">
               <Button>
                 <Plus className="w-4 h-4 mr-2" />
@@ -157,37 +179,49 @@ export function StaffClient({
         ))}
       </TabsList>
 
-      <TabsContent value="empleados" className="mt-6">
-        <StaffList staff={staff} businessId={businessId} roles={roles} />
-      </TabsContent>
+      {canViewStaff && (
+        <TabsContent value="empleados" className="mt-6">
+          <StaffList staff={staff} businessId={businessId} roles={roles} />
+        </TabsContent>
+      )}
 
-      <TabsContent value="turnos" className="mt-6">
-        <ShiftsTab businessId={businessId} staff={staff} />
-      </TabsContent>
+      {canViewTeams && (
+        <TabsContent value="equipos" className="mt-6">
+          <TeamsPageClient staffForPicker={staffForPicker} />
+        </TabsContent>
+      )}
 
-      {canViewTimeTracking && (
+      {canViewStaff && (
+        <TabsContent value="turnos" className="mt-6">
+          <ShiftsTab businessId={businessId} staff={staff} />
+        </TabsContent>
+      )}
+
+      {canViewStaff && canViewTimeTracking && (
         <TabsContent value="fichajes" className="mt-6">
           <TimeTrackingTab businessId={businessId} staff={staff} />
         </TabsContent>
       )}
 
-      {canViewAbsences && (
+      {canViewStaff && canViewAbsences && (
         <TabsContent value="vacaciones" className="mt-6">
           <VacationsTab businessId={businessId} staff={staff} />
         </TabsContent>
       )}
 
-      {canEditStaff && (
+      {canViewStaff && canEditStaff && (
         <TabsContent value="documentos" className="mt-6">
           <DocumentsTab businessId={businessId} staff={staff} />
         </TabsContent>
       )}
 
-      <TabsContent value="roles" className="mt-6">
-        <RolesTab businessId={businessId} initialRoles={roles} />
-      </TabsContent>
+      {canViewStaff && (
+        <TabsContent value="roles" className="mt-6">
+          <RolesTab businessId={businessId} initialRoles={roles} />
+        </TabsContent>
+      )}
 
-      {canManagePermissions && (
+      {canViewStaff && canManagePermissions && (
         <TabsContent value="permisos" className="mt-6">
           <Card>
             <CardHeader>

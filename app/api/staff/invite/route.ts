@@ -3,13 +3,9 @@ import { createClient } from '@supabase/supabase-js'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { Resend } from 'resend'
 import { randomUUID } from 'crypto'
+import { resolveSiteUrl } from '@/lib/emails/site-url'
 
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
-const SITE_URL =
-  process.env.NEXT_PUBLIC_SITE_URL ||
-  (typeof process.env.VERCEL_URL === 'string' && process.env.VERCEL_URL
-    ? `https://${process.env.VERCEL_URL}`
-    : 'http://localhost:3000')
 
 const RESEND_FROM = process.env.RESEND_FROM_EMAIL || 'Arkapp <hello@arkapp.es>'
 
@@ -145,7 +141,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Error al crear la invitación' }, { status: 500 })
     }
 
-    const inviteUrl = `${SITE_URL}/auth/accept-invite?token=${inviteToken}`
+    const inviteUrl = `${resolveSiteUrl()}/auth/accept-invite?token=${inviteToken}`
 
     const resend = new Resend(resendApiKey)
 

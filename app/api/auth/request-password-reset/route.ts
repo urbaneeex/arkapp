@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { Resend } from 'resend'
-import { SITE_URL } from '@/lib/emails/site-url'
+import { resolveSiteUrl } from '@/lib/emails/site-url'
 import { buildPasswordResetEmail } from '@/lib/emails/password-reset-request'
 import {
   allowPasswordResetRequest,
@@ -99,7 +99,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(JSON_OK)
     }
 
-    const resetUrl = `${SITE_URL.replace(/\/$/, '')}/reset-password?token=${encodeURIComponent(plainToken)}`
+    const resetUrl = `${resolveSiteUrl()}/reset-password?token=${encodeURIComponent(plainToken)}`
     const { subject, html } = buildPasswordResetEmail({ resetUrl })
 
     const resend = new Resend(apiKey)

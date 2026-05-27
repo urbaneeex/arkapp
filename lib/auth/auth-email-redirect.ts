@@ -1,4 +1,4 @@
-import { SITE_URL } from '@/lib/emails/site-url'
+import { resolveSiteUrl } from '@/lib/emails/site-url'
 
 export const AUTH_CONFIRM_PATH = '/auth/confirm'
 
@@ -20,7 +20,7 @@ export function getAuthEmailRedirectUrlClient(): string {
     }
     return `${origin}${AUTH_CONFIRM_PATH}`
   }
-  return `${baseEnv || SITE_URL.replace(/\/$/, '')}${AUTH_CONFIRM_PATH}`
+  return `${baseEnv || resolveSiteUrl()}${AUTH_CONFIRM_PATH}`
 }
 
 export function getAuthEmailRedirectUrlFromRequest(host: string | null, proto: string | null): string {
@@ -28,5 +28,5 @@ export function getAuthEmailRedirectUrlFromRequest(host: string | null, proto: s
     const p = proto ?? 'https'
     return `${p}://${host}${AUTH_CONFIRM_PATH}`
   }
-  return `${SITE_URL.replace(/\/$/, '')}${AUTH_CONFIRM_PATH}`
+  return `${resolveSiteUrl()}${AUTH_CONFIRM_PATH}`
 }

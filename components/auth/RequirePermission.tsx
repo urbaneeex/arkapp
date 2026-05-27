@@ -10,17 +10,23 @@ import { WORK_BOARD_CALENDAR_PATH } from '@/lib/routes'
 
 export function RequirePermission({
   permission,
+  anyOf,
   children,
   redirectTo = WORK_BOARD_CALENDAR_PATH,
 }: {
-  permission: PermissionKey
+  permission?: PermissionKey
+  anyOf?: PermissionKey[]
   children: React.ReactNode
   redirectTo?: string
 }) {
   const router = useRouter()
   const { hasPermission, loading } = usePermissions()
 
-  const allowed = hasPermission(permission)
+  const allowed = anyOf?.length
+    ? anyOf.some((key) => hasPermission(key))
+    : permission
+      ? hasPermission(permission)
+      : false
 
   useEffect(() => {
     if (loading) return

@@ -44,7 +44,7 @@ const primaryBar: {
     permission: 'work_board_view',
     newTask: true,
   },
-  { key: 'fichar', tab: 'fichar', label: 'Fichar', icon: Clock },
+  { key: 'fichar', tab: 'fichar', label: 'Jornada', icon: Clock },
 ]
 
 function pathMatches(pathname: string, path: string) {
@@ -72,6 +72,7 @@ export function MobileBottomNav({
     if (loading) return MOBILE_OVERFLOW_NAV_ITEMS.filter((i) => !i.requireOwner)
     return MOBILE_OVERFLOW_NAV_ITEMS.filter((item) => {
       if (item.requireOwner && !isOwner) return false
+      if (item.anyOf?.length) return item.anyOf.some((k) => hasPermission(k))
       return !item.permission || hasPermission(item.permission)
     })
   }, [hasPermission, loading, isOwner])

@@ -3,7 +3,7 @@
 import { cn } from '@/lib/utils'
 
 /**
- * Cabecera de sección (p. ej. «Mi Jornada», «Tablero», «Inicio»).
+ * Cabecera de sección (p. ej. «Jornada», «Tablero», «Inicio»).
  * Visible en móvil y desktop; tipografía display 2xl.
  */
 export function PageHeader({

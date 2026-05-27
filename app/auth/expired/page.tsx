@@ -17,7 +17,7 @@ export default function InviteExpiredPage() {
           El enlace ha expirado
         </h1>
         <p className="text-zinc-400 mb-4">
-          Este enlace de invitación ya no es válido. Los enlaces expiran después de <strong>7 días</strong> por seguridad.
+          Este enlace de invitación ya no es válido. Los enlaces expiran después de <strong>48 horas</strong> por seguridad.
         </p>
         <p className="text-sm text-zinc-400 mb-6">
           Contacta con tu administrador para que te envíe una nueva invitación. Recibirás un nuevo correo con un enlace válido.

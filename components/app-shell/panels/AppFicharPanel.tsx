@@ -37,7 +37,7 @@ export function AppFicharPanel() {
         <p className="text-zinc-400">
           {data?.kind === 'no_business'
             ? 'No estás asociado a ningún negocio.'
-            : 'No se pudo cargar fichar.'}
+            : 'No se pudo cargar jornada.'}
         </p>
       </div>
     )

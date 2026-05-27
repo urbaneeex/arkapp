@@ -164,7 +164,7 @@ export async function POST(request: NextRequest) {
       const { error: colError } = await supabaseAdmin
         .from('staff')
         .update({ invitation_status: 'accepted' })
-        .eq('id', invite.staff_id)
+        .eq('id', authUserId)
       if (colError) {
         // Columna puede no existir aún
       }

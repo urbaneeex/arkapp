@@ -11,7 +11,6 @@ import {
   Settings,
   DollarSign,
   Clock,
-  UsersRound,
   ChartColumnIncreasing,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -38,6 +37,13 @@ function sidebarItemIsActive(pathname: string, href: string): boolean {
   if (href === PRODUCTIVIDAD_HREF) {
     return pathname === PRODUCTIVIDAD_HREF || pathname.startsWith(`${PRODUCTIVIDAD_HREF}/`)
   }
+  if (href === '/dashboard/staff') {
+    return (
+      pathname === '/dashboard/staff' ||
+      pathname.startsWith('/dashboard/staff/') ||
+      pathname.startsWith('/dashboard/teams')
+    )
+  }
   return pathname === href || pathname.startsWith(`${href}/`)
 }
 
@@ -51,15 +57,14 @@ const mainNavItems: {
 }[] = [
   { href: '/dashboard', label: 'Inicio', icon: Home },
   { href: '/dashboard/work-board', label: 'Tablero', icon: LayoutGrid, permission: 'work_board_view' },
-  { href: '/dashboard/fichar', label: 'Fichar', icon: Clock },
+  { href: '/dashboard/fichar', label: 'Jornada', icon: Clock },
   { href: '/dashboard/clients', label: 'Clientes', icon: Users, permission: 'clients_view' },
   { href: '/dashboard/services', label: 'Servicios', icon: Briefcase, permission: 'services_view' },
-  { href: '/dashboard/staff', label: 'Equipo', icon: UserCircle, permission: 'staff_view' },
   {
-    href: '/dashboard/teams',
-    label: 'Equipos',
-    icon: UsersRound,
-    anyOf: ['teams_view', 'teams_manage'],
+    href: '/dashboard/staff',
+    label: 'Organización',
+    icon: UserCircle,
+    anyOf: ['staff_view', 'teams_view', 'teams_manage'],
   },
   {
     href: PRODUCTIVIDAD_HREF,

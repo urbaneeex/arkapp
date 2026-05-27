@@ -60,7 +60,7 @@ export function EmployeePortal({
   return (
     <Tabs value={activeTab} onValueChange={setActiveTab} className="flex w-full min-h-0 flex-1 flex-col">
       <header className="mb-6">
-        <h1 className="font-display text-2xl font-bold text-zinc-100">Mi Jornada</h1>
+        <h1 className="font-display text-2xl font-bold text-zinc-100">Jornada</h1>
       </header>
 
       <TabsList className="flex h-auto w-full cursor-default flex-row flex-wrap justify-start gap-2 rounded-lg bg-zinc-800 p-1 text-zinc-400">

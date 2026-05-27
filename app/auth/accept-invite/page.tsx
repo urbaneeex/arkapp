@@ -37,9 +37,27 @@ function AcceptInvitePageInner() {
 
     let cancelled = false
     fetch(`/api/staff/verify-invite?token=${encodeURIComponent(token)}`)
-      .then((res) => res.json())
-      .then((data) => {
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}))
         if (cancelled) return
+        if (!res.ok && !data.email) {
+          if (data.error === 'expired' || data.message?.toLowerCase().includes('expirado')) {
+            router.replace('/auth/expired')
+            return
+          }
+          if (data.error === 'already_used' || data.message?.toLowerCase().includes('ya fue utilizada')) {
+            setError('Esta invitación ya fue utilizada. Si ya tienes cuenta, inicia sesión.')
+            setVerifying(false)
+            return
+          }
+          setError(data.message || data.error || 'Enlace inválido.')
+          setVerifying(false)
+          return
+        }
+        return data
+      })
+      .then((data) => {
+        if (cancelled || !data) return
         if (data.error === 'expired' || data.message?.toLowerCase().includes('expirado')) {
           router.replace('/auth/expired')
           return
