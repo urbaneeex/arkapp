@@ -4,13 +4,13 @@ import { GlobalHeader } from '@/components/layout/GlobalHeader'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { MobileBottomNav } from '@/components/layout/MobileBottomNav'
 import { DashboardMain } from '@/components/layout/DashboardMain'
+import { BusinessStoreHydrator } from '@/components/layout/BusinessStoreHydrator'
 import { PermissionsProvider } from '@/contexts/PermissionsContext'
 import { ReactQueryProvider } from '@/components/providers/ReactQueryProvider'
 import { SessionGuard } from '@/components/auth/SessionGuard'
 import { AppTabShellProvider } from '@/components/app-shell/AppTabShellProvider'
 import { getCachedUser } from '@/lib/supabase/server'
-import { getBusinessForUser } from '@/lib/supabase/business'
-import { getAccountDisplayName } from '@/lib/user-display-name.server'
+import { getDashboardLayoutContext } from '@/lib/dashboard/getDashboardLayoutContext'
 
 export default async function DashboardLayout({
   children,
@@ -20,28 +20,39 @@ export default async function DashboardLayout({
   const user = await getCachedUser()
   if (!user) redirect('/login')
 
-  const [result, displayUserName] = await Promise.all([
-    getBusinessForUser(user.id),
-    getAccountDisplayName(user.id, user.email),
-  ])
+  const ctx = await getDashboardLayoutContext(user.id, user.email)
+  if (!ctx) redirect('/onboarding')
 
-  if (!result) {
-    redirect('/onboarding')
+  const businessSidebar = {
+    name: ctx.businessName,
+    logo_url: null as string | null,
+    plan: null as string | null,
   }
-
-  const businessName: string = result.business?.name ?? ''
 
   return (
     <SessionGuard>
-      <PermissionsProvider>
+      <PermissionsProvider
+        initialPermissions={ctx.permissions}
+        initialAccessLevel={ctx.accessLevel}
+        initialIsOwner={ctx.isOwner}
+      >
         <ReactQueryProvider>
           <Suspense fallback={null}>
-            <AppTabShellProvider displayName={displayUserName}>
+            <AppTabShellProvider
+              displayName={ctx.displayName}
+              accountUser={
+                user.email || ctx.displayName
+                  ? { name: ctx.displayName || undefined, email: user.email ?? '' }
+                  : null
+              }
+              businessName={ctx.businessName}
+            >
+              <BusinessStoreHydrator business={businessSidebar} />
               <div className="h-screen min-h-0 overflow-hidden flex flex-col bg-zinc-950">
                 <GlobalHeader
-                  initialUserName={displayUserName}
+                  initialUserName={ctx.displayName}
                   initialUserEmail={user.email ?? ''}
-                  initialBusinessName={businessName}
+                  initialBusinessName={ctx.businessName}
                 />
                 <Sidebar />
                 <DashboardMain>{children}</DashboardMain>
@@ -54,9 +65,9 @@ export default async function DashboardLayout({
                   }
                 >
                   <MobileBottomNav
-                    initialUserName={displayUserName}
+                    initialUserName={ctx.displayName}
                     initialUserEmail={user.email ?? ''}
-                    initialBusinessName={businessName}
+                    initialBusinessName={ctx.businessName}
                   />
                 </Suspense>
               </div>

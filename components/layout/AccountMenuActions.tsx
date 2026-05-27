@@ -16,10 +16,14 @@ export function AccountMenuUserHeader({
   user,
   businessName,
   compact,
+  showEditButton,
+  onEdit,
 }: {
   user: AccountMenuUser
   businessName?: string
   compact?: boolean
+  showEditButton?: boolean
+  onEdit?: () => void
 }) {
   const displayName = user.name || user.email?.split('@')[0] || 'Usuario'
 
@@ -50,8 +54,19 @@ export function AccountMenuUserHeader({
           >
             {displayName}
           </p>
-          <p className="mt-0.5 truncate text-xs text-zinc-500">{user.email}</p>
-          {businessName ? (
+          <div className="mt-0.5 flex items-center justify-between gap-2">
+            <p className="min-w-0 truncate text-xs text-zinc-500">{user.email}</p>
+            {showEditButton ? (
+              <Link
+                href="/dashboard/settings?stack=account"
+                onClick={() => onEdit?.()}
+                className="shrink-0 text-xs font-semibold text-brand transition-colors hover:text-brand-hover"
+              >
+                Editar
+              </Link>
+            ) : null}
+          </div>
+          {!compact && businessName ? (
             <p className="mt-1 truncate text-xs text-zinc-400">
               <span className="font-display font-semibold text-zinc-300">Arkapp</span>
               <span className="font-normal"> x {businessName}</span>
@@ -66,12 +81,15 @@ export function AccountMenuUserHeader({
 export function AccountMenuActions({
   onAction,
   variant = 'popover',
+  hideProfileLink = false,
+  hideLogout = false,
 }: {
   onAction?: () => void
   variant?: 'popover' | 'sheet'
+  hideProfileLink?: boolean
+  hideLogout?: boolean
 }) {
   const { theme, setTheme } = useTheme()
-  const supabase = createClient()
 
   const rowClass =
     variant === 'sheet'
@@ -87,12 +105,6 @@ export function AccountMenuActions({
     variant === 'sheet'
       ? 'flex items-center gap-3 px-3 py-3 text-sm text-zinc-500'
       : 'flex items-center gap-2 px-4 py-3 text-sm text-zinc-500 dark:text-zinc-400'
-
-  const handleLogout = async () => {
-    onAction?.()
-    await supabase.auth.signOut()
-    window.location.href = '/login'
-  }
 
   const handleThemeToggle = () => {
     setTheme(theme === 'dark' ? 'light' : 'dark')
@@ -119,35 +131,62 @@ export function AccountMenuActions({
         </span>
       </button>
 
-      <Link href="/dashboard/settings" onClick={() => onAction?.()} className={linkClass}>
-        <User className="h-4 w-4 shrink-0 text-zinc-400" aria-hidden />
-        Mi perfil
-      </Link>
+      {!hideProfileLink ? (
+        <Link href="/dashboard/settings" onClick={() => onAction?.()} className={linkClass}>
+          <User className="h-4 w-4 shrink-0 text-zinc-400" aria-hidden />
+          Mi perfil
+        </Link>
+      ) : null}
 
       <div className={staticRowClass}>
         <Globe className="h-4 w-4 shrink-0 text-zinc-500" aria-hidden />
         <span>Idioma: Español 🇪🇸</span>
       </div>
 
-      <div
-        className={cn(
-          'border-t border-zinc-800',
-          variant === 'sheet' ? 'mx-2 mt-1 px-1 pb-2 pt-1' : 'p-2'
-        )}
-      >
-        <button
-          type="button"
-          onClick={() => void handleLogout()}
+      {!hideLogout ? (
+        <div
           className={cn(
-            variant === 'sheet'
-              ? 'flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl px-3 py-3 text-sm font-medium text-zinc-100 transition-colors hover:bg-red-950/30 hover:text-red-400'
-              : 'flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-medium text-zinc-100 transition-colors hover:bg-red-950/20 hover:text-red-400'
+            'border-t border-zinc-800',
+            variant === 'sheet' ? 'mx-2 mt-1 px-1 pb-2 pt-1' : 'p-2'
           )}
         >
-          <LogOut className="h-4 w-4" aria-hidden />
-          Cerrar sesión
-        </button>
-      </div>
+          <AccountMenuLogoutButton variant={variant} onAction={onAction} />
+        </div>
+      ) : null}
     </div>
+  )
+}
+
+export function AccountMenuLogoutButton({
+  variant = 'sheet',
+  onAction,
+  className,
+}: {
+  variant?: 'popover' | 'sheet'
+  onAction?: () => void
+  className?: string
+}) {
+  const supabase = createClient()
+
+  const handleLogout = async () => {
+    onAction?.()
+    await supabase.auth.signOut()
+    window.location.href = '/login'
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => void handleLogout()}
+      className={cn(
+        variant === 'sheet'
+          ? 'flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl px-3 py-3 text-sm font-medium text-zinc-100 transition-colors hover:bg-red-950/30 hover:text-red-400'
+          : 'flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-medium text-zinc-100 transition-colors hover:bg-red-950/20 hover:text-red-400',
+        className
+      )}
+    >
+      <LogOut className="h-4 w-4" aria-hidden />
+      Cerrar sesión
+    </button>
   )
 }

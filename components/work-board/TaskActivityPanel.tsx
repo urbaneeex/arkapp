@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Loader2 } from 'lucide-react'
+import { Activity, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { workBoardKeys } from '@/lib/work-board/workBoardQueryKeys'
 import type { AppointmentActivityItem } from '@/lib/work-board/appointmentActivityTypes'
@@ -21,9 +21,11 @@ async function fetchActivity(appointmentId: string): Promise<AppointmentActivity
 export function TaskActivityPanel({
   appointmentId,
   enabled = true,
+  showHeader = true,
 }: {
   appointmentId: string
   enabled?: boolean
+  showHeader?: boolean
 }) {
   const queryClient = useQueryClient()
   const listRef = useRef<HTMLUListElement>(null)
@@ -79,18 +81,21 @@ export function TaskActivityPanel({
   })
 
   return (
-    <aside className="flex min-h-0 flex-1 flex-col border-t border-zinc-800 md:border-t-0 md:border-l md:pl-0">
-      <div className="flex shrink-0 items-center justify-between border-b border-zinc-800 px-4 py-3">
-        <h3 className="text-sm font-semibold text-zinc-100">Actividad</h3>
-      </div>
+    <aside className="flex h-full min-h-0 flex-1 flex-col">
+      {showHeader ? (
+        <div className="flex shrink-0 items-center gap-2 border-b border-zinc-800 px-4 py-3 md:px-6">
+          <Activity className="h-4 w-4 shrink-0 text-brand" aria-hidden />
+          <h3 className="font-display text-sm font-semibold text-zinc-100">Actividad</h3>
+        </div>
+      ) : null}
 
       <div className="relative min-h-0 flex-1">
         {isLoading ? (
-          <div className="flex h-32 items-center justify-center text-zinc-500">
+          <div className="flex flex-1 items-center justify-center text-zinc-500">
             <Loader2 className="h-5 w-5 animate-spin" aria-hidden />
           </div>
         ) : isError ? (
-          <p className="p-4 text-center text-[13px] text-zinc-500">
+          <p className="flex flex-1 items-center justify-center p-4 text-center text-[13px] text-zinc-500">
             No se pudo cargar la actividad.{' '}
             <button
               type="button"
@@ -101,7 +106,7 @@ export function TaskActivityPanel({
             </button>
           </p>
         ) : items.length === 0 ? (
-          <p className="p-4 text-center text-[13px] text-zinc-500">
+          <p className="flex flex-1 items-center justify-center p-4 text-center text-[13px] text-zinc-500">
             Sin actividad todavía. Deja el primer comentario.
           </p>
         ) : (

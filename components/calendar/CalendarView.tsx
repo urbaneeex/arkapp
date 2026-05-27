@@ -1025,7 +1025,7 @@ export function CalendarView({
         style={{ zIndex: CALENDAR_TOOLBAR_Z }}
       >
         {headerSlot}
-        <div className="flex flex-nowrap items-center gap-1.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] lg:flex-wrap lg:gap-2 lg:overflow-visible [&::-webkit-scrollbar]:hidden">
+        <div className="flex flex-nowrap items-center gap-2 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] lg:flex-wrap lg:gap-2 lg:overflow-visible [&::-webkit-scrollbar]:hidden">
           <button
             type="button"
             onClick={goToday}

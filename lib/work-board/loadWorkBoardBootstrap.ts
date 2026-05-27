@@ -26,6 +26,8 @@ export type WorkBoardSearchParams = {
   view?: string
   new?: string
   period?: string
+  /** Abre modal edición al cargar (`?task=`). */
+  task?: string
 }
 
 /** Citas + joins mínimos para Kanban/calendario. */

@@ -1,6 +1,6 @@
 import type { WorkBoardSearchParams } from '@/lib/work-board/loadWorkBoardBootstrap'
 
-export type AppTabId = 'home' | 'workBoard' | 'fichar'
+export type AppTabId = 'home' | 'workBoard' | 'fichar' | 'account'
 
 export type AppTabShellState = {
   tab: AppTabId
@@ -10,9 +10,8 @@ export type AppTabShellState = {
 
 export const DEFAULT_WORK_BOARD_PARAMS: WorkBoardSearchParams = {}
 
+/** Atajo «Tarea» (bottom nav): solo modal nueva tarea, sin calendario. */
 export const WORK_BOARD_NEW_TASK_PARAMS: WorkBoardSearchParams = {
-  view: 'calendar',
-  period: 'week',
   new: '1',
 }
 
@@ -51,7 +50,23 @@ export function parseAppTabFromLocation(
         view: searchParams.get('view') ?? undefined,
         new: searchParams.get('new') ?? undefined,
         period: searchParams.get('period') ?? undefined,
+        task: searchParams.get('task') ?? undefined,
       },
+      ficharTab: null,
+    }
+  }
+
+  if (pathname === '/dashboard') {
+    if (searchParams.get('panel') === 'account') {
+      return {
+        tab: 'account',
+        workBoardParams: DEFAULT_WORK_BOARD_PARAMS,
+        ficharTab: null,
+      }
+    }
+    return {
+      tab: 'home',
+      workBoardParams: DEFAULT_WORK_BOARD_PARAMS,
       ficharTab: null,
     }
   }
@@ -69,6 +84,8 @@ export function buildAppTabUrl(
 ): string {
   if (tab === 'home') return '/dashboard'
 
+  if (tab === 'account') return '/dashboard?panel=account'
+
   if (tab === 'fichar') {
     const tabParam = opts?.ficharTab
     return tabParam ? `/dashboard/fichar?tab=${encodeURIComponent(tabParam)}` : '/dashboard/fichar'
@@ -79,6 +96,7 @@ export function buildAppTabUrl(
   if (sp.view) q.set('view', sp.view)
   if (sp.new) q.set('new', sp.new)
   if (sp.period) q.set('period', sp.period)
+  if (sp.task) q.set('task', sp.task)
   const qs = q.toString()
   return qs ? `/dashboard/work-board?${qs}` : '/dashboard/work-board'
 }
@@ -88,6 +106,7 @@ export function workBoardBootstrapUrl(sp: WorkBoardSearchParams): string {
   if (sp.view) q.set('view', sp.view)
   if (sp.new) q.set('new', sp.new)
   if (sp.period) q.set('period', sp.period)
+  if (sp.task) q.set('task', sp.task)
   const s = q.toString()
   return s ? `/api/work-board/bootstrap?${s}` : '/api/work-board/bootstrap'
 }

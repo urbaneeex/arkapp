@@ -11,6 +11,10 @@ import {
   DASHBOARD_BLOCK_BODY_CLASS,
   DASHBOARD_BLOCK_MUTED_CLASS,
 } from '@/components/dashboard/blocks/dashboardBlockTypography'
+import { useAppTabShellOptional } from '@/components/app-shell/AppTabShellProvider'
+
+const rowClassName =
+  'flex min-h-9 items-center gap-1.5 rounded-lg border border-zinc-800/80 border-l-4 px-2 py-1.5 hover:bg-zinc-900/50'
 
 export function DashboardOwnerTasksTodayList({
   items,
@@ -36,58 +40,105 @@ export function DashboardOwnerTasksTodayList({
       ))}
       {moreCount > 0 ? (
         <li className="list-none pt-0.5 text-right">
-          <Link
-            href={workBoardHref}
-            className={cn(DASHBOARD_BLOCK_BODY_CLASS, 'font-medium tabular-nums text-brand hover:underline')}
-          >
-            +{moreCount} {moreCount === 1 ? 'tarea más' : 'tareas más'}
-          </Link>
+          <TaskMoreLink workBoardHref={workBoardHref} moreCount={moreCount} />
         </li>
       ) : null}
     </ul>
   )
 }
 
+function TaskMoreLink({
+  workBoardHref,
+  moreCount,
+}: {
+  workBoardHref: string
+  moreCount: number
+}) {
+  const shell = useAppTabShellOptional()
+  const label = `+${moreCount} ${moreCount === 1 ? 'tarea más' : 'tareas más'}`
+  const className = cn(
+    DASHBOARD_BLOCK_BODY_CLASS,
+    'font-medium tabular-nums text-brand hover:underline'
+  )
+
+  if (shell?.shellVisible) {
+    return (
+      <button
+        type="button"
+        className={className}
+        onClick={() => shell.navigateAppTab('workBoard')}
+      >
+        {label}
+      </button>
+    )
+  }
+
+  return (
+    <Link href={workBoardHref} className={className}>
+      {label}
+    </Link>
+  )
+}
+
 function TaskRow({ item, workBoardHref }: { item: OwnerTodayTaskItem; workBoardHref: string }) {
+  const shell = useAppTabShellOptional()
   const accent = kanbanCardAccentFromStageColor(item.stageColor)
   const slugClass = stageColorClassForSlug(item.stageSlug)
+  const href = `${workBoardHref}?task=${encodeURIComponent(item.id)}`
+
+  const content = (
+    <>
+      <span className={cn('min-w-0 flex-1 truncate font-medium', DASHBOARD_BLOCK_BODY_CLASS)}>
+        {item.title}
+      </span>
+      <span
+        className={cn('hidden shrink-0 tabular-nums xl:inline', DASHBOARD_BLOCK_MUTED_CLASS)}
+      >
+        {item.dateLabel}
+      </span>
+      <span
+        className={cn(
+          'shrink-0 rounded border px-1 py-px text-[9px] font-medium leading-none',
+          statePillClass(item.stateLabel, item.stageSlug)
+        )}
+      >
+        {item.stateLabel}
+      </span>
+    </>
+  )
+
+  const rowStyle = accent
+    ? {
+        borderLeftColor: accent.borderLeftColor,
+        backgroundColor: accent.backgroundColor,
+      }
+    : undefined
+
+  if (shell?.shellVisible) {
+    return (
+      <li>
+        <button
+          type="button"
+          className={cn(rowClassName, 'w-full text-left', !accent && slugClass)}
+          style={rowStyle}
+          onClick={() =>
+            shell.navigateAppTab('workBoard', { workBoardParams: { task: item.id } })
+          }
+        >
+          {content}
+        </button>
+      </li>
+    )
+  }
 
   return (
     <li>
       <Link
-        href={`${workBoardHref}?task=${item.id}`}
-        className={cn(
-          'flex min-h-9 items-center gap-1.5 rounded-lg border border-zinc-800/80 border-l-4 px-2 py-1.5 hover:bg-zinc-900/50',
-          !accent && slugClass
-        )}
-        style={
-          accent
-            ? {
-                borderLeftColor: accent.borderLeftColor,
-                backgroundColor: accent.backgroundColor,
-              }
-            : undefined
-        }
+        href={href}
+        className={cn(rowClassName, !accent && slugClass)}
+        style={rowStyle}
       >
-        <span className={cn('min-w-0 flex-1 truncate font-medium', DASHBOARD_BLOCK_BODY_CLASS)}>
-          {item.title}
-        </span>
-        <span
-          className={cn(
-            'hidden shrink-0 tabular-nums xl:inline',
-            DASHBOARD_BLOCK_MUTED_CLASS
-          )}
-        >
-          {item.dateLabel}
-        </span>
-        <span
-          className={cn(
-            'shrink-0 rounded border px-1 py-px text-[9px] font-medium leading-none',
-            statePillClass(item.stateLabel, item.stageSlug)
-          )}
-        >
-          {item.stateLabel}
-        </span>
+        {content}
       </Link>
     </li>
   )

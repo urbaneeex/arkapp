@@ -14,16 +14,15 @@ import {
   UsersRound,
   ChartColumnIncreasing,
 } from 'lucide-react'
-import { useEffect } from 'react'
-import { createClient } from '@/lib/supabase/client'
-import { getBusinessForUserClient } from '@/lib/supabase/business-client'
 import { cn } from '@/lib/utils'
-import { useBusinessStore } from '@/stores/business'
 import { Tooltip } from '@/components/ui/tooltip'
 import { usePermissions } from '@/hooks/usePermissions'
 import type { PermissionKey } from '@/lib/permissions'
 import { useAppTabShell } from '@/components/app-shell/AppTabShellProvider'
 import { isAppShellTabHref } from '@/lib/app-shell/appTabRoutes'
+import { prefetchAppTabQueries } from '@/lib/app-shell/prefetchAppTabQueries'
+import { useQueryClient } from '@tanstack/react-query'
+import type { AppTabId } from '@/lib/app-shell/appTabRoutes'
 
 const WORK_BOARD_HREF = '/dashboard/work-board'
 const PRODUCTIVIDAD_HREF = '/dashboard/work-board/productividad'
@@ -76,10 +75,11 @@ const iconSize = 'w-7 h-7'
 
 export function Sidebar() {
   const pathname = usePathname()
+  const queryClient = useQueryClient()
   const { navigateAppTab, isAppTabActive } = useAppTabShell()
-  const setBusiness = useBusinessStore((s) => s.setBusiness)
   const { hasPermission, loading: permissionsLoading, isOwner } = usePermissions()
-  const supabase = createClient()
+
+  const prefetchTab = (tab: AppTabId) => prefetchAppTabQueries(queryClient, tab)
 
   const visibleNavItems = mainNavItems.filter((item) => {
     if (item.requireOwner && !isOwner) return false
@@ -90,19 +90,6 @@ export function Sidebar() {
   const navItemsToShow = permissionsLoading
     ? mainNavItems.filter((i) => !i.requireOwner)
     : visibleNavItems
-
-  useEffect(() => {
-    const load = async () => {
-      const {
-        data: { user: authUser },
-      } = await supabase.auth.getUser()
-      if (!authUser) return
-
-      const businessData = await getBusinessForUserClient(authUser.id)
-      setBusiness(businessData)
-    }
-    load()
-  }, [supabase, setBusiness])
 
   return (
     <aside className="hidden lg:block fixed top-16 left-0 z-40 h-[calc(100vh-4rem)] w-[4.5rem] bg-zinc-100 dark:bg-zinc-950 border-r border-zinc-200 dark:border-zinc-800">
@@ -126,6 +113,7 @@ export function Sidebar() {
                     type="button"
                     aria-label={label}
                     aria-current={isActive ? 'page' : undefined}
+                    onPointerDown={() => prefetchTab(shellTab)}
                     onClick={() => navigateAppTab(shellTab)}
                     className={itemClass}
                   >

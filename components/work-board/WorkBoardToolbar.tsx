@@ -18,7 +18,7 @@ export function WorkBoardToolbar({
 }) {
   return (
     <div
-      className="inline-flex h-9 shrink-0 items-stretch rounded-lg border border-zinc-700 bg-zinc-900/80 p-0.5"
+      className="inline-flex h-9 shrink-0 items-stretch gap-1 rounded-lg border border-zinc-700 bg-zinc-900/80 p-1"
       role="group"
       aria-label="Vista del tablero"
     >

@@ -1,6 +1,5 @@
 import { cache } from 'react'
-import { createClient } from '@/lib/supabase/server'
-import { getBusinessForUser } from '@/lib/supabase/business'
+import { getDashboardLayoutContext } from '@/lib/dashboard/getDashboardLayoutContext'
 
 /**
  * Nombre visible en app: negocio (owner_name) o staff.name), no OAuth metadata.
@@ -11,17 +10,6 @@ export const getAccountDisplayName = cache(async function getAccountDisplayName(
   email: string | null | undefined
 ): Promise<string> {
   const emailFallback = email?.split('@')?.[0]?.trim() || 'Usuario'
-  const result = await getBusinessForUser(userId)
-  if (!result) return emailFallback
-  if (result.isOwner) {
-    return (result.business.owner_name ?? '').trim() || emailFallback
-  }
-  const supabase = await createClient()
-  const { data: staffRow } = await supabase
-    .from('staff')
-    .select('name')
-    .eq('id', userId)
-    .is('deleted_at', null)
-    .maybeSingle()
-  return (staffRow?.name ?? '').trim() || emailFallback
+  const ctx = await getDashboardLayoutContext(userId, email)
+  return ctx?.displayName ?? emailFallback
 })

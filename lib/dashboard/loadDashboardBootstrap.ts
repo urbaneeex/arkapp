@@ -6,14 +6,16 @@ import { DEFAULT_MATRIX, PERMISSION_LEVEL_IDS, type LevelId } from '@/lib/permis
 import type { ActionIconKey, PendingAction } from '@/components/dashboard/PendingActionsCard'
 import type {
   DashboardBootstrapPayload,
+  DashboardHeavyPayload,
+  DashboardHeroPayload,
   DashboardMetricsPayload,
   DashboardShellPayload,
   OwnerDashboardPayload,
   StaffDashboardPayload,
 } from '@/lib/dashboard/dashboardTypes'
 import { startOfToday } from 'date-fns'
-import { fetchOwnerDashboard } from '@/lib/dashboard/fetchOwnerDashboard'
-import { fetchStaffDashboard } from '@/lib/dashboard/fetchStaffDashboard'
+import { fetchOwnerDashboard, fetchOwnerHeroMetrics, fetchOwnerHeavyMetrics } from '@/lib/dashboard/fetchOwnerDashboard'
+import { fetchStaffDashboard, fetchStaffHeroMetrics, fetchStaffHeavyMetrics } from '@/lib/dashboard/fetchStaffDashboard'
 
 export type { DashboardBootstrapPayload } from '@/lib/dashboard/dashboardTypes'
 
@@ -237,44 +239,165 @@ export async function fetchDashboardShell(
 /**
  * Métricas pesadas (owner/staff home). Separado del shell para streaming SSR.
  */
-export async function fetchDashboardMetrics(
+export async function fetchDashboardHero(
   shell: DashboardShellOk,
   userId: string,
   userEmail: string
-): Promise<DashboardMetricsPayload> {
+): Promise<DashboardHeroPayload> {
   void userEmail
-
-  let ownerHome: OwnerDashboardPayload | undefined
-  let staffHome: StaffDashboardPayload | undefined
 
   if (shell.role === 'owner') {
     try {
-      const admin = createServiceRoleClient()
-      ownerHome = await fetchOwnerDashboard(
-        admin,
+      const ownerHero = await fetchOwnerHeroMetrics(
         shell.businessId,
         userId,
         shell.myStaffId
       )
+      return { kind: 'ok', role: 'owner', ownerHero }
     } catch (e) {
-      console.error('[dashboard metrics] owner home', e)
+      console.error('[dashboard hero] owner', e)
+      return { kind: 'ok', role: 'owner' }
     }
-  } else {
-    const supabase = await createClient()
-    staffHome = await fetchStaffDashboard(
-      supabase,
+  }
+
+  try {
+    const staffHero = await fetchStaffHeroMetrics(
+      shell.businessId,
+      userId,
+      shell.myStaffId
+    )
+    return { kind: 'ok', role: 'staff', staffHero }
+  } catch (e) {
+    console.error('[dashboard hero] staff', e)
+    return { kind: 'ok', role: 'staff' }
+  }
+}
+
+export async function fetchDashboardHeavy(
+  shell: DashboardShellOk,
+  userId: string,
+  userEmail: string
+): Promise<DashboardHeavyPayload> {
+  void userEmail
+
+  if (shell.role === 'owner') {
+    try {
+      const ownerHeavy = await fetchOwnerHeavyMetrics(
+        shell.businessId,
+        userId,
+        shell.myStaffId
+      )
+      return { kind: 'ok', role: 'owner', ownerHeavy }
+    } catch (e) {
+      console.error('[dashboard heavy] owner', e)
+      return { kind: 'ok', role: 'owner' }
+    }
+  }
+
+  try {
+    const staffHeavy = await fetchStaffHeavyMetrics(
       shell.businessId,
       userId,
       shell.myStaffId,
       shell.contractHoursPerWeek,
       shell.vacationDaysPerYear
     )
+    return { kind: 'ok', role: 'staff', staffHeavy }
+  } catch (e) {
+    console.error('[dashboard heavy] staff', e)
+    return { kind: 'ok', role: 'staff' }
+  }
+}
+
+export async function fetchDashboardMetrics(
+  shell: DashboardShellOk,
+  userId: string,
+  userEmail: string
+): Promise<DashboardMetricsPayload> {
+  const [hero, heavy] = await Promise.all([
+    fetchDashboardHero(shell, userId, userEmail),
+    fetchDashboardHeavy(shell, userId, userEmail),
+  ])
+
+  if (hero.kind !== 'ok' || heavy.kind !== 'ok') return {}
+
+  let ownerHome: OwnerDashboardPayload | undefined
+  let staffHome: StaffDashboardPayload | undefined
+
+  if (shell.role === 'owner' && hero.ownerHero && heavy.ownerHeavy) {
+    const h = hero.ownerHero
+    const d = heavy.ownerHeavy
+    ownerHome = {
+      section1: {
+        tasksToday: h.tasksToday,
+        clientsWeek: d.section1.clientsWeek,
+        overdueTasks: d.section1.overdueTasks,
+        revenueMonth: h.revenueMonth,
+      },
+      section2: d.section2,
+      section3: d.section3,
+      appointmentsWeekChart: d.appointmentsWeekChart,
+      tasksTodayList: d.tasksTodayList,
+    }
+  } else if (shell.role === 'staff' && hero.staffHero && heavy.staffHeavy) {
+    const h = hero.staffHero
+    const d = heavy.staffHeavy
+    staffHome = {
+      section1: {
+        tasksToday: h.tasksToday,
+        ...d.section1,
+      },
+      section3: d.section3,
+      section4: d.section4,
+      tasksTodayList: d.tasksTodayList,
+      teamAbsencesWeek: d.teamAbsencesWeek,
+    }
+  } else {
+    try {
+      if (shell.role === 'owner') {
+        const admin = createServiceRoleClient()
+        ownerHome = await fetchOwnerDashboard(
+          admin,
+          shell.businessId,
+          userId,
+          shell.myStaffId
+        )
+      } else {
+        const supabase = await createClient()
+        staffHome = await fetchStaffDashboard(
+          supabase,
+          shell.businessId,
+          userId,
+          shell.myStaffId,
+          shell.contractHoursPerWeek,
+          shell.vacationDaysPerYear
+        )
+      }
+    } catch (e) {
+      console.error('[dashboard metrics] fallback', e)
+    }
   }
 
   return { ownerHome, staffHome }
 }
 
 export const getDashboardShellCached = cache(fetchDashboardShell)
+
+export const getDashboardHeroCached = cache(
+  async (userId: string, userEmail: string): Promise<DashboardHeroPayload> => {
+    const shell = await getDashboardShellCached(userId, userEmail)
+    if (shell.kind !== 'ok') return { kind: 'no_business' }
+    return fetchDashboardHero(shell, userId, userEmail)
+  }
+)
+
+export const getDashboardHeavyCached = cache(
+  async (userId: string, userEmail: string): Promise<DashboardHeavyPayload> => {
+    const shell = await getDashboardShellCached(userId, userEmail)
+    if (shell.kind !== 'ok') return { kind: 'no_business' }
+    return fetchDashboardHeavy(shell, userId, userEmail)
+  }
+)
 
 export const getDashboardMetricsCached = cache(
   async (userId: string, userEmail: string): Promise<DashboardMetricsPayload> => {
@@ -296,9 +419,17 @@ export const getDashboardBootstrapCached = cache(
 /**
  * Datos del Inicio (SSR + GET /api/dashboard/bootstrap). Sin redirects.
  */
+export type DashboardBootstrapPart = 'shell' | 'hero' | 'heavy' | 'all'
+
 export async function fetchDashboardBootstrapPayload(
   userId: string,
-  userEmail: string
-): Promise<DashboardBootstrapPayload> {
+  userEmail: string,
+  part: DashboardBootstrapPart = 'all'
+): Promise<
+  DashboardBootstrapPayload | DashboardShellPayload | DashboardHeroPayload | DashboardHeavyPayload
+> {
+  if (part === 'shell') return getDashboardShellCached(userId, userEmail)
+  if (part === 'hero') return getDashboardHeroCached(userId, userEmail)
+  if (part === 'heavy') return getDashboardHeavyCached(userId, userEmail)
   return getDashboardBootstrapCached(userId, userEmail)
 }

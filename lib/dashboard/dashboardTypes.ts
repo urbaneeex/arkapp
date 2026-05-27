@@ -173,6 +173,40 @@ export type DashboardMetricsPayload = {
   staffHome?: StaffDashboardPayload
 }
 
+export type OwnerHeroPayload = {
+  tasksToday: OwnerTasksToday | null
+  revenueMonth: OwnerRevenueMonth | null
+}
+
+export type OwnerHeavyPayload = {
+  section1: Pick<OwnerDashboardPayload['section1'], 'clientsWeek' | 'overdueTasks'>
+  section2: OwnerDashboardPayload['section2']
+  section3: OwnerDashboardPayload['section3']
+  appointmentsWeekChart: OwnerWeekChartDay[] | null
+  tasksTodayList: OwnerTasksTodayList
+}
+
+export type StaffHeroPayload = {
+  tasksToday: OwnerTasksToday | null
+  pendingTotal: number | null
+}
+
+export type StaffHeavyPayload = {
+  section1: Omit<StaffDashboardPayload['section1'], 'tasksToday'>
+  section3: StaffDashboardPayload['section3']
+  section4: StaffDashboardPayload['section4']
+  tasksTodayList: OwnerTasksTodayList
+  teamAbsencesWeek: StaffTeamAbsence[]
+}
+
+export type DashboardHeroPayload =
+  | { kind: 'no_business' }
+  | { kind: 'ok'; role: DashboardRole; ownerHero?: OwnerHeroPayload; staffHero?: StaffHeroPayload }
+
+export type DashboardHeavyPayload =
+  | { kind: 'no_business' }
+  | { kind: 'ok'; role: DashboardRole; ownerHeavy?: OwnerHeavyPayload; staffHeavy?: StaffHeavyPayload }
+
 export type DashboardShellPayload =
   | { kind: 'no_business' }
   | {

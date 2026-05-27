@@ -36,13 +36,19 @@ function pickNestedName(n: { name?: string } | { name?: string }[] | null | unde
   return Array.isArray(n) ? n[0]?.name ?? null : n.name ?? null
 }
 
-function kanbanAssigneesIncludeStaff(metadata: unknown, staffId: string): boolean {
+function kanbanAssigneesIncludeViewer(
+  metadata: unknown,
+  viewerUserId: string,
+  viewerStaffId: string
+): boolean {
   if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return false
   const raw = (metadata as Record<string, unknown>).kanban_assignees
   if (!Array.isArray(raw)) return false
-  return raw.some(
-    (e) => e && typeof e === 'object' && 'id' in e && String((e as { id: unknown }).id) === staffId
-  )
+  return raw.some((e) => {
+    if (!e || typeof e !== 'object' || !('id' in e)) return false
+    const id = String((e as { id: unknown }).id)
+    return id === viewerStaffId || id === viewerUserId
+  })
 }
 
 function pickStageSlug(row: OwnerTasksTodayRow): string {
@@ -69,12 +75,13 @@ export function isMyTaskRow(
   viewerStaffId: string
 ): boolean {
   if (row.created_by === viewerUserId) return true
-  if (row.staff_id === viewerStaffId) return true
-  return kanbanAssigneesIncludeStaff(row.metadata, viewerStaffId)
+  if (row.staff_id === viewerStaffId || row.staff_id === viewerUserId) return true
+  return kanbanAssigneesIncludeViewer(row.metadata, viewerUserId, viewerStaffId)
 }
 
+/** Columnas «no iniciado» del tablero (Pendiente + etapas custom not_started). */
 export function isStrictPendingColumn(row: OwnerTasksTodayRow): boolean {
-  return pickStageSlug(row) === 'pending'
+  return pickStageCategory(row) === 'not_started'
 }
 
 export function isInProgressColumn(row: OwnerTasksTodayRow): boolean {

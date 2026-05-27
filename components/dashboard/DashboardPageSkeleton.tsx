@@ -11,6 +11,112 @@ function SurfaceCardSkeleton({ tall }: { tall?: boolean }) {
   )
 }
 
+export function DashboardPendingActionsSkeleton() {
+  return (
+    <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/50 p-4">
+      <div className="mb-3 h-4 w-36 animate-pulse rounded bg-zinc-800/80" />
+      <div className="space-y-2">
+        {Array.from({ length: 2 }).map((_, i) => (
+          <div key={i} className="h-12 animate-pulse rounded-lg bg-zinc-800/50" />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+export function DashboardHeroMetricsSkeleton() {
+  return (
+    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+      <SurfaceCardSkeleton />
+      <SurfaceCardSkeleton />
+    </div>
+  )
+}
+
+export function DashboardTasksListSkeleton() {
+  return (
+    <div className="space-y-3">
+      <SurfaceCardSkeleton tall />
+      <DashboardSkelRow index={0} />
+      <DashboardSkelRow index={1} />
+    </div>
+  )
+}
+
+export function OwnerTasksNumberSkeleton() {
+  return (
+    <div className="flex shrink-0 flex-col items-center justify-center text-center md:max-w-[40%] md:pr-4 md:border-r md:border-zinc-800/80">
+      <div className="h-10 w-14 animate-pulse rounded bg-zinc-800/70" />
+      <div className="mt-2 h-3 w-32 animate-pulse rounded bg-zinc-800/50" />
+    </div>
+  )
+}
+
+export function OwnerTasksListInlineSkeleton() {
+  return (
+    <div className="min-w-0 flex-1 border-t border-zinc-800/80 pt-4 md:border-t-0 md:pl-4">
+      <div className="space-y-2">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div key={i} className="h-10 animate-pulse rounded-lg bg-zinc-800/50" />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+export function OwnerMiniMetricSkeleton() {
+  return (
+    <div className="flex flex-col items-center gap-2 py-1">
+      <div className="h-3 w-16 animate-pulse rounded bg-zinc-800/60" />
+      <div className="h-8 w-10 animate-pulse rounded bg-zinc-800/70" />
+    </div>
+  )
+}
+
+export function OwnerWeekMetricsSkeleton() {
+  return (
+    <div className="grid w-full grid-cols-2 gap-x-4 gap-y-3">
+      {Array.from({ length: 4 }).map((_, i) => (
+        <OwnerMiniMetricSkeleton key={i} />
+      ))}
+    </div>
+  )
+}
+
+export function OwnerWeekChartSkeleton() {
+  return (
+    <div className="flex min-w-0 flex-col border-t border-zinc-800/80 pt-4 md:border-t-0 md:pt-0 md:pl-5">
+      <div className="mb-2 h-3 w-28 animate-pulse rounded bg-zinc-800/60" />
+      <div className="h-24 w-full animate-pulse rounded bg-zinc-800/50" />
+    </div>
+  )
+}
+
+export function OwnerSecondaryRowSkeleton() {
+  return <DashboardSkelRow index={1} />
+}
+
+export function StaffWeekMetricsSkeleton() {
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      {Array.from({ length: 4 }).map((_, i) => (
+        <OwnerMiniMetricSkeleton key={i} />
+      ))}
+    </div>
+  )
+}
+
+export function StaffSecondaryRowsSkeleton() {
+  return (
+    <>
+      <DashboardSkelRow index={1} />
+      <div className="mt-3 md:mt-4">
+        <SurfaceCardSkeleton />
+      </div>
+    </>
+  )
+}
+
 /** Skeleton métricas: 2 filas × 2 cards (sin header ni pending). */
 export function DashboardMetricsSkeleton() {
   return (

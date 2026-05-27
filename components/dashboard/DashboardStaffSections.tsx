@@ -8,7 +8,12 @@ import { DashboardSurfaceCard } from '@/components/dashboard/blocks/DashboardSur
 import { DashboardMiniMetric } from '@/components/dashboard/blocks/DashboardMiniMetric'
 import { DashboardOwnerTasksTodayList } from '@/components/dashboard/blocks/DashboardOwnerTasksTodayList'
 import { DashboardHoursProgress } from '@/components/dashboard/blocks/DashboardHoursProgress'
-import type { StaffDashboardPayload } from '@/lib/dashboard/dashboardTypes'
+import type {
+  OwnerTasksToday,
+  OwnerTasksTodayList,
+  StaffDashboardPayload,
+  StaffHeavyPayload,
+} from '@/lib/dashboard/dashboardTypes'
 import {
   DASHBOARD_BLOCK_MUTED_CLASS,
   DASHBOARD_BLOCK_VALUE_LARGE_CLASS,
@@ -27,94 +32,142 @@ const URGENCY_CLASS = {
   week: 'text-zinc-400 bg-zinc-800/60 border-zinc-700',
 } as const
 
-export function DashboardStaffSections({ data }: { data: StaffDashboardPayload }) {
-  const s1 = data.section1
-  const tasksToday = s1.tasksToday
-  const pendingMetrics = s1.pendingTasks
-  const hours = data.section4.hoursWeek
+export function StaffTasksTodayNumber({
+  tasksToday,
+}: {
+  tasksToday: OwnerTasksToday | null | undefined
+}) {
+  return (
+    <div className="flex shrink-0 flex-col items-center justify-center text-center md:max-w-[40%] md:pr-4 md:border-r md:border-zinc-800/80">
+      <p className={DASHBOARD_BLOCK_VALUE_LARGE_CLASS}>
+        {tasksToday != null ? tasksToday.total : '--'}
+      </p>
+      {tasksToday != null ? (
+        <p
+          className={cn(
+            'mt-1.5 flex flex-wrap justify-center gap-x-2 gap-y-0.5',
+            DASHBOARD_BLOCK_MUTED_CLASS
+          )}
+        >
+          <span>{tasksToday.pending} pend.</span>
+          <span>·</span>
+          <span>{tasksToday.inProgress} en curso</span>
+          <span>·</span>
+          <span>{tasksToday.completedToday} complet.</span>
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
+export function StaffTasksTodayListColumn({
+  tasksTodayList,
+}: {
+  tasksTodayList: OwnerTasksTodayList
+}) {
+  return (
+    <div className="min-w-0 flex-1 border-t border-zinc-800/80 pt-4 md:border-t-0 md:pl-4">
+      <DashboardOwnerTasksTodayList
+        items={tasksTodayList.items}
+        moreCount={tasksTodayList.moreCount}
+        workBoardHref={WORK_BOARD_PATH}
+      />
+    </div>
+  )
+}
+
+export function StaffWeekMetricsGrid({
+  section1,
+}: {
+  section1: StaffHeavyPayload['section1']
+}) {
+  const pendingMetrics = section1.pendingTasks
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      <DashboardMiniMetric
+        valueSize="large"
+        label="Tareas pendientes"
+        value={pendingMetrics != null ? String(pendingMetrics.total) : '--'}
+        highlight={pendingMetrics != null && pendingMetrics.overdue > 0 ? 'danger' : undefined}
+      />
+      <DashboardMiniMetric
+        valueSize="large"
+        label="Vencen hoy"
+        value={pendingMetrics != null ? String(pendingMetrics.dueToday) : '--'}
+        highlight={pendingMetrics != null && pendingMetrics.dueToday > 0 ? 'amber' : undefined}
+      />
+      <DashboardMiniMetric
+        valueSize="large"
+        label="Completadas"
+        value={section1.completedThisWeek != null ? String(section1.completedThisWeek) : '--'}
+        highlight="success"
+      />
+      <DashboardMiniMetric
+        valueSize="large"
+        label="Horas fichadas"
+        value={section1.clockToday ? `${section1.clockToday.hoursWorked} h` : '—'}
+      />
+    </div>
+  )
+}
+
+export function StaffDashboardRowOneShell({
+  tasksNumber,
+  tasksList,
+  weekMetrics,
+}: {
+  tasksNumber: React.ReactNode
+  tasksList: React.ReactNode
+  weekMetrics: React.ReactNode
+}) {
+  return (
+    <DashboardBlockGrid matchRowHeight>
+      <DashboardSurfaceCard
+        title="Tareas hoy"
+        titleIcon={Calendar}
+        compact
+        className="flex h-full w-full flex-col"
+        contentClassName="flex min-h-0 flex-1 flex-col"
+      >
+        <div className="flex min-h-0 flex-1 flex-col gap-4 md:flex-row md:items-stretch">
+          {tasksNumber}
+          {tasksList}
+        </div>
+      </DashboardSurfaceCard>
+
+      <DashboardSurfaceCard
+        title="Esta semana"
+        titleIcon={BarChart2}
+        compact
+        className="flex h-full w-full flex-col"
+        contentClassName="flex min-h-0 flex-1 flex-col"
+      >
+        {weekMetrics}
+      </DashboardSurfaceCard>
+    </DashboardBlockGrid>
+  )
+}
+
+export function StaffSecondaryRows({
+  section3,
+  section4,
+  teamAbsencesWeek,
+}: {
+  section3: StaffHeavyPayload['section3']
+  section4: StaffHeavyPayload['section4']
+  teamAbsencesWeek: StaffHeavyPayload['teamAbsencesWeek']
+}) {
+  const hours = section4.hoursWeek
   const targetHours = hours?.contractHoursPerWeek ?? 40
-  const vacation = data.section4.vacation
+  const vacation = section4.vacation
 
   return (
-    <div className="space-y-3 md:space-y-4">
-      <DashboardBlockGrid matchRowHeight>
-        <DashboardSurfaceCard
-          title="Tareas hoy"
-          titleIcon={Calendar}
-          compact
-          className="flex h-full w-full flex-col"
-          contentClassName="flex min-h-0 flex-1 flex-col"
-        >
-          <div className="flex min-h-0 flex-1 flex-col gap-4 md:flex-row md:items-stretch">
-            <div className="flex shrink-0 flex-col items-center justify-center text-center md:max-w-[40%] md:pr-4 md:border-r md:border-zinc-800/80">
-              <p className={DASHBOARD_BLOCK_VALUE_LARGE_CLASS}>
-                {tasksToday != null ? tasksToday.total : '--'}
-              </p>
-              {tasksToday != null ? (
-                <p
-                  className={cn(
-                    'mt-1.5 flex flex-wrap justify-center gap-x-2 gap-y-0.5',
-                    DASHBOARD_BLOCK_MUTED_CLASS
-                  )}
-                >
-                  <span>{tasksToday.pending} pend.</span>
-                  <span>·</span>
-                  <span>{tasksToday.inProgress} en curso</span>
-                  <span>·</span>
-                  <span>{tasksToday.completedToday} complet.</span>
-                </p>
-              ) : null}
-            </div>
-            <div className="min-w-0 flex-1 border-t border-zinc-800/80 pt-4 md:border-t-0 md:pl-4">
-              <DashboardOwnerTasksTodayList
-                items={data.tasksTodayList.items}
-                moreCount={data.tasksTodayList.moreCount}
-                workBoardHref={WORK_BOARD_PATH}
-              />
-            </div>
-          </div>
-        </DashboardSurfaceCard>
-
-        <DashboardSurfaceCard
-          title="Esta semana"
-          titleIcon={BarChart2}
-          compact
-          className="flex h-full w-full flex-col"
-          contentClassName="flex min-h-0 flex-1 flex-col"
-        >
-          <div className="grid grid-cols-2 gap-3">
-            <DashboardMiniMetric
-              valueSize="large"
-              label="Tareas pendientes"
-              value={pendingMetrics != null ? String(pendingMetrics.total) : '--'}
-              highlight={pendingMetrics != null && pendingMetrics.overdue > 0 ? 'danger' : undefined}
-            />
-            <DashboardMiniMetric
-              valueSize="large"
-              label="Vencen hoy"
-              value={pendingMetrics != null ? String(pendingMetrics.dueToday) : '--'}
-              highlight={pendingMetrics != null && pendingMetrics.dueToday > 0 ? 'amber' : undefined}
-            />
-            <DashboardMiniMetric
-              valueSize="large"
-              label="Completadas"
-              value={s1.completedThisWeek != null ? String(s1.completedThisWeek) : '--'}
-              highlight="success"
-            />
-            <DashboardMiniMetric
-              valueSize="large"
-              label="Horas fichadas"
-              value={s1.clockToday ? `${s1.clockToday.hoursWorked} h` : '—'}
-            />
-          </div>
-        </DashboardSurfaceCard>
-      </DashboardBlockGrid>
-
+    <>
       <DashboardBlockGrid>
         <DashboardSurfaceCard title="Mis tareas urgentes" titleIcon={AlertCircle}>
-          {data.section3.urgent.length > 0 ? (
+          {section3.urgent.length > 0 ? (
             <ul className="space-y-2">
-              {data.section3.urgent.map((t) => (
+              {section3.urgent.map((t) => (
                 <li key={t.id}>
                   <Link
                     href={`${WORK_BOARD_PATH}?task=${t.id}`}
@@ -140,10 +193,7 @@ export function DashboardStaffSections({ data }: { data: StaffDashboardPayload }
 
         <DashboardSurfaceCard title="Mis horas esta semana" titleIcon={Timer}>
           {hours?.available ? (
-            <DashboardHoursProgress
-              hoursWorked={hours.hoursWorked}
-              targetHours={targetHours}
-            />
+            <DashboardHoursProgress hoursWorked={hours.hoursWorked} targetHours={targetHours} />
           ) : (
             <p className="text-[13px] text-zinc-500">—</p>
           )}
@@ -166,9 +216,9 @@ export function DashboardStaffSections({ data }: { data: StaffDashboardPayload }
             <p className="mb-4 text-[13px] text-zinc-500">Vacaciones: Próximamente</p>
           )}
           <p className="mb-2 text-[11px] font-medium text-zinc-500">Ausencias del equipo</p>
-          {data.teamAbsencesWeek.length > 0 ? (
+          {teamAbsencesWeek.length > 0 ? (
             <ul className="space-y-2">
-              {data.teamAbsencesWeek.map((a, i) => (
+              {teamAbsencesWeek.map((a, i) => (
                 <li key={`${a.staffName}-${i}`} className="text-[13px] text-zinc-400">
                   <span className="text-zinc-200">{a.staffName}</span>
                   {' · '}
@@ -183,6 +233,32 @@ export function DashboardStaffSections({ data }: { data: StaffDashboardPayload }
           )}
         </DashboardSurfaceCard>
       </DashboardBlockGrid>
+    </>
+  )
+}
+
+export function DashboardStaffSections({ data }: { data: StaffDashboardPayload }) {
+  return (
+    <div className="space-y-3 md:space-y-4">
+      <StaffDashboardRowOneShell
+        tasksNumber={<StaffTasksTodayNumber tasksToday={data.section1.tasksToday} />}
+        tasksList={<StaffTasksTodayListColumn tasksTodayList={data.tasksTodayList} />}
+        weekMetrics={
+          <StaffWeekMetricsGrid
+            section1={{
+              pendingTasks: data.section1.pendingTasks,
+              clockToday: data.section1.clockToday,
+              completedThisWeek: data.section1.completedThisWeek,
+              motivationalNote: data.section1.motivationalNote,
+            }}
+          />
+        }
+      />
+      <StaffSecondaryRows
+        section3={data.section3}
+        section4={data.section4}
+        teamAbsencesWeek={data.teamAbsencesWeek}
+      />
     </div>
   )
 }

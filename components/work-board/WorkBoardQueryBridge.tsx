@@ -40,6 +40,8 @@ export function WorkBoardQueryBridge({ searchParams }: { searchParams: WorkBoard
 
   const invalidateBoard = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: workBoardKeys.all })
+    void queryClient.invalidateQueries({ queryKey: dashboardKeys.hero() })
+    void queryClient.invalidateQueries({ queryKey: dashboardKeys.heavy() })
     void queryClient.invalidateQueries({ queryKey: dashboardKeys.bootstrap() })
   }, [queryClient])
 

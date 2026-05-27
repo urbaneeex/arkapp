@@ -2,10 +2,8 @@
 
 import { useEffect } from 'react'
 import dynamic from 'next/dynamic'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRouter } from 'next/navigation'
-import { PendingActionsCard } from '@/components/dashboard/PendingActionsCard'
-import type { DashboardBootstrapPayload } from '@/lib/dashboard/dashboardTypes'
+import { useQueryClient } from '@tanstack/react-query'
 import { dashboardKeys } from '@/lib/dashboard/dashboardQueryKeys'
 
 const LiveClockPanelBeta = dynamic(
@@ -21,65 +19,44 @@ const LiveClockPanelBeta = dynamic(
   }
 )
 
-async function fetchDashboardBootstrap(): Promise<DashboardBootstrapPayload> {
-  const res = await fetch('/api/dashboard/bootstrap')
-  if (!res.ok) throw new Error('dashboard bootstrap')
-  return res.json()
-}
-
-export function DashboardHomeClient({
-  initialData,
+/** LiveClock + invalidación hero/heavy tras cambios en tablero. */
+export function DashboardHomeClientIsland({
+  businessId,
+  canSeeLiveClockPanel,
+  liveClockBetaEnabled,
 }: {
-  initialData: DashboardBootstrapPayload
+  businessId: string
+  canSeeLiveClockPanel: boolean
+  liveClockBetaEnabled: boolean
 }) {
   const router = useRouter()
   const queryClient = useQueryClient()
 
-  const { data = initialData } = useQuery({
-    queryKey: dashboardKeys.bootstrap(),
-    queryFn: fetchDashboardBootstrap,
-    initialData,
-    staleTime: 60_000,
-    gcTime: 30 * 60_000,
-    refetchOnMount: false,
-    refetchOnWindowFocus: false,
-  })
-
   useEffect(() => {
     return queryClient.getQueryCache().subscribe((event) => {
-      if (
-        event.type === 'updated' &&
-        event.action.type === 'success' &&
-        event.query.queryKey[0] === dashboardKeys.bootstrap()[0]
-      ) {
+      if (event.type !== 'updated' || event.action.type !== 'success') return
+      const key = event.query.queryKey
+      if (key[0] !== dashboardKeys.all[0]) return
+      if (key[1] === 'hero' || key[1] === 'heavy' || key[1] === 'bootstrap') {
         router.refresh()
       }
     })
   }, [queryClient, router])
 
-  if (data.kind === 'no_business') {
-    return null
-  }
-
-  const {
-    businessId,
-    pendingActions,
-    hasClock,
-    canSeeLiveClockPanel,
-    liveClockBetaEnabled,
-  } = data
+  if (!liveClockBetaEnabled || !canSeeLiveClockPanel) return null
 
   return (
-    <>
-      <div className="mt-3 md:mt-4">
-        <PendingActionsCard actions={pendingActions} hasClock={hasClock} />
-      </div>
-
-      {liveClockBetaEnabled && canSeeLiveClockPanel && (
-        <div className="mt-6">
-          <LiveClockPanelBeta businessId={businessId} />
-        </div>
-      )}
-    </>
+    <div className="mt-6">
+      <LiveClockPanelBeta businessId={businessId} />
+    </div>
   )
+}
+
+/** @deprecated SSR reemplaza bootstrap monolítico; mantener compat corta. */
+export function DashboardHomeClient({
+  initialData: _initialData,
+}: {
+  initialData: unknown
+}) {
+  return null
 }

@@ -27,13 +27,32 @@ type PermissionsContextValue = {
 
 const PermissionsContext = createContext<PermissionsContextValue | null>(null)
 
-export function PermissionsProvider({ children }: { children: React.ReactNode }) {
-  const [permissions, setPermissions] = useState<Permissions | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [accessLevel, setAccessLevel] = useState<string | null>(null)
-  const [isOwner, setIsOwner] = useState(false)
+type InitialProps = {
+  children: React.ReactNode
+  initialPermissions?: Permissions | null
+  initialAccessLevel?: string | null
+  initialIsOwner?: boolean
+}
+
+export function PermissionsProvider({
+  children,
+  initialPermissions = null,
+  initialAccessLevel = null,
+  initialIsOwner = false,
+}: InitialProps) {
+  const hasInitial = initialPermissions != null
+  const [permissions, setPermissions] = useState<Permissions | null>(
+    hasInitial ? initialPermissions : null
+  )
+  const [loading, setLoading] = useState(!hasInitial)
+  const [accessLevel, setAccessLevel] = useState<string | null>(
+    hasInitial ? initialAccessLevel : null
+  )
+  const [isOwner, setIsOwner] = useState(hasInitial ? initialIsOwner : false)
 
   useEffect(() => {
+    if (hasInitial) return
+
     let cancelled = false
 
     const loadPermissions = async () => {
@@ -108,7 +127,7 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [hasInitial])
 
   const hasPermission = useCallback(
     (permission: PermissionKey): boolean => {

@@ -1,5 +1,9 @@
 import type { NextConfig } from 'next'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import withSerwistInit from '@serwist/next'
+
+const projectRoot = path.dirname(fileURLToPath(import.meta.url))
 
 const withSerwist = withSerwistInit({
   swSrc: 'app/sw.ts',
@@ -29,6 +33,8 @@ const securityHeaders = [
 ]
 
 const nextConfig: NextConfig = {
+  // Evita que Next suba a ~/ por package-lock.json ajeno al repo.
+  outputFileTracingRoot: projectRoot,
   experimental: {
     optimizePackageImports: ['lucide-react', 'date-fns'],
   },

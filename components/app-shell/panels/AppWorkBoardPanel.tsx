@@ -9,6 +9,7 @@ import { workBoardBootstrapUrl } from '@/lib/app-shell/appTabRoutes'
 import { useAppTabShell } from '@/components/app-shell/AppTabShellProvider'
 import { WorkBoardPageClient } from '@/components/work-board/WorkBoardPageClient'
 import { WorkBoardKanbanPageSkeleton } from '@/components/work-board/WorkBoardKanbanPageSkeleton'
+import { WorkBoardNewTaskLoadingPanel } from '@/components/app-shell/panels/WorkBoardNewTaskLoadingPanel'
 
 export function AppWorkBoardPanel() {
   const { workBoardParams } = useAppTabShell()
@@ -29,8 +30,16 @@ export function AppWorkBoardPanel() {
 
   const invalidateBoard = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: workBoardKeys.all })
+    void queryClient.invalidateQueries({ queryKey: dashboardKeys.hero() })
+    void queryClient.invalidateQueries({ queryKey: dashboardKeys.heavy() })
     void queryClient.invalidateQueries({ queryKey: dashboardKeys.bootstrap() })
   }, [queryClient])
+
+  const quickAddMode = workBoardParams.new === '1'
+
+  if (quickAddMode && isLoading && !data) {
+    return <WorkBoardNewTaskLoadingPanel />
+  }
 
   if (isLoading && !data) {
     return <WorkBoardKanbanPageSkeleton />
@@ -43,6 +52,7 @@ export function AppWorkBoardPanel() {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <WorkBoardPageClient
+        key={quickAddMode ? 'quick-add' : `board-${workBoardParams.task ?? 'default'}`}
         businessId={data.businessId}
         currentUserId={data.currentUserId}
         initialStages={data.initialStages}
@@ -50,7 +60,8 @@ export function AppWorkBoardPanel() {
         initialStaffOptions={data.initialStaffOptions}
         initialView={data.initialView}
         initialCalendarPeriod={data.initialCalendarPeriod}
-        initialNewPanel={data.initialNewPanel}
+        initialNewPanel={data.initialNewPanel || quickAddMode}
+        initialOpenTaskId={workBoardParams.task ?? null}
         rawAppointments={data.rawAppointments}
         calendarStaff={data.calendarStaff}
         businessCountry={data.businessCountry}

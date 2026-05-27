@@ -9,15 +9,8 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { usePathname, useSearchParams } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useQueryClient } from '@tanstack/react-query'
-import type { WorkBoardSearchParams } from '@/lib/work-board/loadWorkBoardBootstrap'
-import type { DashboardBootstrapPayload } from '@/lib/dashboard/dashboardTypes'
-import type { WorkBoardBootstrapPayload } from '@/lib/work-board/loadWorkBoardBootstrap'
-import type { FicharBootstrapPayload } from '@/lib/fichar/loadFicharBootstrap'
-import { dashboardKeys } from '@/lib/dashboard/dashboardQueryKeys'
-import { workBoardKeys } from '@/lib/work-board/workBoardQueryKeys'
-import { ficharKeys } from '@/lib/fichar/ficharQueryKeys'
 import {
   type AppTabId,
   buildAppTabUrl,
@@ -26,10 +19,27 @@ import {
   parseAppTabFromLocation,
   workBoardBootstrapUrl,
 } from '@/lib/app-shell/appTabRoutes'
+import type { WorkBoardSearchParams } from '@/lib/work-board/loadWorkBoardBootstrap'
+import type { WorkBoardBootstrapPayload } from '@/lib/work-board/loadWorkBoardBootstrap'
+import { workBoardKeys } from '@/lib/work-board/workBoardQueryKeys'
+import { prefetchAppTabQueries } from '@/lib/app-shell/prefetchAppTabQueries'
+import { AppNewTaskDiscardDialog } from '@/components/app-shell/AppNewTaskDiscardDialog'
+import { useCompactAppNav } from '@/hooks/useCompactAppNav'
+import type { AccountMenuUser } from '@/components/layout/AccountMenuActions'
 
 type NavigateOpts = {
   workBoardParams?: WorkBoardSearchParams
   ficharTab?: string | null
+}
+
+type PendingLeaveAction =
+  | { kind: 'tab'; tab: AppTabId; opts?: NavigateOpts }
+  | { kind: 'fn'; fn: () => void }
+
+type ShellOverride = {
+  tab: AppTabId
+  workBoardParams: WorkBoardSearchParams
+  ficharTab: string | null
 }
 
 type AppTabShellContextValue = {
@@ -39,25 +49,19 @@ type AppTabShellContextValue = {
   workBoardParams: WorkBoardSearchParams
   ficharTab: string | null
   mountedTabs: Set<AppTabId>
+  isNewTaskQuickAdd: boolean
+  newTaskDraftDirty: boolean
+  setNewTaskDraftDirty: (dirty: boolean) => void
   navigateAppTab: (tab: AppTabId, opts?: NavigateOpts) => void
+  requestLeaveNewTask: (action: PendingLeaveAction) => void
   setFicharTab: (tab: string | null) => void
   setWorkBoardParams: (params: WorkBoardSearchParams) => void
   isAppTabActive: (tab: AppTabId) => boolean
+  accountUser: AccountMenuUser | null
+  businessName: string
 }
 
 const AppTabShellContext = createContext<AppTabShellContextValue | null>(null)
-
-async function fetchDashboardBootstrap(): Promise<DashboardBootstrapPayload> {
-  const res = await fetch('/api/dashboard/bootstrap')
-  if (!res.ok) throw new Error('dashboard bootstrap')
-  return res.json()
-}
-
-async function fetchFicharBootstrap(): Promise<FicharBootstrapPayload> {
-  const res = await fetch('/api/fichar/bootstrap')
-  if (!res.ok) throw new Error('fichar bootstrap')
-  return res.json()
-}
 
 async function fetchWorkBoardBootstrap(sp: WorkBoardSearchParams): Promise<WorkBoardBootstrapPayload> {
   const res = await fetch(workBoardBootstrapUrl(sp))
@@ -65,22 +69,22 @@ async function fetchWorkBoardBootstrap(sp: WorkBoardSearchParams): Promise<WorkB
   return res.json()
 }
 
-type ShellOverride = {
-  tab: AppTabId
-  workBoardParams: WorkBoardSearchParams
-  ficharTab: string | null
-}
-
 export function AppTabShellProvider({
   children,
   displayName,
+  accountUser,
+  businessName = '',
 }: {
   children: ReactNode
   displayName: string
+  accountUser: AccountMenuUser | null
+  businessName?: string
 }) {
   const pathname = usePathname()
+  const router = useRouter()
   const searchParams = useSearchParams()
   const queryClient = useQueryClient()
+  const compactAppNav = useCompactAppNav()
 
   const routeShell = isAppShellRoute(pathname)
   const parsedFromUrl = useMemo(
@@ -90,14 +94,22 @@ export function AppTabShellProvider({
 
   const [shellOverride, setShellOverride] = useState<ShellOverride | null>(null)
   const [mountedTabs, setMountedTabs] = useState<Set<AppTabId>>(() => new Set())
+  const [newTaskDraftDirty, setNewTaskDraftDirty] = useState(false)
+  const [discardOpen, setDiscardOpen] = useState(false)
+  const [pendingLeave, setPendingLeave] = useState<PendingLeaveAction | null>(null)
 
-  const shellVisible = routeShell || shellOverride !== null
+  const shellVisible = isAppShellRoute(pathname)
 
   const activeTab = shellOverride?.tab ?? parsedFromUrl.tab
   const workBoardParams = shellOverride?.workBoardParams ?? parsedFromUrl.workBoardParams
   const ficharTab = shellOverride?.ficharTab ?? parsedFromUrl.ficharTab
+  const isNewTaskQuickAdd = activeTab === 'workBoard' && workBoardParams.new === '1'
 
   useEffect(() => {
+    if (!isAppShellRoute(pathname)) {
+      setShellOverride(null)
+      return
+    }
     if (routeShell) {
       setShellOverride(null)
     }
@@ -121,50 +133,22 @@ export function AppTabShellProvider({
     return () => window.removeEventListener('popstate', onPopState)
   }, [])
 
-  useEffect(() => {
-    const prefetch = () => {
-      void queryClient.prefetchQuery({
-        queryKey: dashboardKeys.bootstrap(),
-        queryFn: fetchDashboardBootstrap,
-        staleTime: 60_000,
-      })
-      void queryClient.prefetchQuery({
-        queryKey: ficharKeys.bootstrap(),
-        queryFn: fetchFicharBootstrap,
-        staleTime: 60_000,
-      })
-      void queryClient.prefetchQuery({
-        queryKey: workBoardKeys.bootstrap(DEFAULT_WORK_BOARD_PARAMS),
-        queryFn: () => fetchWorkBoardBootstrap(DEFAULT_WORK_BOARD_PARAMS),
-        staleTime: 60_000,
-      })
-    }
-    if (typeof requestIdleCallback !== 'undefined') {
-      const id = requestIdleCallback(prefetch)
-      return () => cancelIdleCallback(id)
-    }
-    const t = window.setTimeout(prefetch, 0)
-    return () => window.clearTimeout(t)
-  }, [queryClient])
-
-  const syncUrl = useCallback((tab: AppTabId, opts?: NavigateOpts) => {
-    const url = buildAppTabUrl(tab, {
-      workBoardParams: opts?.workBoardParams,
-      ficharTab: opts?.ficharTab,
-    })
-    window.history.replaceState(window.history.state, '', url)
-  }, [])
-
-  const navigateAppTab = useCallback(
+  const syncUrl = useCallback(
     (tab: AppTabId, opts?: NavigateOpts) => {
-      const nextWorkBoard = opts?.workBoardParams ?? (tab === 'workBoard' ? workBoardParams : DEFAULT_WORK_BOARD_PARAMS)
-      const nextFicharTab = opts?.ficharTab !== undefined ? opts.ficharTab : tab === 'fichar' ? ficharTab : null
-
-      setShellOverride({
-        tab,
-        workBoardParams: tab === 'workBoard' ? nextWorkBoard : DEFAULT_WORK_BOARD_PARAMS,
-        ficharTab: tab === 'fichar' ? nextFicharTab : null,
+      const url = buildAppTabUrl(tab, {
+        workBoardParams: opts?.workBoardParams,
+        ficharTab: opts?.ficharTab,
       })
+      router.replace(url, { scroll: false })
+    },
+    [router]
+  )
+
+  const performNavigateAppTab = useCallback(
+    (tab: AppTabId, opts?: NavigateOpts) => {
+      const nextWorkBoard = opts?.workBoardParams ?? DEFAULT_WORK_BOARD_PARAMS
+      const nextFicharTab =
+        opts?.ficharTab !== undefined ? opts.ficharTab : tab === 'fichar' ? ficharTab : null
 
       setMountedTabs((prev) => {
         const next = new Set(prev)
@@ -173,6 +157,7 @@ export function AppTabShellProvider({
       })
 
       syncUrl(tab, { workBoardParams: nextWorkBoard, ficharTab: nextFicharTab })
+      prefetchAppTabQueries(queryClient, tab)
 
       if (tab === 'workBoard') {
         void queryClient.prefetchQuery({
@@ -182,17 +167,55 @@ export function AppTabShellProvider({
         })
       }
     },
-    [ficharTab, queryClient, syncUrl, workBoardParams]
+    [ficharTab, queryClient, syncUrl]
+  )
+
+  const shouldGuardNewTaskLeave = useCallback(
+    (action: PendingLeaveAction) => {
+      if (!compactAppNav || !isNewTaskQuickAdd || !newTaskDraftDirty) return false
+      if (action.kind === 'tab') {
+        if (action.tab === 'workBoard' && action.opts?.workBoardParams?.new === '1') return false
+        return true
+      }
+      return true
+    },
+    [compactAppNav, isNewTaskQuickAdd, newTaskDraftDirty]
+  )
+
+  const commitPendingLeave = useCallback(() => {
+    const action = pendingLeave
+    setDiscardOpen(false)
+    setPendingLeave(null)
+    setNewTaskDraftDirty(false)
+    if (!action) return
+    if (action.kind === 'fn') action.fn()
+    else performNavigateAppTab(action.tab, action.opts)
+  }, [pendingLeave, performNavigateAppTab])
+
+  const requestLeaveNewTask = useCallback(
+    (action: PendingLeaveAction) => {
+      if (shouldGuardNewTaskLeave(action)) {
+        setPendingLeave(action)
+        setDiscardOpen(true)
+        return
+      }
+      setNewTaskDraftDirty(false)
+      if (action.kind === 'fn') action.fn()
+      else performNavigateAppTab(action.tab, action.opts)
+    },
+    [shouldGuardNewTaskLeave, performNavigateAppTab]
+  )
+
+  const navigateAppTab = useCallback(
+    (tab: AppTabId, opts?: NavigateOpts) => {
+      requestLeaveNewTask({ kind: 'tab', tab, opts })
+    },
+    [requestLeaveNewTask]
   )
 
   const setFicharTab = useCallback(
     (tab: string | null) => {
       if (activeTab !== 'fichar') return
-      setShellOverride({
-        tab: 'fichar',
-        workBoardParams: DEFAULT_WORK_BOARD_PARAMS,
-        ficharTab: tab,
-      })
       syncUrl('fichar', { ficharTab: tab })
     },
     [activeTab, syncUrl]
@@ -201,19 +224,35 @@ export function AppTabShellProvider({
   const setWorkBoardParams = useCallback(
     (params: WorkBoardSearchParams) => {
       if (activeTab !== 'workBoard') return
-      setShellOverride({
-        tab: 'workBoard',
-        workBoardParams: params,
-        ficharTab: null,
-      })
-      syncUrl('workBoard', { workBoardParams: params })
-      void queryClient.prefetchQuery({
-        queryKey: workBoardKeys.bootstrap(params),
-        queryFn: () => fetchWorkBoardBootstrap(params),
-        staleTime: 60_000,
-      })
+      const apply = () => {
+        syncUrl('workBoard', { workBoardParams: params })
+        void queryClient.prefetchQuery({
+          queryKey: workBoardKeys.bootstrap(params),
+          queryFn: () => fetchWorkBoardBootstrap(params),
+          staleTime: 60_000,
+        })
+      }
+      if (
+        compactAppNav &&
+        isNewTaskQuickAdd &&
+        params.new !== '1' &&
+        newTaskDraftDirty
+      ) {
+        setPendingLeave({ kind: 'fn', fn: apply })
+        setDiscardOpen(true)
+        return
+      }
+      if (isNewTaskQuickAdd && params.new !== '1') setNewTaskDraftDirty(false)
+      apply()
     },
-    [activeTab, queryClient, syncUrl]
+    [
+      activeTab,
+      compactAppNav,
+      isNewTaskQuickAdd,
+      newTaskDraftDirty,
+      queryClient,
+      syncUrl,
+    ]
   )
 
   const isAppTabActive = useCallback(
@@ -229,10 +268,16 @@ export function AppTabShellProvider({
       workBoardParams,
       ficharTab,
       mountedTabs,
+      isNewTaskQuickAdd,
+      newTaskDraftDirty,
+      setNewTaskDraftDirty,
       navigateAppTab,
+      requestLeaveNewTask,
       setFicharTab,
       setWorkBoardParams,
       isAppTabActive,
+      accountUser,
+      businessName,
     }),
     [
       displayName,
@@ -241,14 +286,31 @@ export function AppTabShellProvider({
       workBoardParams,
       ficharTab,
       mountedTabs,
+      isNewTaskQuickAdd,
+      newTaskDraftDirty,
       navigateAppTab,
+      requestLeaveNewTask,
       setFicharTab,
       setWorkBoardParams,
       isAppTabActive,
+      accountUser,
+      businessName,
     ]
   )
 
-  return <AppTabShellContext.Provider value={value}>{children}</AppTabShellContext.Provider>
+  return (
+    <AppTabShellContext.Provider value={value}>
+      {children}
+      <AppNewTaskDiscardDialog
+        open={discardOpen}
+        onCancel={() => {
+          setDiscardOpen(false)
+          setPendingLeave(null)
+        }}
+        onDiscard={commitPendingLeave}
+      />
+    </AppTabShellContext.Provider>
+  )
 }
 
 export function useAppTabShell() {

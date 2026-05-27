@@ -235,6 +235,19 @@ function staffIdsFromWorkItem(item: WorkItemCard): string[] {
   return []
 }
 
+function teamIdsFromWorkItem(item: WorkItemCard): string[] {
+  if (item.team_ids?.length) return item.team_ids
+  if (item.team_id) return [item.team_id]
+  return []
+}
+
+function stringArraysEqual(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false
+  const sortedA = [...a].sort()
+  const sortedB = [...b].sort()
+  return sortedA.every((value, index) => value === sortedB[index])
+}
+
 export function KanbanQuickAddAppointment({
   stageId,
   businessId,
@@ -255,6 +268,9 @@ export function KanbanQuickAddAppointment({
   readOnly = false,
   onEditClose,
   variant = 'default',
+  onDirtyChange,
+  hideTitleActions = false,
+  onSaveActionsChange,
   teams = [],
   pipelineStages = [],
 }: {
@@ -278,15 +294,24 @@ export function KanbanQuickAddAppointment({
   /** Solo consulta (asignado sin ser creador); actividad sigue en el padre. */
   readOnly?: boolean
   onEditClose?: () => void
-  /** `modal`: solo el formulario; el padre envuelve en Dialog (sin botón colapsable). */
-  variant?: 'default' | 'modal'
+  /** `modal`: formulario en dialog; `page`: inline con botón final «Crear tarea». */
+  variant?: 'default' | 'modal' | 'page'
+  /** Cambios sin guardar (p. ej. salir del flujo «Nueva tarea» en móvil). */
+  onDirtyChange?: (dirty: boolean) => void
+  /** Móvil/tablet: oculta Guardar y X en fila título; usar `onSaveActionsChange`. */
+  hideTitleActions?: boolean
+  onSaveActionsChange?: (
+    actions: { save: () => void; disabled: boolean; saving: boolean } | null
+  ) => void
   teams?: { id: string; name: string; color: string }[]
   /** Columnas del tablero (selector de estado en edición modal). */
   pipelineStages?: PipelineStageRow[]
 }) {
   const isEditMode = Boolean(editItem)
   const isCalendarMode = !!(defaultOpen && onClose)
+  const isPageSurface = variant === 'page'
   const isModalSurface = variant === 'modal'
+  const isFormSurface = isModalSurface || isPageSurface
   const supabase = createClient()
   const panelRef = useRef<HTMLDivElement>(null)
   const assignPopoverRef = useRef<HTMLDivElement>(null)
@@ -295,6 +320,8 @@ export function KanbanQuickAddAppointment({
   const clientPopoverRef = useRef<HTMLDivElement>(null)
   const servicePopoverRef = useRef<HTMLDivElement>(null)
   const clientSearchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const skipInitialTitleSelectRef = useRef(false)
+  const [editDirtyBaselineReadyId, setEditDirtyBaselineReadyId] = useState<string | null>(null)
 
   const calcInitialDate = () => initialDay ? format(initialDay, 'yyyy-MM-dd') : ''
   const calcInitialTime = () => initialTimeMin != null
@@ -476,19 +503,20 @@ export function KanbanQuickAddAppointment({
   /** Modal / apertura del panel: reinicio sin atar a `stageId` (el usuario puede cambiar columna sin perder el borrador). */
   useEffect(() => {
     if (isEditMode) return
-    if (!open && !isModalSurface) return
+    if (!open && !isFormSurface) return
     resetNewTaskDraft()
-  }, [open, isEditMode, isModalSurface, resetNewTaskDraft])
+  }, [open, isEditMode, isFormSurface, resetNewTaskDraft])
 
   /** Solo en columna Kanban: al cambiar `stageId` con panel abierto, reiniciar. */
   useEffect(() => {
-    if (isEditMode || isModalSurface) return
+    if (isEditMode || isFormSurface) return
     if (!open) return
     resetNewTaskDraft()
-  }, [stageId, isEditMode, isModalSurface, open, resetNewTaskDraft])
+  }, [stageId, isEditMode, isFormSurface, open, resetNewTaskDraft])
 
   useEffect(() => {
     if (!editItem) return
+    setEditDirtyBaselineReadyId(null)
     const titleVal = editItem.title?.trim() || editItem.displayTitle?.trim() || ''
     setTitle(titleVal)
     if (editItem.start_time) {
@@ -548,13 +576,19 @@ export function KanbanQuickAddAppointment({
   }, [editItem?.id ?? ''])
 
   useEffect(() => {
+    if (isEditMode) skipInitialTitleSelectRef.current = true
+  }, [isEditMode, editItem?.id])
+
+  useEffect(() => {
     if (!isEditMode || !editItem) return
     if (!editItem.service_id) {
       setSelectedService(null)
+      setEditDirtyBaselineReadyId(editItem.id)
       return
     }
     const svc = services.find((s) => s.id === editItem.service_id) ?? null
     if (svc) setSelectedService(svc)
+    setEditDirtyBaselineReadyId(editItem.id)
   }, [isEditMode, editItem?.id, editItem?.service_id, services])
 
   useEffect(() => {
@@ -565,7 +599,7 @@ export function KanbanQuickAddAppointment({
   }, [forceOpenSignal, isEditMode])
 
   useEffect(() => {
-    if (isModalSurface) return
+    if (isFormSurface) return
     if (!isEditMode && !open && !isCalendarMode) return
     const onPointerDown = (e: PointerEvent) => {
       const t = e.target as Node
@@ -586,7 +620,7 @@ export function KanbanQuickAddAppointment({
     }
     document.addEventListener('pointerdown', onPointerDown, true)
     return () => document.removeEventListener('pointerdown', onPointerDown, true)
-  }, [open, isCalendarMode, onClose, isEditMode, onEditClose, isModalSurface])
+  }, [open, isCalendarMode, onClose, isEditMode, onEditClose, isFormSurface])
 
   /** Si inicio (fecha + hora) es igual o posterior al fin, el fin deja de ser válido. */
   useEffect(() => {
@@ -868,6 +902,159 @@ export function KanbanQuickAddAppointment({
   const hasTitle = title.trim().length > 0
   const canSaveTitle = hasTitle || Boolean(selectedService?.name?.trim())
   const saveDisabled = formLocked || !canSaveTitle
+  const handleSaveRef = useRef(handleSave)
+  handleSaveRef.current = handleSave
+
+  useEffect(() => {
+    if (!onSaveActionsChange) return
+    if (hideTitleActions && !readOnly && isModalSurface) {
+      onSaveActionsChange({
+        save: () => {
+          void handleSaveRef.current()
+        },
+        disabled: saveDisabled,
+        saving,
+      })
+    } else {
+      onSaveActionsChange(null)
+    }
+    return () => onSaveActionsChange(null)
+  }, [
+    onSaveActionsChange,
+    hideTitleActions,
+    readOnly,
+    isModalSurface,
+    saveDisabled,
+    saving,
+  ])
+
+  const initialDraftDate = calcInitialDate()
+  const initialDraftTime = calcInitialTime()
+  const initialDraftEnd = calcInitialEnd(initialDraftDate, initialDraftTime)
+
+  const isDraftDirty = useMemo(() => {
+    if (isEditMode) return false
+    return (
+      title.trim().length > 0 ||
+      startDate !== initialDraftDate ||
+      startTime !== initialDraftTime ||
+      endLocal !== initialDraftEnd ||
+      priority !== 'none' ||
+      staffIds.length > 0 ||
+      selectedTeamIds.length > 0 ||
+      selectedService !== null ||
+      clientMode !== 'search' ||
+      newClientName.trim().length > 0 ||
+      newClientPhone.trim().length > 0 ||
+      newClientEmail.trim().length > 0 ||
+      clientQuery.trim().length > 0
+    )
+  }, [
+    isEditMode,
+    title,
+    startDate,
+    startTime,
+    endLocal,
+    initialDraftDate,
+    initialDraftTime,
+    initialDraftEnd,
+    priority,
+    staffIds,
+    selectedTeamIds,
+    selectedService,
+    clientMode,
+    newClientName,
+    newClientPhone,
+    newClientEmail,
+    clientQuery,
+  ])
+
+  const isEditDirty = useMemo(() => {
+    if (!isEditMode || !editItem || readOnly) return false
+    if (editDirtyBaselineReadyId !== editItem.id) return false
+
+    const initialTitle = editItem.title?.trim() || editItem.displayTitle?.trim() || ''
+    if (title.trim() !== initialTitle) return true
+
+    if (editItem.start_time) {
+      const start = parseISO(editItem.start_time)
+      if (!Number.isNaN(start.getTime())) {
+        if (startDate !== format(start, 'yyyy-MM-dd')) return true
+        if (startTime !== format(start, 'HH:mm')) return true
+      } else if (startDate || startTime) {
+        return true
+      }
+    } else if (startDate || startTime) {
+      return true
+    }
+
+    const initialEnd = editItem.end_time ?? null
+    if (endLocal !== initialEnd) return true
+
+    if (priority !== (editItem.kanban_priority ?? 'none')) return true
+    if (!stringArraysEqual(staffIds, staffIdsFromWorkItem(editItem))) return true
+    if (!stringArraysEqual(selectedTeamIds, teamIdsFromWorkItem(editItem))) return true
+
+    const initialStage = editItem.pipeline_stage_id ?? ''
+    if (editPipelineStageId !== initialStage) return true
+
+    const initialServiceId = editItem.service_id ?? null
+    const currentServiceId = selectedService?.id ?? null
+    if (initialServiceId !== currentServiceId) {
+      const orphanService =
+        Boolean(initialServiceId) &&
+        !currentServiceId &&
+        !services.some((service) => service.id === initialServiceId)
+      if (!orphanService) return true
+    }
+
+    if (editItem.client_id) {
+      if (clientMode !== 'existing' || selectedClient?.id !== editItem.client_id) return true
+      if (isEditingClient) {
+        const initialPhone = selectedClient?.phone ?? ''
+        const initialEmail = selectedClient?.email ?? ''
+        if ((editClientPhone || '') !== (initialPhone || '')) return true
+        if ((editClientEmail || '') !== (initialEmail || '')) return true
+      }
+    } else if (clientMode !== 'search' || selectedClient || newClientName.trim() || newClientPhone.trim() || newClientEmail.trim()) {
+      return true
+    }
+
+    return false
+  }, [
+    isEditMode,
+    editItem,
+    readOnly,
+    editDirtyBaselineReadyId,
+    title,
+    startDate,
+    startTime,
+    endLocal,
+    priority,
+    staffIds,
+    selectedTeamIds,
+    editPipelineStageId,
+    selectedService,
+    clientMode,
+    selectedClient,
+    isEditingClient,
+    editClientPhone,
+    editClientEmail,
+    newClientName,
+    newClientPhone,
+    newClientEmail,
+    services,
+  ])
+
+  const formDirty = isEditMode ? isEditDirty : isDraftDirty
+
+  useEffect(() => {
+    onDirtyChange?.(formDirty)
+  }, [formDirty, onDirtyChange])
+
+  useEffect(() => {
+    return () => onDirtyChange?.(false)
+  }, [onDirtyChange])
 
   const filteredStaff = useMemo(() => {
     const q = assignSearch.trim().toLowerCase()
@@ -920,7 +1107,8 @@ export function KanbanQuickAddAppointment({
       <div
         className={cn(
           'flex min-w-0 items-center gap-1 rounded-lg border border-zinc-600/80 bg-zinc-900/60 py-0.5 pl-2 pr-1',
-          isModalSurface && 'gap-2 py-1.5 pl-3 pr-2'
+          isFormSurface && 'gap-2 py-1.5 pl-3 pr-2',
+          isPageSurface && 'mt-1'
         )}
       >
         <Input
@@ -931,35 +1119,44 @@ export function KanbanQuickAddAppointment({
           disabled={formLocked}
           className={cn(
             'min-h-0 min-w-0 flex-1 border-0 bg-transparent px-0 shadow-none placeholder:text-zinc-500 focus-visible:ring-0 focus-visible:ring-offset-0',
-            isModalSurface ? 'h-11 text-base' : 'h-9',
+            isFormSurface ? 'h-11 text-base' : 'h-9',
             readOnly && 'cursor-default opacity-90'
           )}
+          onFocus={(e) => {
+            if (!isEditMode || !skipInitialTitleSelectRef.current) return
+            skipInitialTitleSelectRef.current = false
+            const el = e.currentTarget
+            requestAnimationFrame(() => {
+              const len = el.value.length
+              el.setSelectionRange(len, len)
+            })
+          }}
           onKeyDown={(e) => {
             if (readOnly) return
-            if (e.key === 'Enter' && !e.shiftKey) {
+            if (e.key === 'Enter' && !e.shiftKey && !isPageSurface) {
               e.preventDefault()
               if (canSaveTitle) void handleSave()
             }
           }}
         />
-        {!readOnly ? (
+        {!readOnly && !isPageSurface && !hideTitleActions ? (
         <Button
           type="button"
           variant="secondary"
           disabled={saveDisabled}
           className={cn(
             'min-h-0 shrink-0 gap-0.5 rounded-full font-semibold leading-none',
-            isModalSurface
+            isFormSurface
               ? 'h-9 px-4 text-xs'
               : 'h-7 px-2 py-0 text-[11px]'
           )}
           onClick={() => void handleSave()}
         >
           {saving ? '…' : 'Guardar'}
-          <CornerDownLeft className={cn('shrink-0 opacity-80', isModalSurface ? 'h-3.5 w-3.5' : 'h-3 w-3')} aria-hidden />
+          <CornerDownLeft className={cn('shrink-0 opacity-80', isFormSurface ? 'h-3.5 w-3.5' : 'h-3 w-3')} aria-hidden />
         </Button>
         ) : null}
-        {(isCalendarMode || isEditMode || (isModalSurface && onClose)) && (
+        {(isCalendarMode || isEditMode || (isFormSurface && onClose)) && !hideTitleActions ? (
           <button
             type="button"
             onClick={() => (isEditMode ? onEditClose?.() : onClose?.())}
@@ -968,10 +1165,10 @@ export function KanbanQuickAddAppointment({
           >
             <X className="h-4 w-4" />
           </button>
-        )}
+        ) : null}
       </div>
 
-          {!isModalSurface ? (
+          {!isFormSurface ? (
           <div className="mt-2 flex min-w-0 flex-col gap-1">
             {/* ── FECHA ─────────────────────────────────────────────────── */}
             <div className="min-w-0">
@@ -2288,6 +2485,34 @@ export function KanbanQuickAddAppointment({
           )}
     </>
   )
+
+  if (isPageSurface) {
+    return (
+      <div
+        ref={panelRef}
+        className={cn('flex w-full min-w-0 flex-col gap-4 font-sans', wrapperClassName)}
+        style={wrapperStyle}
+      >
+        <fieldset disabled={readOnly && isEditMode} className="min-w-0 border-0 p-0 m-0 disabled:opacity-95">
+          {cardBody}
+        </fieldset>
+        {!readOnly && !isEditMode ? (
+          <div className="sticky bottom-0 border-t border-zinc-800 bg-[#0d0d0d]/95 pt-3 backdrop-blur-sm">
+            <Button
+              type="button"
+              variant="default"
+              size="lg"
+              className="w-full rounded-xl"
+              disabled={saveDisabled}
+              onClick={() => void handleSave()}
+            >
+              {saving ? 'Creando…' : 'Crear tarea'}
+            </Button>
+          </div>
+        ) : null}
+      </div>
+    )
+  }
 
   if (isModalSurface) {
     return (
