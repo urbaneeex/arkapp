@@ -10,6 +10,7 @@ import {
   DASHBOARD_ACTIVITY_PREVIEW_COUNT,
 } from '@/components/dashboard/blocks/DashboardRecentActivityList'
 import { DashboardOwnerTasksTodayList } from '@/components/dashboard/blocks/DashboardOwnerTasksTodayList'
+import { DashboardTaskOpenBridge } from '@/components/dashboard/DashboardTaskOpenBridge'
 import { WeekAppointmentsBarChart } from '@/components/dashboard/blocks/WeekAppointmentsBarChart'
 import {
   DASHBOARD_BLOCK_MUTED_CLASS,
@@ -22,6 +23,7 @@ import type {
   OwnerTasksToday,
   OwnerTasksTodayList,
   OwnerWeekChartDay,
+  DashboardTaskBoardContext,
 } from '@/lib/dashboard/dashboardTypes'
 import { cn } from '@/lib/utils'
 
@@ -66,11 +68,17 @@ export function OwnerTasksTodayNumber({
 
 export function OwnerTasksTodayListColumn({
   tasksTodayList,
+  taskBoardContext,
 }: {
   tasksTodayList: OwnerTasksTodayList
+  taskBoardContext?: DashboardTaskBoardContext | null
 }) {
   return (
     <div className="min-w-0 flex-1 border-t border-zinc-800/80 pt-4 md:border-t-0 md:pl-4">
+      <DashboardTaskOpenBridge
+        tasksTodayList={tasksTodayList}
+        taskBoardContext={taskBoardContext}
+      />
       <DashboardOwnerTasksTodayList
         items={tasksTodayList.items}
         moreCount={tasksTodayList.moreCount}
@@ -152,7 +160,7 @@ export function OwnerSecondaryRow({
       <DashboardSurfaceCard
         title="Carga del equipo"
         titleIcon={Users}
-        className="flex h-full w-full flex-col"
+        className="flex w-full flex-col md:h-full"
         contentClassName="flex min-h-0 flex-1 flex-col"
         headerAside={
           section2.clockToday?.available
@@ -174,7 +182,7 @@ export function OwnerSecondaryRow({
       <DashboardSurfaceCard
         title="Actividad reciente"
         titleIcon={Activity}
-        className="flex h-full w-full flex-col"
+        className="flex w-full flex-col md:h-full"
         contentClassName="flex min-h-0 flex-1 flex-col"
         headerAside={
           section3.urgent.activity.length > DASHBOARD_ACTIVITY_PREVIEW_COUNT ? (
@@ -211,7 +219,7 @@ export function OwnerDashboardRowOneShell({
         title="Tareas hoy"
         titleIcon={Calendar}
         compact
-        className="flex h-full w-full flex-col"
+        className="flex w-full flex-col md:h-full"
         contentClassName="flex min-h-0 flex-1 flex-col"
       >
         <div className="flex min-h-0 flex-1 flex-col gap-4 md:flex-row md:items-stretch">
@@ -224,7 +232,7 @@ export function OwnerDashboardRowOneShell({
         title="Esta semana"
         titleIcon={BarChart2}
         compact
-        className="flex h-full w-full flex-col"
+        className="flex w-full flex-col md:h-full"
         contentClassName="flex min-h-0 flex-1 flex-col"
       >
         <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 md:grid-cols-2 md:items-start md:gap-x-6">
@@ -241,7 +249,12 @@ export function DashboardOwnerSections({ data }: { data: OwnerDashboardPayload }
     <div className="space-y-3 md:space-y-4">
       <OwnerDashboardRowOneShell
         tasksNumber={<OwnerTasksTodayNumber tasks={data.section1.tasksToday} />}
-        tasksList={<OwnerTasksTodayListColumn tasksTodayList={data.tasksTodayList} />}
+        tasksList={
+          <OwnerTasksTodayListColumn
+            tasksTodayList={data.tasksTodayList}
+            taskBoardContext={data.taskBoardContext}
+          />
+        }
         weekMetrics={
           <OwnerWeekMetricsGrid
             clientsWeek={data.section1.clientsWeek}

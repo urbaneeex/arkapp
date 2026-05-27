@@ -7,12 +7,14 @@ import { DashboardBlockGrid } from '@/components/dashboard/blocks/DashboardBlock
 import { DashboardSurfaceCard } from '@/components/dashboard/blocks/DashboardSurfaceCard'
 import { DashboardMiniMetric } from '@/components/dashboard/blocks/DashboardMiniMetric'
 import { DashboardOwnerTasksTodayList } from '@/components/dashboard/blocks/DashboardOwnerTasksTodayList'
+import { DashboardTaskOpenBridge } from '@/components/dashboard/DashboardTaskOpenBridge'
 import { DashboardHoursProgress } from '@/components/dashboard/blocks/DashboardHoursProgress'
 import type {
   OwnerTasksToday,
   OwnerTasksTodayList,
   StaffDashboardPayload,
   StaffHeavyPayload,
+  DashboardTaskBoardContext,
 } from '@/lib/dashboard/dashboardTypes'
 import {
   DASHBOARD_BLOCK_MUTED_CLASS,
@@ -62,11 +64,17 @@ export function StaffTasksTodayNumber({
 
 export function StaffTasksTodayListColumn({
   tasksTodayList,
+  taskBoardContext,
 }: {
   tasksTodayList: OwnerTasksTodayList
+  taskBoardContext?: DashboardTaskBoardContext | null
 }) {
   return (
     <div className="min-w-0 flex-1 border-t border-zinc-800/80 pt-4 md:border-t-0 md:pl-4">
+      <DashboardTaskOpenBridge
+        tasksTodayList={tasksTodayList}
+        taskBoardContext={taskBoardContext}
+      />
       <DashboardOwnerTasksTodayList
         items={tasksTodayList.items}
         moreCount={tasksTodayList.moreCount}
@@ -126,7 +134,7 @@ export function StaffDashboardRowOneShell({
         title="Tareas hoy"
         titleIcon={Calendar}
         compact
-        className="flex h-full w-full flex-col"
+        className="flex w-full flex-col md:h-full"
         contentClassName="flex min-h-0 flex-1 flex-col"
       >
         <div className="flex min-h-0 flex-1 flex-col gap-4 md:flex-row md:items-stretch">
@@ -139,7 +147,7 @@ export function StaffDashboardRowOneShell({
         title="Esta semana"
         titleIcon={BarChart2}
         compact
-        className="flex h-full w-full flex-col"
+        className="flex w-full flex-col md:h-full"
         contentClassName="flex min-h-0 flex-1 flex-col"
       >
         {weekMetrics}
@@ -242,7 +250,12 @@ export function DashboardStaffSections({ data }: { data: StaffDashboardPayload }
     <div className="space-y-3 md:space-y-4">
       <StaffDashboardRowOneShell
         tasksNumber={<StaffTasksTodayNumber tasksToday={data.section1.tasksToday} />}
-        tasksList={<StaffTasksTodayListColumn tasksTodayList={data.tasksTodayList} />}
+        tasksList={
+          <StaffTasksTodayListColumn
+            tasksTodayList={data.tasksTodayList}
+            taskBoardContext={data.taskBoardContext}
+          />
+        }
         weekMetrics={
           <StaffWeekMetricsGrid
             section1={{

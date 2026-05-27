@@ -42,7 +42,12 @@ async function StaffTasksListSection({
   if (heavy.kind !== 'ok' || !heavy.staffHeavy) {
     return <StaffTasksTodayListColumn tasksTodayList={{ items: [], moreCount: 0 }} />
   }
-  return <StaffTasksTodayListColumn tasksTodayList={heavy.staffHeavy.tasksTodayList} />
+  return (
+    <StaffTasksTodayListColumn
+      tasksTodayList={heavy.staffHeavy.tasksTodayList}
+      taskBoardContext={heavy.staffHeavy.taskBoardContext}
+    />
+  )
 }
 
 async function StaffPendingMetricHero({ userId, userEmail }: { userId: string; userEmail: string }) {

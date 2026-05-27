@@ -18,7 +18,13 @@ export function AppTabShell({ homeSlot }: { homeSlot?: React.ReactNode }) {
   const { activeTab, mountedTabs, accountUser } = useAppTabShell()
 
   return (
-    <div className="min-h-0 flex-1">
+    <div
+      className={cn(
+        activeTab === 'workBoard' || activeTab === 'fichar'
+          ? 'flex h-full min-h-0 flex-col'
+          : undefined
+      )}
+    >
       <div
         className={cn(activeTab === 'home' ? 'block' : 'hidden')}
         aria-hidden={activeTab !== 'home'}

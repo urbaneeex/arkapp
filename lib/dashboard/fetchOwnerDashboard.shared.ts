@@ -4,7 +4,7 @@ import type { OwnerWeekChartDay } from '@/lib/dashboard/dashboardTypes'
 
 const WEEK_DAY_LABELS = ['L', 'M', 'X', 'J', 'V', 'S', 'D']
 
-export const APPOINTMENT_METRICS_SELECT = `id, title, staff_id, team_id, start_time, end_time, completed_at, archived_at, metadata, visibility, pipeline_stage_id, created_at, created_by, status, price_total,
+export const APPOINTMENT_METRICS_SELECT = `id, title, staff_id, team_id, client_id, service_id, pipeline_stage_id, start_time, end_time, completed_at, archived_at, metadata, visibility, created_at, created_by, status, price_total,
   pipeline_stages(slug, stage_category, label, color),
   clients(name), services(name)`
 

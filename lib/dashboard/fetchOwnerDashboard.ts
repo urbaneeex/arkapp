@@ -26,5 +26,6 @@ export async function fetchOwnerDashboard(
     section3: heavy.section3,
     appointmentsWeekChart: heavy.appointmentsWeekChart,
     tasksTodayList: heavy.tasksTodayList,
+    taskBoardContext: heavy.taskBoardContext,
   }
 }

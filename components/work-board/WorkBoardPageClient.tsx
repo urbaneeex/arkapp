@@ -4,6 +4,7 @@ import type { ReactNode } from 'react'
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { useQueryClient } from '@tanstack/react-query'
 import { usePermissions } from '@/hooks/usePermissions'
 import type { WorkItemCard, WorkBoardStaffOption, PipelineStageRow } from '@/lib/work-items/types'
 import { normalizeStageCategoryRow } from '@/lib/work-items/seedPipelineStages'
@@ -219,6 +220,8 @@ export function WorkBoardPageClient({
   myTeamIds = [],
   onInvalidateBoard,
   initialOpenTaskId,
+  taskOverlayOnly = false,
+  onTaskOverlayClose,
 }: {
   businessId: string
   currentUserId: string
@@ -244,27 +247,40 @@ export function WorkBoardPageClient({
   onInvalidateBoard?: () => void
   /** `?task=<id>` — abre el modal de edición al cargar (p. ej. desde Inicio). */
   initialOpenTaskId?: string | null
+  /** Solo modal de tarea (overlay shell); sin tablero detrás. */
+  taskOverlayOnly?: boolean
+  onTaskOverlayClose?: () => void
 }) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const shell = useAppTabShellOptional()
   const compactAppNav = useCompactAppNav()
+  const queryClient = useQueryClient()
   const quickAddOnly = initialNewPanel
   const [catalogClients, setCatalogClients] = useState(initialCatalogClients)
   const [catalogServices, setCatalogServices] = useState(initialCatalogServices)
 
   useEffect(() => {
+    type CatalogPayload = {
+      clients?: typeof initialCatalogClients
+      services?: typeof initialCatalogServices
+    }
+    const cached = queryClient.getQueryData<CatalogPayload>(['work-board', 'catalog'])
+    if (cached) {
+      setCatalogClients(cached.clients ?? [])
+      setCatalogServices(cached.services ?? [])
+      return
+    }
+
     let cancelled = false
     fetch('/api/work-board/catalog')
       .then((r) => {
         if (!r.ok) throw new Error('catalog')
-        return r.json() as Promise<{
-          clients?: typeof initialCatalogClients
-          services?: typeof initialCatalogServices
-        }>
+        return r.json() as Promise<CatalogPayload>
       })
       .then((d) => {
         if (!cancelled) {
+          queryClient.setQueryData(['work-board', 'catalog'], d)
           setCatalogClients(d.clients ?? [])
           setCatalogServices(d.services ?? [])
         }
@@ -273,7 +289,7 @@ export function WorkBoardPageClient({
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [queryClient])
 
   const { hasPermission, loading } = usePermissions()
   const canView = hasPermission('work_board_view')
@@ -311,8 +327,13 @@ export function WorkBoardPageClient({
   const [archivedKanbanItems, setArchivedKanbanItems] = useState<WorkItemCard[]>([])
   const [addTaskDialogOpen, setAddTaskDialogOpen] = useState(initialNewPanel)
   const [addTaskFormKey, setAddTaskFormKey] = useState(0)
-  const [editTaskDialogOpen, setEditTaskDialogOpen] = useState(false)
-  const [editTaskItem, setEditTaskItem] = useState<WorkItemCard | null>(null)
+  const [editTaskDialogOpen, setEditTaskDialogOpen] = useState(
+    () => taskOverlayOnly && Boolean(initialOpenTaskId)
+  )
+  const [editTaskItem, setEditTaskItem] = useState<WorkItemCard | null>(() => {
+    if (!taskOverlayOnly || !initialOpenTaskId) return null
+    return initialItems.find((i) => i.id === initialOpenTaskId) ?? null
+  })
   const [editTaskFormKey, setEditTaskFormKey] = useState(0)
   const [editTaskPanel, setEditTaskPanel] = useState<TaskEditDialogPanel>('task')
   const [editTaskDirty, setEditTaskDirty] = useState(false)
@@ -407,6 +428,10 @@ export function WorkBoardPageClient({
     setEditTaskItem(null)
     setEditTaskPanel('task')
     setModalFormSave(null)
+    if (taskOverlayOnly) {
+      onTaskOverlayClose?.()
+      return
+    }
     const taskParam = searchParams.get('task') ?? shell?.workBoardParams.task
     if (!taskParam) return
     if (shell?.shellVisible && shell.activeTab === 'workBoard') {
@@ -420,7 +445,7 @@ export function WorkBoardPageClient({
       const q = next.toString()
       router.replace(q ? `/dashboard/work-board?${q}` : '/dashboard/work-board', { scroll: false })
     }
-  }, [router, searchParams, shell])
+  }, [router, searchParams, shell, taskOverlayOnly, onTaskOverlayClose])
 
   const attemptCloseEditTaskDialog = useCallback(() => {
     if (editTaskDirty && editTaskItem && canEditAppointmentCard(editTaskItem)) {
@@ -492,7 +517,7 @@ export function WorkBoardPageClient({
     />
   )
 
-  if (loading && !quickAddOnly) {
+  if (loading && !quickAddOnly && !taskOverlayOnly) {
     return (
       <div className="flex min-h-[320px] flex-1 items-center justify-center text-sm text-zinc-400">
         Cargando permisos…
@@ -500,7 +525,7 @@ export function WorkBoardPageClient({
     )
   }
 
-  if (!canView && !quickAddOnly) {
+  if (!canView && !quickAddOnly && !taskOverlayOnly) {
     return (
       <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-6 text-center text-sm text-zinc-400">
         No tienes permiso para ver el tablero.
@@ -602,6 +627,120 @@ export function WorkBoardPageClient({
     </Dialog>
   )
 
+  const editTaskDiscardDialog = (
+    <AppNewTaskDiscardDialog
+      open={editDiscardOpen}
+      onCancel={() => setEditDiscardOpen(false)}
+      onDiscard={performCloseEditTaskDialog}
+      title="¿Salir sin guardar?"
+      description="Has modificado la tarea. Si cierras ahora, los cambios no guardados se perderán."
+      discardLabel="Salir sin guardar"
+    />
+  )
+
+  const editTaskDialog = (
+    <Dialog
+      open={editTaskDialogOpen}
+      onOpenChange={(open) => {
+        if (!open) attemptCloseEditTaskDialog()
+      }}
+    >
+      <DialogContent
+        showClose={!compactAppNav}
+        onOpenAutoFocus={(e) => e.preventDefault()}
+        aria-describedby={undefined}
+        className="flex h-[min(92vh,880px)] max-h-[min(92vh,880px)] w-[min(100vw-1.5rem,760px)] max-w-[760px] flex-col gap-0 overflow-hidden border-zinc-700 bg-zinc-900 p-0 text-zinc-100 shadow-2xl md:w-[min(100vw-1.5rem,1100px)] md:max-w-[1100px]"
+      >
+        <DialogHeader
+          className={cn(
+            'relative shrink-0 border-b border-zinc-800 px-4 py-4 text-left md:px-6',
+            compactAppNav ? 'pr-4' : 'pr-14'
+          )}
+        >
+          <DialogTitle
+            className={cn(
+              'font-display truncate text-lg font-semibold text-zinc-100 md:text-xl',
+              showEditHeaderSave && 'pr-24'
+            )}
+          >
+            {editTaskItem?.displayTitle?.trim()
+              ? `Tarea: ${editTaskItem.displayTitle.trim()}`
+              : 'Tarea'}
+          </DialogTitle>
+          {showEditHeaderSave ? <TaskDialogHeaderSave actions={modalFormSave} /> : null}
+        </DialogHeader>
+
+        <TaskEditDialogTabs
+          value={editTaskPanel}
+          onChange={(panel) => {
+            setEditTaskPanel(panel)
+            if (panel !== 'task') setModalFormSave(null)
+          }}
+        />
+
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          {editTaskPanel === 'task' ? (
+            <div
+              role="tabpanel"
+              aria-label="Información"
+              className="h-full min-h-0 overflow-y-auto px-4 py-4 md:px-6 md:py-5"
+            >
+              {editTaskItem ? (
+                <KanbanQuickAddAppointment
+                  key={`${editTaskItem.id}-${editTaskFormKey}`}
+                  variant="modal"
+                  editItem={editTaskItem}
+                  readOnly={!canEditAppointmentCard(editTaskItem)}
+                  businessId={businessId}
+                  currentUserId={currentUserId}
+                  staffOptions={initialStaffOptions}
+                  services={catalogServices}
+                  teams={teamsForKanban}
+                  pipelineStages={stages}
+                  hideTitleActions={compactAppNav}
+                  onSaveActionsChange={compactAppNav ? setModalFormSave : undefined}
+                  onDirtyChange={setEditTaskDirty}
+                  onEditClose={attemptCloseEditTaskDialog}
+                  onSaved={() => {
+                    performCloseEditTaskDialog()
+                    onInvalidateBoard?.()
+                  }}
+                  onCreated={() => {
+                    performCloseEditTaskDialog()
+                    onInvalidateBoard?.()
+                  }}
+                />
+              ) : (
+                <p className="text-sm text-zinc-500">Tarea no encontrada.</p>
+              )}
+            </div>
+          ) : editTaskItem ? (
+            <div
+              role="tabpanel"
+              aria-label="Actividad"
+              className="flex h-full min-h-0 flex-col overflow-hidden"
+            >
+              <TaskActivityPanel
+                appointmentId={editTaskItem.id}
+                enabled={editTaskDialogOpen}
+                showHeader={false}
+              />
+            </div>
+          ) : null}
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+
+  if (taskOverlayOnly) {
+    return (
+      <>
+        {editTaskDialog}
+        {editTaskDiscardDialog}
+      </>
+    )
+  }
+
   if (quickAddOnly) {
     return (
       <div className="flex min-h-0 flex-1 flex-col">
@@ -632,106 +771,9 @@ export function WorkBoardPageClient({
 
       {addTaskDialog}
 
-      <Dialog
-        open={editTaskDialogOpen}
-        onOpenChange={(open) => {
-          if (!open) attemptCloseEditTaskDialog()
-        }}
-      >
-        <DialogContent
-          showClose={!compactAppNav}
-          onOpenAutoFocus={(e) => e.preventDefault()}
-          aria-describedby={undefined}
-          className="flex h-[min(92vh,880px)] max-h-[min(92vh,880px)] w-[min(100vw-1.5rem,760px)] max-w-[760px] flex-col gap-0 overflow-hidden border-zinc-700 bg-zinc-900 p-0 text-zinc-100 shadow-2xl md:w-[min(100vw-1.5rem,1100px)] md:max-w-[1100px]"
-        >
-          <DialogHeader
-            className={cn(
-              'relative shrink-0 border-b border-zinc-800 px-4 py-4 text-left md:px-6',
-              compactAppNav ? 'pr-4' : 'pr-14'
-            )}
-          >
-            <DialogTitle
-              className={cn(
-                'font-display truncate text-lg font-semibold text-zinc-100 md:text-xl',
-                showEditHeaderSave && 'pr-24'
-              )}
-            >
-              {editTaskItem?.displayTitle?.trim()
-                ? `Tarea: ${editTaskItem.displayTitle.trim()}`
-                : 'Tarea'}
-            </DialogTitle>
-            {showEditHeaderSave ? <TaskDialogHeaderSave actions={modalFormSave} /> : null}
-          </DialogHeader>
+      {editTaskDialog}
 
-          <TaskEditDialogTabs
-            value={editTaskPanel}
-            onChange={(panel) => {
-              setEditTaskPanel(panel)
-              if (panel !== 'task') setModalFormSave(null)
-            }}
-          />
-
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            {editTaskPanel === 'task' ? (
-              <div
-                role="tabpanel"
-                aria-label="Información"
-                className="h-full min-h-0 overflow-y-auto px-4 py-4 md:px-6 md:py-5"
-              >
-                {editTaskItem ? (
-                  <KanbanQuickAddAppointment
-                    key={`${editTaskItem.id}-${editTaskFormKey}`}
-                    variant="modal"
-                    editItem={editTaskItem}
-                    readOnly={!canEditAppointmentCard(editTaskItem)}
-                    businessId={businessId}
-                    currentUserId={currentUserId}
-                    staffOptions={initialStaffOptions}
-                    services={catalogServices}
-                    teams={teamsForKanban}
-                    pipelineStages={stages}
-                    hideTitleActions={compactAppNav}
-                    onSaveActionsChange={compactAppNav ? setModalFormSave : undefined}
-                    onDirtyChange={setEditTaskDirty}
-                    onEditClose={attemptCloseEditTaskDialog}
-                    onSaved={() => {
-                      performCloseEditTaskDialog()
-                      onInvalidateBoard?.()
-                    }}
-                    onCreated={() => {
-                      performCloseEditTaskDialog()
-                      onInvalidateBoard?.()
-                    }}
-                  />
-                ) : (
-                  <p className="text-sm text-zinc-500">Tarea no encontrada.</p>
-                )}
-              </div>
-            ) : editTaskItem ? (
-              <div
-                role="tabpanel"
-                aria-label="Actividad"
-                className="flex h-full min-h-0 flex-col overflow-hidden"
-              >
-                <TaskActivityPanel
-                  appointmentId={editTaskItem.id}
-                  enabled={editTaskDialogOpen}
-                  showHeader={false}
-                />
-              </div>
-            ) : null}
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <AppNewTaskDiscardDialog
-        open={editDiscardOpen}
-        onCancel={() => setEditDiscardOpen(false)}
-        onDiscard={performCloseEditTaskDialog}
-        title="¿Salir sin guardar?"
-        description="Has modificado la tarea. Si cierras ahora, los cambios no guardados se perderán."
-        discardLabel="Salir sin guardar"
-      />
+      {editTaskDiscardDialog}
 
       {showBoardChrome && viewMode === 'kanban' && (
         <>
@@ -780,7 +822,7 @@ export function WorkBoardPageClient({
           shiftsByDay={shiftsByDay}
           businessCountry={businessCountry}
           headerSlot={
-            <div className={cn(workBoardHeaderStackClass, 'mb-0')}>
+            <div className={cn(workBoardHeaderStackClass, 'mb-0 shrink-0')}>
               <PageHeader title="Tablero" className={workBoardPageHeaderClass} />
               {kanbanFilters.showArchivedOnly ? (
                 <ArchivedKanbanBanner

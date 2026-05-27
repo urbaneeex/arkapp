@@ -17,6 +17,14 @@ import {
   BarChart2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import {
+  DASHBOARD_BLOCK_BODY_CLASS,
+  DASHBOARD_BLOCK_MUTED_CLASS,
+} from '@/components/dashboard/blocks/dashboardBlockTypography'
+import {
+  DASHBOARD_CARD_BODY_PAD,
+  DASHBOARD_CARD_HEADER_PAD,
+} from '@/components/dashboard/blocks/DashboardSurfaceCard'
 
 type Variant = 'default' | 'warning' | 'success'
 
@@ -125,9 +133,9 @@ export function PendingActionsCard({ actions: initialActions, hasClock }: Props)
 
   return (
     <Card className="flex flex-col">
-      <CardHeader className="pb-3">
+      <CardHeader className={DASHBOARD_CARD_HEADER_PAD}>
         <div className="flex items-center justify-between">
-          <CardTitle className="text-lg flex items-center gap-2">
+          <CardTitle className="flex items-center gap-2 text-lg">
             <Zap className="h-4 w-4 text-brand" />
             Acciones pendientes
           </CardTitle>
@@ -138,15 +146,17 @@ export function PendingActionsCard({ actions: initialActions, hasClock }: Props)
           )}
         </div>
       </CardHeader>
-      <CardContent className="flex-1">
+      <CardContent className={cn('pt-0', DASHBOARD_CARD_BODY_PAD)}>
         {allDone ? (
-          <div className="flex flex-col items-center justify-center py-8 text-center gap-3">
-            <div className="rounded-full bg-green-950/30 p-3">
-              <CheckCircle2 className="h-7 w-7 text-green-400" />
+          <div className="flex flex-col items-center justify-center pb-1 text-center gap-2">
+            <div className="rounded-full bg-green-950/30 p-2">
+              <CheckCircle2 className="h-5 w-5 text-green-400" />
             </div>
             <div>
-              <p className="text-sm font-medium text-zinc-200">Todo al día</p>
-              <p className="text-xs text-zinc-500 mt-0.5">No tienes acciones pendientes</p>
+              <p className={DASHBOARD_BLOCK_BODY_CLASS}>Todo al día</p>
+              <p className={cn('mt-0.5', DASHBOARD_BLOCK_MUTED_CLASS)}>
+                No tienes acciones pendientes
+              </p>
             </div>
           </div>
         ) : (

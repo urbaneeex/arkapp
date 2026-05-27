@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react'
@@ -21,9 +22,11 @@ import {
 } from '@/lib/app-shell/appTabRoutes'
 import type { WorkBoardSearchParams } from '@/lib/work-board/loadWorkBoardBootstrap'
 import type { WorkBoardBootstrapPayload } from '@/lib/work-board/loadWorkBoardBootstrap'
+import type { DashboardTaskOpenCache } from '@/lib/dashboard/dashboardTypes'
 import { workBoardKeys } from '@/lib/work-board/workBoardQueryKeys'
 import { prefetchAppTabQueries } from '@/lib/app-shell/prefetchAppTabQueries'
 import { AppNewTaskDiscardDialog } from '@/components/app-shell/AppNewTaskDiscardDialog'
+import { AppTaskEditOverlay } from '@/components/app-shell/AppTaskEditOverlay'
 import { useCompactAppNav } from '@/hooks/useCompactAppNav'
 import type { AccountMenuUser } from '@/components/layout/AccountMenuActions'
 
@@ -56,6 +59,11 @@ type AppTabShellContextValue = {
   requestLeaveNewTask: (action: PendingLeaveAction) => void
   setFicharTab: (tab: string | null) => void
   setWorkBoardParams: (params: WorkBoardSearchParams) => void
+  shellTaskId: string | null
+  openShellTask: (taskId: string) => void
+  closeShellTask: () => void
+  registerTaskOpenCache: (cache: DashboardTaskOpenCache | null) => void
+  getTaskOpenCache: () => DashboardTaskOpenCache | null
   isAppTabActive: (tab: AppTabId) => boolean
   accountUser: AccountMenuUser | null
   businessName: string
@@ -97,6 +105,8 @@ export function AppTabShellProvider({
   const [newTaskDraftDirty, setNewTaskDraftDirty] = useState(false)
   const [discardOpen, setDiscardOpen] = useState(false)
   const [pendingLeave, setPendingLeave] = useState<PendingLeaveAction | null>(null)
+  const [shellTaskId, setShellTaskId] = useState<string | null>(null)
+  const taskOpenCacheRef = useRef<DashboardTaskOpenCache | null>(null)
 
   const shellVisible = isAppShellRoute(pathname)
 
@@ -260,6 +270,36 @@ export function AppTabShellProvider({
     [activeTab, shellVisible]
   )
 
+  const openShellTask = useCallback(
+    (taskId: string) => {
+      const id = taskId.trim()
+      if (!id) return
+      if (!taskOpenCacheRef.current?.itemsById[id]) {
+        void queryClient.prefetchQuery({
+          queryKey: ['work-board', 'task', id],
+          queryFn: async () => {
+            const res = await fetch(`/api/work-board/task/${encodeURIComponent(id)}`)
+            if (!res.ok) throw new Error('task')
+            return res.json()
+          },
+          staleTime: 30_000,
+        })
+      }
+      setShellTaskId(id)
+    },
+    [queryClient]
+  )
+
+  const closeShellTask = useCallback(() => {
+    setShellTaskId(null)
+  }, [])
+
+  const registerTaskOpenCache = useCallback((cache: DashboardTaskOpenCache | null) => {
+    taskOpenCacheRef.current = cache
+  }, [])
+
+  const getTaskOpenCache = useCallback(() => taskOpenCacheRef.current, [])
+
   const value = useMemo(
     () => ({
       displayName,
@@ -275,6 +315,11 @@ export function AppTabShellProvider({
       requestLeaveNewTask,
       setFicharTab,
       setWorkBoardParams,
+      shellTaskId,
+      openShellTask,
+      closeShellTask,
+      registerTaskOpenCache,
+      getTaskOpenCache,
       isAppTabActive,
       accountUser,
       businessName,
@@ -292,6 +337,11 @@ export function AppTabShellProvider({
       requestLeaveNewTask,
       setFicharTab,
       setWorkBoardParams,
+      shellTaskId,
+      openShellTask,
+      closeShellTask,
+      registerTaskOpenCache,
+      getTaskOpenCache,
       isAppTabActive,
       accountUser,
       businessName,
@@ -309,6 +359,7 @@ export function AppTabShellProvider({
         }}
         onDiscard={commitPendingLeave}
       />
+      {shellTaskId ? <AppTaskEditOverlay /> : null}
     </AppTabShellContext.Provider>
   )
 }

@@ -30,6 +30,7 @@ import type {
   OwnerWeekChartDay,
 } from '@/lib/dashboard/dashboardTypes'
 import { buildWeekChart, APPOINTMENT_METRICS_SELECT } from '@/lib/dashboard/fetchOwnerDashboard.shared'
+import { fetchDashboardTaskBoardContext } from '@/lib/dashboard/fetchDashboardTaskBoardContext'
 
 type MetricsRowWithCreated = AppointmentMetricsRow & {
   created_at?: string | null
@@ -88,7 +89,8 @@ export async function fetchOwnerHeroMetrics(
       tasksTodayRowsRes.data as unknown as OwnerTasksTodayRow[] | null,
       viewerUserId,
       viewerStaffId,
-      now
+      now,
+      businessId
     ).tasksToday
   }
 
@@ -326,9 +328,12 @@ export async function fetchOwnerHeavyMetrics(
         tasksTodayRowsRes.data as unknown as OwnerTasksTodayRow[] | null,
         viewerUserId,
         viewerStaffId,
-        now
+        now,
+        businessId
       ).tasksTodayList
     : { items: [], moreCount: 0 }
+
+  const taskBoardContext = await fetchDashboardTaskBoardContext(admin, businessId, viewerUserId)
 
   return {
     section1: { clientsWeek, overdueTasks },
@@ -350,5 +355,6 @@ export async function fetchOwnerHeavyMetrics(
     },
     appointmentsWeekChart,
     tasksTodayList,
+    taskBoardContext,
   }
 }

@@ -121,9 +121,7 @@ function TaskRow({ item, workBoardHref }: { item: OwnerTodayTaskItem; workBoardH
           type="button"
           className={cn(rowClassName, 'w-full text-left', !accent && slugClass)}
           style={rowStyle}
-          onClick={() =>
-            shell.navigateAppTab('workBoard', { workBoardParams: { task: item.id } })
-          }
+          onClick={() => shell.openShellTask(item.id)}
         >
           {content}
         </button>

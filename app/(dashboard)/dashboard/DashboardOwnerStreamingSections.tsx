@@ -48,7 +48,7 @@ async function OwnerTasksListSection({
   if (heavy.kind !== 'ok' || !heavy.ownerHeavy) {
     return <OwnerTasksTodayListColumn tasksTodayList={{ items: [], moreCount: 0 }} />
   }
-  return <OwnerTasksTodayListColumn tasksTodayList={heavy.ownerHeavy.tasksTodayList} />
+  return <OwnerTasksTodayListColumn tasksTodayList={heavy.ownerHeavy.tasksTodayList} taskBoardContext={heavy.ownerHeavy.taskBoardContext} />
 }
 
 async function OwnerClientsMetric({ userId, userEmail }: { userId: string; userEmail: string }) {

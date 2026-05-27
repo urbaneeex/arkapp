@@ -1,6 +1,21 @@
 import type { PendingAction } from '@/components/dashboard/PendingActionsCard'
+import type { PipelineStageRow, WorkBoardStaffOption, WorkItemCard } from '@/lib/work-items/types'
 
 export type DashboardRole = 'owner' | 'staff'
+
+export type DashboardTaskBoardContext = {
+  businessId: string
+  currentUserId: string
+  initialStages: PipelineStageRow[]
+  initialStaffOptions: WorkBoardStaffOption[]
+  teamsForKanban: { id: string; name: string; color: string }[]
+  myTeamIds: string[]
+}
+
+export type DashboardTaskOpenCache = {
+  context: DashboardTaskBoardContext
+  itemsById: Record<string, WorkItemCard>
+}
 
 export type OwnerTasksToday = {
   total: number
@@ -80,6 +95,8 @@ export type OwnerTodayTaskItem = {
   stateLabel: string
   stageSlug: string
   stageColor: string | null
+  /** Tarjeta tablero para abrir modal sin bootstrap. */
+  workItem?: WorkItemCard
 }
 
 export type OwnerTasksTodayList = {
@@ -116,6 +133,7 @@ export type OwnerDashboardPayload = {
   }
   appointmentsWeekChart: OwnerWeekChartDay[] | null
   tasksTodayList: OwnerTasksTodayList
+  taskBoardContext?: DashboardTaskBoardContext | null
 }
 
 export type StaffMyDay = {
@@ -166,6 +184,7 @@ export type StaffDashboardPayload = {
   }
   tasksTodayList: OwnerTasksTodayList
   teamAbsencesWeek: StaffTeamAbsence[]
+  taskBoardContext?: DashboardTaskBoardContext | null
 }
 
 export type DashboardMetricsPayload = {
@@ -184,6 +203,7 @@ export type OwnerHeavyPayload = {
   section3: OwnerDashboardPayload['section3']
   appointmentsWeekChart: OwnerWeekChartDay[] | null
   tasksTodayList: OwnerTasksTodayList
+  taskBoardContext?: DashboardTaskBoardContext | null
 }
 
 export type StaffHeroPayload = {
@@ -197,6 +217,7 @@ export type StaffHeavyPayload = {
   section4: StaffDashboardPayload['section4']
   tasksTodayList: OwnerTasksTodayList
   teamAbsencesWeek: StaffTeamAbsence[]
+  taskBoardContext?: DashboardTaskBoardContext | null
 }
 
 export type DashboardHeroPayload =

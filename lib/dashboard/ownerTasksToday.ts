@@ -2,6 +2,7 @@ import { endOfDay, startOfDay } from 'date-fns'
 import type { PipelineStageCategory } from '@/lib/work-items/pipelineStageDefinitions'
 import { isTerminalStage } from '@/lib/work-board/ownerMetricsCompute'
 import { formatWorkItemScheduleChip } from '@/lib/work-items/formatRelativeTaskRange'
+import { mapAppointmentRowToWorkItem, type AppointmentRowInput } from '@/lib/work-items/mapAppointmentRow'
 import { normalizeStageCategoryRow } from '@/lib/work-items/seedPipelineStages'
 import type {
   OwnerTasksToday,
@@ -21,6 +22,11 @@ export type OwnerTasksTodayRow = {
   status?: string | null
   created_by?: string | null
   staff_id?: string | null
+  client_id?: string | null
+  service_id?: string | null
+  pipeline_stage_id?: string | null
+  team_id?: string | null
+  visibility?: 'personal' | 'team' | 'business' | null
   price_total?: number | null
   metadata?: unknown | null
   pipeline_stages?:
@@ -163,7 +169,8 @@ function pickStageMeta(row: OwnerTasksTodayRow): {
 function rowToTaskItem(
   row: OwnerTasksTodayRow,
   now: Date,
-  bucket: 'in_progress' | 'pending'
+  bucket: 'in_progress' | 'pending',
+  businessId: string
 ): OwnerTodayTaskItem {
   const stage = pickStageMeta(row)
   const { label, hasSchedule } = formatWorkItemScheduleChip(
@@ -192,6 +199,11 @@ function rowToTaskItem(
     stateLabel,
     stageSlug: stage.slug,
     stageColor: stage.color,
+    workItem: mapAppointmentRowToWorkItem({
+      ...row,
+      business_id: businessId,
+      pipeline_stage_id: row.pipeline_stage_id ?? '',
+    } as AppointmentRowInput),
   }
 }
 
@@ -199,7 +211,8 @@ export function computeOwnerTasksToday(
   rows: OwnerTasksTodayRow[] | null | undefined,
   viewerUserId: string,
   viewerStaffId: string,
-  now: Date
+  now: Date,
+  businessId: string
 ): {
   tasksToday: OwnerTasksToday | null
   tasksTodayList: OwnerTasksTodayList
@@ -235,8 +248,8 @@ export function computeOwnerTasksToday(
   pendingRows.sort(sortRows)
 
   const merged = [
-    ...inProgressRows.map((r) => rowToTaskItem(r, now, 'in_progress')),
-    ...pendingRows.map((r) => rowToTaskItem(r, now, 'pending')),
+    ...inProgressRows.map((r) => rowToTaskItem(r, now, 'in_progress', businessId)),
+    ...pendingRows.map((r) => rowToTaskItem(r, now, 'pending', businessId)),
   ]
 
   const tasksTodayList: OwnerTasksTodayList = {

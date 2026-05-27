@@ -6,6 +6,7 @@ import { isTerminalStage, type AppointmentMetricsRow } from '@/lib/work-board/ow
 import { computeOwnerTasksToday, type OwnerTasksTodayRow } from '@/lib/dashboard/ownerTasksToday'
 import type { StaffHeavyPayload, StaffHeroPayload, StaffTeamAbsence } from '@/lib/dashboard/dashboardTypes'
 import { APPOINTMENT_METRICS_SELECT } from '@/lib/dashboard/fetchOwnerDashboard.shared'
+import { fetchDashboardTaskBoardContext } from '@/lib/dashboard/fetchDashboardTaskBoardContext'
 
 function pickStage(row: AppointmentMetricsRow) {
   const ps = row.pipeline_stages
@@ -81,7 +82,8 @@ export async function fetchStaffHeroMetrics(
       tasksTodayRowsRes.data as unknown as OwnerTasksTodayRow[] | null,
       viewerUserId,
       staffId,
-      now
+      now,
+      businessId
     ).tasksToday
 
     const mine = (tasksTodayRowsRes.data as unknown as AppointmentMetricsRow[]).filter(
@@ -175,7 +177,8 @@ export async function fetchStaffHeavyMetrics(
         tasksTodayRowsRes.data as unknown as OwnerTasksTodayRow[] | null,
         viewerUserId,
         staffId,
-        now
+        now,
+        businessId
       ).tasksTodayList
     : { items: [], moreCount: 0 }
 
@@ -293,11 +296,14 @@ export async function fetchStaffHeavyMetrics(
     }
   }
 
+  const taskBoardContext = await fetchDashboardTaskBoardContext(supabase, businessId, viewerUserId)
+
   return {
     section1: { pendingTasks, clockToday, completedThisWeek, motivationalNote },
     section3: { urgent },
     section4: { hoursWeek, vacation },
     tasksTodayList,
     teamAbsencesWeek,
+    taskBoardContext,
   }
 }

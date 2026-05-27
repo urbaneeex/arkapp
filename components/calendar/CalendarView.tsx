@@ -52,6 +52,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
+import { workBoardCalendarNavRowClass } from '@/lib/work-board/workBoardHeaderClasses'
 import { ClientOnlyDnd } from '@/components/calendar/ClientOnlyDnd'
 import { AppointmentPopover, type AppointmentForPopover } from '@/components/calendar/AppointmentPopover'
 import { AppointmentEditModal } from '@/components/calendar/AppointmentEditModal'
@@ -1021,11 +1022,16 @@ export function CalendarView({
   return (
     <div className="flex flex-col flex-1 min-h-0">
       <div
-        className="sticky top-0 shrink-0 space-y-4 border-b border-zinc-200 bg-zinc-100 px-4 pb-4 pt-4 dark:border-zinc-800/80 dark:bg-[#0d0d0d] lg:px-8 lg:pb-6 lg:pt-6"
+        className="sticky top-0 flex shrink-0 flex-col gap-4 border-b border-zinc-200 bg-zinc-100 px-4 pb-4 pt-4 dark:border-zinc-800/80 dark:bg-[#0d0d0d] max-lg:gap-0 lg:gap-4 lg:px-8 lg:pb-6 lg:pt-6"
         style={{ zIndex: CALENDAR_TOOLBAR_Z }}
       >
         {headerSlot}
-        <div className="flex flex-nowrap items-center gap-2 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] lg:flex-wrap lg:gap-2 lg:overflow-visible [&::-webkit-scrollbar]:hidden">
+        <div
+          className={cn(
+            workBoardCalendarNavRowClass,
+            'flex flex-nowrap items-center gap-2 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] lg:flex-wrap lg:gap-2 lg:overflow-visible [&::-webkit-scrollbar]:hidden'
+          )}
+        >
           <button
             type="button"
             onClick={goToday}

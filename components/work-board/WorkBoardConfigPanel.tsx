@@ -30,7 +30,6 @@ import {
   MoreHorizontal,
   Pencil,
   Palette,
-  LayoutList,
   Info,
   Circle,
   CircleDashed,
@@ -44,7 +43,6 @@ import {
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -74,6 +72,9 @@ const PRESET_COLORS = [
   '#06b6d4',
   '#6b7280',
 ]
+
+/** Botones del panel: menos redondeo que pill global. */
+const CONFIG_PANEL_BTN = 'rounded-lg' as const
 
 type LocalStage = {
   uid: string
@@ -725,33 +726,17 @@ export function WorkBoardConfigPanel({
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose() }}>
-      <DialogContent className="max-w-lg gap-0 overflow-hidden p-0 sm:max-w-lg">
-        <DialogHeader className="space-y-2 border-b border-zinc-800 bg-zinc-950/40 px-5 pb-5 pt-6 text-left">
+      <DialogContent className="w-[min(calc(100vw-2rem),32rem)] max-w-[min(calc(100vw-2rem),32rem)] gap-0 overflow-hidden p-0 sm:max-w-lg">
+        <DialogHeader className="border-b border-zinc-800 bg-zinc-950/40 px-5 pb-5 pt-6 text-left">
           <DialogTitle className="font-display text-xl font-bold tracking-tight text-zinc-100">
             {step === 'edit' ? 'Ajustes del tablero' : 'Reasignar tareas'}
           </DialogTitle>
-          <DialogDescription className="text-sm leading-relaxed text-zinc-400">
-            {step === 'edit'
-              ? 'Pendiente y Completada son obligatorias y no se eliminan ni cambian de categoría. Crea más estados con + y muévelos entre grupos arrastrando.'
-              : 'Indica el estado destino para las tareas de cada columna eliminada.'}
-          </DialogDescription>
         </DialogHeader>
 
         <div className="max-h-[min(60vh,32rem)] overflow-y-auto px-5 py-5">
           {step === 'edit' ? (
               <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
               <div className="space-y-6">
-                <div className="flex gap-3 rounded-lg border border-zinc-800/80 bg-zinc-950/30 px-3.5 py-3">
-                  <LayoutList className="mt-0.5 h-4 w-4 shrink-0 text-brand" aria-hidden />
-                  <div className="min-w-0 space-y-0.5">
-                    <p className="text-sm font-medium text-zinc-200">Categorías del embudo</p>
-                    <p className="text-xs leading-snug text-zinc-500">
-                      Arrastra estados entre categorías salvo Pendiente y Completada, que solo se reordenan dentro de
-                      su grupo.
-                    </p>
-                  </div>
-                </div>
-
                 {STAGE_CATEGORY_ORDER.map((category) => {
                   const catStages = groups.get(category) ?? []
                   const ids = catStages.map((s) => s.uid)
@@ -775,7 +760,7 @@ export function WorkBoardConfigPanel({
                           type="button"
                           variant="ghost"
                           size="sm"
-                          className="h-7 gap-1 px-2 text-xs text-zinc-400 hover:text-zinc-200"
+                          className={cn('h-7 gap-1 px-2 text-xs text-zinc-400 hover:text-zinc-200', CONFIG_PANEL_BTN)}
                           onClick={() => addStage(category)}
                         >
                           <Plus className="h-3.5 w-3.5" />
@@ -828,18 +813,15 @@ export function WorkBoardConfigPanel({
             <Button
               type="button"
               variant="ghost"
-              className="mr-auto text-zinc-400 hover:text-zinc-200"
+              className={cn('mr-auto text-zinc-400 hover:text-zinc-200', CONFIG_PANEL_BTN)}
               onClick={() => { setStep('edit'); setError(null) }}
             >
               ← Volver
             </Button>
           ) : null}
-          <Button type="button" variant="outline" onClick={onClose} className="border-zinc-600 bg-transparent">
-            Cancelar
-          </Button>
           <Button
             type="button"
-            className="bg-brand text-white hover:bg-brand-hover"
+            className={cn('bg-brand text-white hover:bg-brand-hover', CONFIG_PANEL_BTN)}
             onClick={step === 'edit' ? handleApplyClick : handleConfirmReassign}
             disabled={saving || (step === 'reassign' && !allReassigned)}
           >

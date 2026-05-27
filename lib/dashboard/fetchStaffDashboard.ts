@@ -34,5 +34,6 @@ export async function fetchStaffDashboard(
     section4: heavy.section4,
     tasksTodayList: heavy.tasksTodayList,
     teamAbsencesWeek: heavy.teamAbsencesWeek,
+    taskBoardContext: heavy.taskBoardContext,
   }
 }
