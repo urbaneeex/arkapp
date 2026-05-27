@@ -10,7 +10,10 @@ export async function proxy(request: NextRequest) {
     pathname === '/api/auth/lookup-email' ||
     pathname === '/api/auth/register' ||
     pathname === '/api/auth/resend-signup' ||
-    pathname === '/api/auth/post-auth-welcome'
+    pathname === '/api/auth/post-auth-welcome' ||
+    pathname.startsWith('/api/cron/') ||
+    pathname.startsWith('/api/webhooks/') ||
+    pathname.startsWith('/api/public/')
   ) {
     return NextResponse.next()
   }
