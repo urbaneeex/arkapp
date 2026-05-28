@@ -5,7 +5,7 @@ import {
 } from '@/lib/work-items/mapAppointmentRow'
 import { ensurePipelineStagesForBusiness, normalizeStageCategoryRow } from '@/lib/work-items/seedPipelineStages'
 import type { PipelineStageRow, WorkBoardStaffOption, WorkItemCard } from '@/lib/work-items/types'
-import { userCanOpenAppointmentDetailClient } from '@/lib/work-board/appointmentParticipation'
+import { userCanAccessAppointmentClient } from '@/lib/work-board/appointmentParticipation'
 import { APPOINTMENTS_SELECT_SLIM } from '@/lib/work-board/loadWorkBoardBootstrap'
 
 export type WorkBoardTaskPayload = {
@@ -64,7 +64,7 @@ export async function fetchWorkBoardTaskPayload(
   const [item] = mapAppointmentRowsToWorkItems(rowsTyped)
   if (!item) return null
 
-  if (!userCanOpenAppointmentDetailClient(item, userId, businessId)) return null
+  if (!userCanAccessAppointmentClient(item, userId, businessId)) return null
 
   const initialStages: PipelineStageRow[] = (stages ?? []).map((row) => {
     const r = row as {

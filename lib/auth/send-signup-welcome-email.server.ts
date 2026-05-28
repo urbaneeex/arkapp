@@ -4,7 +4,7 @@ import { isEmailValidForSending } from '@/lib/email'
 import { buildWelcomeEmailHtml } from '@/lib/emails/welcome-after-signup'
 import { createServiceRoleClient } from '@/lib/supabase/admin'
 
-const RESEND_FROM = process.env.RESEND_FROM_EMAIL || 'Arkapp <hello@arkapp.es>'
+import { getResendFromEmail } from '@/lib/emails/resend-config'
 
 /** Evita reenvíos si ya se mandó el correo de alta de titular. */
 const WELCOME_SENT_META_KEY = 'signup_welcome_sent_at'
@@ -98,7 +98,7 @@ async function sendWelcomeIfNewBusiness(
     const firstName =
       (userMetadata?.full_name as string | undefined)?.split(' ')[0] ?? 'bienvenido'
     await resend.emails.send({
-      from: RESEND_FROM,
+      from: getResendFromEmail(),
       to: email,
       subject: '¡Bienvenido a Arkapp! 🎉',
       html: buildWelcomeEmailHtml(firstName, origin),

@@ -4,10 +4,9 @@ import { createClient as createServerClient } from '@/lib/supabase/server'
 import { Resend } from 'resend'
 import { randomUUID } from 'crypto'
 import { resolveSiteUrl } from '@/lib/emails/site-url'
+import { getResendFromEmail } from '@/lib/emails/resend-config'
 
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-const RESEND_FROM = process.env.RESEND_FROM_EMAIL || 'Arkapp <hello@arkapp.es>'
 
 function buildInviteEmailHtml(name: string, inviteUrl: string): string {
   return `
@@ -147,7 +146,7 @@ export async function POST(request: NextRequest) {
 
     try {
       const { data: sendData, error: sendError } = await resend.emails.send({
-        from: RESEND_FROM,
+        from: getResendFromEmail(),
         to: email,
         subject: 'Invitación para unirte al equipo',
         html: buildInviteEmailHtml(name, inviteUrl),

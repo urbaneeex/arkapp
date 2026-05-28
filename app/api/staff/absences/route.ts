@@ -5,7 +5,7 @@ import { es } from 'date-fns/locale'
 import { Resend } from 'resend'
 import { buildVacationApprovedEmail } from '@/lib/email-templates'
 
-const RESEND_FROM = process.env.RESEND_FROM_EMAIL || 'Arkapp <hello@arkapp.es>'
+import { getResendFromEmail } from '@/lib/emails/resend-config'
 const ALLOWED_ABSENCE_TYPES = ['vacation', 'sick_leave', 'personal_permission', 'day_off'] as const
 
 async function getOwnerAccess(
@@ -279,7 +279,7 @@ export async function PATCH(request: NextRequest) {
         endDate: format(parseISO(absence.end_date), "d 'de' MMMM yyyy", { locale: es }),
         businessName: business?.name ?? '',
       })
-      await resend.emails.send({ from: RESEND_FROM, to: staffRow.email, subject, html })
+      await resend.emails.send({ from: getResendFromEmail(), to: staffRow.email, subject, html })
         .catch(e => console.error('[absences] vacation email error', e))
     }
 

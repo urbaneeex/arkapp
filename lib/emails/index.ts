@@ -1,4 +1,5 @@
 export { SITE_URL, CANONICAL_SITE_URL, resolveSiteUrl } from './site-url'
+export { DEFAULT_RESEND_FROM, getResendFromEmail } from './resend-config'
 export { baseLayout, actionButton } from './layout'
 export { buildDocumentSignatureRequestEmail } from './document-signature-request'
 export { buildVacationApprovedEmail } from './vacation-approved'

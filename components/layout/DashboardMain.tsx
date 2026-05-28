@@ -11,8 +11,8 @@ export function DashboardMain({ children }: { children: React.ReactNode }) {
   const isDashboardHome = pathname === '/dashboard'
 
   return (
-    <main className="flex-1 min-h-0 overflow-hidden pb-0 transition-[padding] duration-200 ease-out bg-zinc-100 dark:bg-[#0d0d0d] lg:pl-[4.5rem]">
-      <div className="h-full min-h-0 overflow-y-auto overflow-x-hidden px-4 pt-2 pb-[calc(5.5rem+env(safe-area-inset-bottom))] lg:px-8 lg:pb-0 lg:pt-6">
+    <main className="min-h-0 flex-1 overflow-hidden bg-[#0d0d0d] pb-0 lg:ml-[240px]">
+      <div className="h-full min-h-0 overflow-x-hidden overflow-y-auto px-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))] pt-2 lg:px-8 lg:pb-0 lg:pt-6">
         {shellVisible ? (
           <AppTabShell homeSlot={isDashboardHome ? children : null} />
         ) : (

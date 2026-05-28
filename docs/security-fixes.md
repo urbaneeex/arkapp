@@ -1,4 +1,4 @@
-# Vulnerabilidades de seguridad — estado
+a # Vulnerabilidades de seguridad — estado
 
 > Todas las vulnerabilidades identificadas han sido corregidas. Para las reglas que deben seguirse a futuro, ver **`docs/security-standards.md`**.
 

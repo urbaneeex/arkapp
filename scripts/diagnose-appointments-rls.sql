@@ -1,6 +1,5 @@
--- Diagnóstico RLS: propietario ve citas `personal` ajenas (ejecutar en Supabase SQL Editor).
--- Tras reparar con migración 20260513131000 o pegando el CREATE OR REPLACE de 20260513130000,
--- vuelve a ejecutar QUERY 1 y 4.
+-- Diagnóstico RLS appointments (ejecutar en Supabase SQL Editor).
+-- Tras migración 20260519120000: SELECT/UPDATE solo participantes (creador o asignados).
 
 -- QUERY 1 — Cuerpo actual de la función (buscar owner_uid / bypass propietario)
 SELECT prosrc

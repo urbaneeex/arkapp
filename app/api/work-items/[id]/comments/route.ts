@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { verifyAppointmentAccess } from '@/lib/work-board/verifyAppointmentAccess'
 import { validateTipTapContentPayload } from '@/lib/work-board/tiptapContent'
 import { buildAppointmentActivityFeed } from '@/lib/work-board/buildAppointmentActivityFeed'
+import { buildNameContextFromRows } from '@/lib/work-board/describeAppointmentAuditChanges'
 import type { AppointmentCommentRow } from '@/lib/work-board/appointmentActivityTypes'
 
 const BodySchema = z.object({
@@ -71,7 +72,8 @@ export async function POST(
     staff: { name: authorName },
   }
 
-  const item = buildAppointmentActivityFeed([], [commentRow], staffNames)[0]
+  const nameContext = buildNameContextFromRows({ staffNames })
+  const item = buildAppointmentActivityFeed([], [commentRow], nameContext)[0]
 
   return NextResponse.json({ comment: item ?? null }, { status: 201 })
 }

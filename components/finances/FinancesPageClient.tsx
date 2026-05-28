@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -17,7 +17,7 @@ import {
   Download,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { format } from 'date-fns'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -78,8 +78,14 @@ export function FinancesPageClient({
   kpis: KPIs
 }) {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const financeTabs = ['resumen', 'ingresos', 'gastos', 'reportes'] as const
   const supabase = createClient()
-  const [activeTab, setActiveTab] = useState('resumen')
+  const [activeTab, setActiveTab] = useState(() => {
+    const tab = searchParams.get('tab')
+    if (tab && financeTabs.includes(tab as (typeof financeTabs)[number])) return tab
+    return 'resumen'
+  })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [showExpenseForm, setShowExpenseForm] = useState(false)
@@ -90,6 +96,18 @@ export function FinancesPageClient({
     amount: '',
     notes: '',
   })
+
+  useEffect(() => {
+    const tab = searchParams.get('tab')
+    if (tab && financeTabs.includes(tab as (typeof financeTabs)[number])) {
+      setActiveTab(tab)
+    }
+  }, [searchParams])
+
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab)
+    router.replace(`/dashboard/finances?tab=${encodeURIComponent(tab)}`, { scroll: false })
+  }
 
   const handleAddExpense = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -123,8 +141,8 @@ export function FinancesPageClient({
     new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(n)
 
   return (
-    <Tabs value={activeTab} onValueChange={setActiveTab}>
-      <TabsList className="flex w-full flex-row flex-wrap justify-start gap-2 h-auto p-1 bg-zinc-800 cursor-default">
+    <Tabs value={activeTab} onValueChange={handleTabChange}>
+      <TabsList className="flex h-auto w-full cursor-default flex-row flex-wrap justify-start gap-2 bg-zinc-800 p-1 lg:hidden">
         <TabsTrigger value="resumen" className="cursor-pointer gap-1.5">
           <DollarSign className="h-4 w-4" />
           Resumen

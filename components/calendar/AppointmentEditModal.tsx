@@ -173,7 +173,7 @@ export function AppointmentEditModal({
           onSuccess={handleSuccess}
           onCancel={handleCancel}
         />
-        {canDelete !== false && (
+        {canDelete === true && (
           <div className="border-t border-zinc-800 pt-4 mt-4 flex justify-end">
             <Button
               type="button"

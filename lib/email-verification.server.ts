@@ -9,7 +9,7 @@ import {
   hashPasswordResetToken,
 } from '@/lib/password-reset.server'
 
-const RESEND_FROM = process.env.RESEND_FROM_EMAIL || 'Arkapp <hello@arkapp.es>'
+import { getResendFromEmail } from '@/lib/emails/resend-config'
 
 const RATE_WINDOW_MS = 15 * 60 * 1000
 const RATE_MAX_PER_WINDOW = 10
@@ -81,7 +81,7 @@ export async function sendEmailVerificationMessage(
   const { subject, html } = buildEmailVerificationEmail({ verifyUrl })
   const resend = new Resend(apiKey)
   const { error: sendErr } = await resend.emails.send({
-    from: RESEND_FROM,
+    from: getResendFromEmail(),
     to: toEmail,
     subject,
     html,

@@ -170,7 +170,7 @@ export function StaffClient({
           )}
         </div>
       </header>
-      <TabsList className="flex w-full flex-row flex-wrap justify-start gap-2 h-auto p-1 bg-zinc-800 cursor-default">
+      <TabsList className="flex h-auto w-full cursor-default flex-row flex-wrap justify-start gap-2 rounded-lg bg-zinc-800 p-1 text-zinc-400 lg:hidden">
         {tabs.map(({ value, icon: Icon, label }) => (
           <TabsTrigger key={value} value={value} className="cursor-pointer gap-1.5">
             <Icon className="h-4 w-4" />

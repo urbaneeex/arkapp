@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -50,6 +50,17 @@ const DAYS = [
 
 const LOGO_MAX_SIZE_MB = 2
 const LOGO_ACCEPT = 'image/jpeg,image/png,image/webp'
+
+const SETTINGS_TABS = [
+  'general',
+  'account',
+  'hours',
+  'booking',
+  'notifications',
+  'billing',
+  'integrations',
+  'clock',
+] as const
 
 export type WaStatus = 'disconnected' | 'pending_qr' | 'connected'
 
@@ -101,10 +112,34 @@ export function SettingsClient({
   isOwner: boolean
 }) {
   const router = useRouter()
-  const [activeTab, setActiveTab] = useState('general')
+  const searchParams = useSearchParams()
+  const [activeTab, setActiveTab] = useState(() => {
+    const tab = searchParams.get('tab')
+    if (tab && SETTINGS_TABS.includes(tab as (typeof SETTINGS_TABS)[number])) return tab
+    if (searchParams.get('stack') === 'account') return 'account'
+    return 'general'
+  })
   const [saving, setSaving] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+
+  useEffect(() => {
+    const tab = searchParams.get('tab')
+    if (tab && SETTINGS_TABS.includes(tab as (typeof SETTINGS_TABS)[number])) {
+      setActiveTab(tab)
+      return
+    }
+    if (searchParams.get('stack') === 'account') {
+      setActiveTab('account')
+    }
+  }, [searchParams])
+
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab)
+    const params = new URLSearchParams(searchParams.toString())
+    params.set('tab', tab)
+    router.replace(`/dashboard/settings?${params.toString()}`, { scroll: false })
+  }
 
   // General form
   const [name, setName] = useState(business.name)
@@ -651,8 +686,8 @@ export function SettingsClient({
         </div>
       )}
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="flex w-full flex-row flex-wrap justify-start gap-2 h-auto p-1 bg-zinc-800 cursor-default">
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
+        <TabsList className="flex h-auto w-full cursor-default flex-row flex-wrap justify-start gap-2 bg-zinc-800 p-1 lg:hidden">
           {[
             { value: 'general', icon: Building2, label: 'General' },
             { value: 'account', icon: User, label: 'Mi cuenta' },

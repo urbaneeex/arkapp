@@ -48,13 +48,15 @@ export default async function DashboardLayout({
               businessName={ctx.businessName}
             >
               <BusinessStoreHydrator business={businessSidebar} />
-              <div className="h-screen min-h-0 overflow-hidden flex flex-col bg-zinc-950">
+              <div className="flex h-screen min-h-0 flex-col overflow-hidden bg-zinc-950">
+                <Suspense fallback={null}>
+                  <Sidebar />
+                </Suspense>
                 <GlobalHeader
                   initialUserName={ctx.displayName}
                   initialUserEmail={user.email ?? ''}
                   initialBusinessName={ctx.businessName}
                 />
-                <Sidebar />
                 <DashboardMain>{children}</DashboardMain>
                 <Suspense
                   fallback={

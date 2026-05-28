@@ -15,6 +15,7 @@ import {
   workloadLabel,
 } from '@/lib/business/workloadConfig'
 import { formatAppointmentAuditFeed } from '@/lib/work-board/formatAppointmentAuditFeed'
+import { loadAppointmentActivityNameContext } from '@/lib/work-board/loadAppointmentActivityNameContext'
 
 export const runtime = 'nodejs'
 
@@ -161,9 +162,20 @@ export async function GET() {
     return NextResponse.json({ error: 'Error interno' }, { status: 500 })
   }
 
+  const activityNameContext = await loadAppointmentActivityNameContext(
+    admin,
+    businessId,
+    staffNameMap
+  )
   const auditFeed = formatAppointmentAuditFeed(
     (auditRows ?? []) as Parameters<typeof formatAppointmentAuditFeed>[0],
-    staffNameMap
+    activityNameContext.staffNames,
+    {
+      stageLabels: activityNameContext.stageLabels,
+      clientNames: activityNameContext.clientNames,
+      serviceNames: activityNameContext.serviceNames,
+      teamNames: activityNameContext.teamNames,
+    }
   )
 
   return NextResponse.json({

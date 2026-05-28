@@ -5,7 +5,7 @@ import { buildDocumentSignedEmail } from '@/lib/email-templates'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 
-const RESEND_FROM = process.env.RESEND_FROM_EMAIL || 'Arkapp <hello@arkapp.es>'
+import { getResendFromEmail } from '@/lib/emails/resend-config'
 
 async function resolveMyStaffId(
   supabase: Awaited<ReturnType<typeof createServerClient>>,
@@ -193,7 +193,7 @@ export async function POST(request: NextRequest) {
               signedAt: format(new Date(now), "d 'de' MMMM yyyy 'a las' HH:mm", { locale: es }),
             })
             await resend.emails.send({
-              from: RESEND_FROM,
+              from: getResendFromEmail(),
               to: ownerEmail,
               subject,
               html,

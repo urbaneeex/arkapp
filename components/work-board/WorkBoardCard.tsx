@@ -1,6 +1,6 @@
 'use client'
 
-import type { PointerEventHandler } from 'react'
+import type { MouseEventHandler, PointerEventHandler } from 'react'
 import { AtSign, Calendar, Check, Flag, Pencil, Trash2, User, Wrench } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
@@ -35,6 +35,9 @@ function chipTextClass(compact?: boolean) {
 const KANBAN_CHIP_READONLY_CLASS =
   'inline-flex max-w-full shrink-0 items-center justify-center gap-1.5 rounded-lg border border-zinc-600/70 bg-zinc-900/50 px-2 py-1.5 font-medium text-zinc-400 shadow-sm cursor-default'
 
+const KANBAN_CARD_INTERACTIVE_SELECTOR =
+  'button, a, input, textarea, select, [data-kanban-chip], [data-kanban-card-action]'
+
 export function WorkBoardCard({
   item,
   compact,
@@ -42,7 +45,7 @@ export function WorkBoardCard({
   onFieldFocus,
   quickEdit,
   kanbanActions,
-  /** Sin clic en título ni chips (p. ej. miembro del equipo sin permiso de edición en esa tarjeta). */
+  /** Reservado; las tarjetas visibles ya implican acceso de participante vía RLS. */
   kanbanInteractionLocked,
   /** Color de columna (`pipeline_stages.color`): borde y tinte de tarjeta. */
   columnColor,
@@ -72,7 +75,7 @@ export function WorkBoardCard({
   const priority = item.kanban_priority ?? null
   const priorityText = kanbanPriorityLabel(priority)
 
-  const stopDrag: React.PointerEventHandler = (e) => {
+  const stopDrag: PointerEventHandler = (e) => {
     e.stopPropagation()
   }
 
@@ -87,45 +90,40 @@ export function WorkBoardCard({
 
   const accentStyle = kanbanCardAccentFromStageColor(columnColor)
 
+  const cardOpenAllowed = Boolean(onOpen) && !kanbanInteractionLocked
+
+  const handleCardClick: MouseEventHandler<HTMLDivElement> = (e) => {
+    if (!cardOpenAllowed || !onOpen) return
+    const target = e.target as HTMLElement
+    if (target.closest(KANBAN_CARD_INTERACTIVE_SELECTOR)) return
+    onOpen(item)
+  }
+
   return (
     <div
+      onClick={handleCardClick}
       className={cn(
         'group w-full rounded-lg border-l-4 text-left font-sans transition-shadow',
         !accentStyle && stageColorClassForSlug(item.stage_slug),
-        compact ? 'p-2.5 text-sm' : 'p-3 text-base'
+        compact ? 'p-2.5 text-sm' : 'p-3 text-base',
+        cardOpenAllowed && 'cursor-pointer'
       )}
       style={accentStyle}
     >
       <div className="flex items-start gap-1">
-        {kanbanInteractionLocked || !onOpen ? (
-          <div className="min-w-0 flex-1 cursor-default rounded-md text-left">
-            <p
-              className={cn(
-                'truncate font-semibold leading-snug text-zinc-100',
-                compact ? 'text-[15px]' : 'text-base'
-              )}
-            >
-              {item.displayTitle}
-            </p>
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={() => onOpen(item)}
-            className="min-w-0 flex-1 cursor-pointer rounded-md text-left transition-opacity hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
+        <div className="min-w-0 flex-1 rounded-md text-left">
+          <p
+            className={cn(
+              'truncate font-semibold leading-snug text-zinc-100',
+              compact ? 'text-[15px]' : 'text-base'
+            )}
           >
-            <p
-              className={cn(
-                'truncate font-semibold leading-snug text-zinc-100',
-                compact ? 'text-[15px]' : 'text-base'
-              )}
-            >
-              {item.displayTitle}
-            </p>
-          </button>
-        )}
+            {item.displayTitle}
+          </p>
+        </div>
         {showKanbanToolbar ? (
           <div
+            data-kanban-card-action
             className="pointer-events-none flex shrink-0 items-center gap-0.5 rounded-md border border-zinc-700/70 bg-zinc-950/60 p-0.5 opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100"
             onPointerDown={stopDrag}
           >

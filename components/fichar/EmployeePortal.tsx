@@ -63,7 +63,7 @@ export function EmployeePortal({
         <h1 className="font-display text-2xl font-bold text-zinc-100">Jornada</h1>
       </header>
 
-      <TabsList className="flex h-auto w-full cursor-default flex-row flex-wrap justify-start gap-2 rounded-lg bg-zinc-800 p-1 text-zinc-400">
+      <TabsList className="flex h-auto w-full cursor-default flex-row flex-wrap justify-start gap-2 rounded-lg bg-zinc-800 p-1 text-zinc-400 lg:hidden">
         <TabsTrigger value="fichar" className="gap-1.5 max-sm:px-2 max-sm:text-xs">
           <Clock className="h-4 w-4 shrink-0" />
           Fichar

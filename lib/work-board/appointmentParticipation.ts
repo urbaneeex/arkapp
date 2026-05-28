@@ -12,93 +12,80 @@ export function metadataKanbanAssigneesIncludeUser(metadata: unknown, userId: st
 }
 
 /** Creador, staff_id principal o lista kanban_assignees. */
-export function userParticipatesInAppointmentRow(row: {
-  created_by?: string | null
-  staff_id?: string | null
-  metadata?: unknown | null
-  business_id: string
-}, userId: string, businessId: string): boolean {
+export function userParticipatesInAppointmentRow(
+  row: {
+    created_by?: string | null
+    staff_id?: string | null
+    metadata?: unknown | null
+    business_id: string
+  },
+  userId: string,
+  businessId: string
+): boolean {
   if (row.business_id !== businessId) return false
   if (row.created_by === userId) return true
   if (row.staff_id === userId) return true
   return metadataKanbanAssigneesIncludeUser(row.metadata, userId)
 }
 
-/** Coincidencia `team_id` / `team_ids` de la tarjeta con equipos del usuario (SSR/cliente). */
-export function userSharesTeamWithAppointmentCard(
-  item: { team_id?: string | null; team_ids?: string[] | undefined },
-  myTeamIds: readonly string[]
-): boolean {
-  if (!myTeamIds.length) return false
-  const mine = new Set(myTeamIds)
-  if (item.team_id && mine.has(item.team_id)) return true
-  for (const tid of item.team_ids ?? []) {
-    if (mine.has(tid)) return true
-  }
-  return false
+type AppointmentAccessRow = {
+  business_id: string
+  created_by?: string | null
+  staff_id?: string | null
+  metadata?: unknown | null
 }
 
-/** Solo el creador puede editar contenido (título, equipos, asignaciones amplias, etc.). */
+/** Ver, abrir, editar y mover: solo participantes (creador o asignados). */
+export function userCanAccessAppointmentClient(
+  item: AppointmentAccessRow,
+  userId: string,
+  businessId: string
+): boolean {
+  return userParticipatesInAppointmentRow(item, userId, businessId)
+}
+
+/** Editar tarea: participantes (creador o asignados). Mismo criterio que ver/abrir/mover. */
+export function userCanEditAppointmentClient(
+  item: AppointmentAccessRow,
+  userId: string,
+  businessId: string
+): boolean {
+  return userCanAccessAppointmentClient(item, userId, businessId)
+}
+
+/** Eliminar tarea: solo el creador (asignados no pueden borrar). */
+export function userCanDeleteAppointmentClient(
+  item: Pick<AppointmentAccessRow, 'business_id' | 'created_by'>,
+  userId: string,
+  businessId: string
+): boolean {
+  return item.business_id === businessId && item.created_by != null && item.created_by === userId
+}
+
+/** @deprecated Usar userCanEditAppointmentClient */
 export function userCanEditAppointmentCardClient(
-  item: { business_id: string; created_by?: string | null },
+  item: AppointmentAccessRow,
   userId: string,
   businessId: string
 ): boolean {
-  return item.business_id === businessId && item.created_by === userId
+  return userCanEditAppointmentClient(item, userId, businessId)
 }
 
-/** Abrir detalle (formulario solo lectura + actividad): creador o asignado principal / kanban_assignees. */
+/** @deprecated Usar userCanAccessAppointmentClient */
 export function userCanOpenAppointmentDetailClient(
-  item: {
-    business_id: string
-    created_by?: string | null
-    staff_id?: string | null
-    metadata?: unknown | null
-  },
+  item: AppointmentAccessRow,
   userId: string,
   businessId: string
 ): boolean {
-  if (userCanEditAppointmentCardClient(item, userId, businessId)) return true
-  return userParticipatesInAppointmentRow(
-    {
-      business_id: businessId,
-      created_by: item.created_by,
-      staff_id: item.staff_id,
-      metadata: item.metadata,
-    },
-    userId,
-    businessId
-  )
+  return userCanAccessAppointmentClient(item, userId, businessId)
 }
 
-/** Mover columna / marcar completado: creador, staff principal, kanban_assignees o equipo de la tarjeta. */
+/** @deprecated Usar userCanAccessAppointmentClient */
 export function userCanMoveAppointmentCardClient(
-  item: {
-    business_id: string
-    created_by?: string | null
-    staff_id?: string | null
-    metadata?: unknown | null
-    team_id?: string | null
-    team_ids?: string[]
-  },
+  item: AppointmentAccessRow,
   userId: string,
   businessId: string,
-  myTeamIds: readonly string[]
+  _myTeamIds?: readonly string[]
 ): boolean {
-  if (item.business_id !== businessId) return false
-  if (
-    userParticipatesInAppointmentRow(
-      {
-        business_id: businessId,
-        created_by: item.created_by,
-        staff_id: item.staff_id,
-        metadata: item.metadata,
-      },
-      userId,
-      businessId
-    )
-  ) {
-    return true
-  }
-  return userSharesTeamWithAppointmentCard(item, myTeamIds)
+  return userCanAccessAppointmentClient(item, userId, businessId)
 }

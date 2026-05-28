@@ -38,11 +38,7 @@ import {
   parseKanbanFiltersFromStorage,
   type KanbanFiltersState,
 } from '@/lib/work-board/kanbanFilters'
-import {
-  userCanMoveAppointmentCardClient,
-  userCanEditAppointmentCardClient,
-  userCanOpenAppointmentDetailClient,
-} from '@/lib/work-board/appointmentParticipation'
+import { userCanAccessAppointmentClient, userCanDeleteAppointmentClient } from '@/lib/work-board/appointmentParticipation'
 import {
   mapAppointmentRowToWorkItem,
   workItemCardToAppointmentRowInput,
@@ -77,18 +73,9 @@ const KanbanQuickAddAppointment = dynamic(
   { ssr: false }
 )
 
-const TaskActivityPanel = dynamic(
-  () => import('./TaskActivityPanel').then((m) => m.TaskActivityPanel),
-  {
-    ssr: false,
-    loading: () => (
-      <div
-        className="h-48 w-full animate-pulse border-t border-zinc-800 bg-zinc-950/50 md:h-auto md:w-[320px] md:border-l md:border-t-0"
-        aria-hidden
-      />
-    ),
-  }
-)
+import { TaskActivityPanel } from './TaskActivityPanel'
+import { fetchAppointmentActivity } from '@/lib/work-board/fetchAppointmentActivity'
+import { workBoardKeys } from '@/lib/work-board/workBoardQueryKeys'
 
 const WorkBoardConfigPanel = dynamic(
   () => import('./WorkBoardConfigPanel').then((m) => m.WorkBoardConfigPanel),
@@ -155,6 +142,32 @@ function TaskDialogHeaderSave({ actions }: { actions: TaskFormSaveActions | null
     >
       {actions.saving ? '…' : 'Guardar'}
     </Button>
+  )
+}
+
+function TaskDialogFooter({
+  actions,
+  onCancel,
+}: {
+  actions: TaskFormSaveActions
+  onCancel: () => void
+}) {
+  return (
+    <div className="flex shrink-0 items-center justify-end gap-2 border-t border-zinc-800 bg-zinc-900/95 px-4 py-3 md:px-6">
+      <Button type="button" variant="outline" size="sm" className="rounded-lg" onClick={onCancel}>
+        Cancelar
+      </Button>
+      <Button
+        type="button"
+        variant="default"
+        size="sm"
+        className="rounded-lg px-4"
+        disabled={actions.disabled}
+        onClick={actions.save}
+      >
+        {actions.saving ? 'Guardando…' : 'Guardar'}
+      </Button>
+    </div>
   )
 }
 
@@ -295,24 +308,14 @@ export function WorkBoardPageClient({
   const canView = hasPermission('work_board_view')
   const canManageStages = hasPermission('pipeline_stages_manage')
   const canCreateAppointments = hasPermission('work_board_view')
-  const canMoveAppointmentCard = useCallback(
+  const canAccessAppointment = useCallback(
     (item: WorkItemCard) =>
-      userCanMoveAppointmentCardClient(item, currentUserId, businessId, myTeamIds),
-    [businessId, currentUserId, myTeamIds]
-  )
-  const canEditAppointmentCard = useCallback(
-    (item: WorkItemCard) =>
-      userCanEditAppointmentCardClient(item, currentUserId, businessId),
-    [businessId, currentUserId]
-  )
-  const canOpenAppointmentDetail = useCallback(
-    (item: WorkItemCard) =>
-      userCanOpenAppointmentDetailClient(item, currentUserId, businessId),
+      userCanAccessAppointmentClient(item, currentUserId, businessId),
     [businessId, currentUserId]
   )
   const canDeleteWorkBoardItem = useCallback(
-    (item: WorkItemCard) => item.created_by != null && item.created_by === currentUserId,
-    [currentUserId]
+    (item: WorkItemCard) => userCanDeleteAppointmentClient(item, currentUserId, businessId),
+    [businessId, currentUserId]
   )
 
   const [viewMode, setViewMode] = useState<WorkBoardViewMode>(initialView)
@@ -419,7 +422,12 @@ export function WorkBoardPageClient({
     setEditTaskFormKey((k) => k + 1)
     setEditTaskPanel('task')
     setEditTaskDialogOpen(true)
-  }, [])
+    void queryClient.prefetchQuery({
+      queryKey: workBoardKeys.activity(item.id),
+      queryFn: () => fetchAppointmentActivity(item.id),
+      staleTime: 15_000,
+    })
+  }, [queryClient])
 
   const performCloseEditTaskDialog = useCallback(() => {
     setEditTaskDirty(false)
@@ -448,12 +456,12 @@ export function WorkBoardPageClient({
   }, [router, searchParams, shell, taskOverlayOnly, onTaskOverlayClose])
 
   const attemptCloseEditTaskDialog = useCallback(() => {
-    if (editTaskDirty && editTaskItem && canEditAppointmentCard(editTaskItem)) {
+    if (editTaskDirty && editTaskItem && canAccessAppointment(editTaskItem)) {
       setEditDiscardOpen(true)
       return
     }
     performCloseEditTaskDialog()
-  }, [editTaskDirty, editTaskItem, canEditAppointmentCard, performCloseEditTaskDialog])
+  }, [editTaskDirty, editTaskItem, canAccessAppointment, performCloseEditTaskDialog])
 
   /** `?new=1` desde botón «Tarea» en shell (inline, no dialog). */
   useEffect(() => {
@@ -474,7 +482,7 @@ export function WorkBoardPageClient({
     const item =
       initialItems.find((i) => i.id === taskId) ??
       kanbanDisplayItems.find((i) => i.id === taskId)
-    if (item && canOpenAppointmentDetail(item)) {
+    if (item && canAccessAppointment(item)) {
       openedInitialTaskRef.current = true
       openEditTaskDialog(item)
     }
@@ -483,7 +491,7 @@ export function WorkBoardPageClient({
     initialOpenTaskId,
     initialItems,
     kanbanDisplayItems,
-    canOpenAppointmentDetail,
+    canAccessAppointment,
     openEditTaskDialog,
   ])
 
@@ -574,12 +582,11 @@ export function WorkBoardPageClient({
     )
   }
 
-  const showEditHeaderSave =
-    compactAppNav &&
+  const showEditFooter =
     editTaskPanel === 'task' &&
     Boolean(modalFormSave) &&
     editTaskItem != null &&
-    canEditAppointmentCard(editTaskItem)
+    canAccessAppointment(editTaskItem)
 
   const addTaskDialog = (
     <Dialog
@@ -657,48 +664,45 @@ export function WorkBoardPageClient({
             compactAppNav ? 'pr-4' : 'pr-14'
           )}
         >
-          <DialogTitle
-            className={cn(
-              'font-display truncate text-lg font-semibold text-zinc-100 md:text-xl',
-              showEditHeaderSave && 'pr-24'
-            )}
-          >
+          <DialogTitle className="font-display truncate text-lg font-semibold text-zinc-100 md:text-xl">
             {editTaskItem?.displayTitle?.trim()
               ? `Tarea: ${editTaskItem.displayTitle.trim()}`
               : 'Tarea'}
           </DialogTitle>
-          {showEditHeaderSave ? <TaskDialogHeaderSave actions={modalFormSave} /> : null}
         </DialogHeader>
 
         <TaskEditDialogTabs
           value={editTaskPanel}
           onChange={(panel) => {
             setEditTaskPanel(panel)
-            if (panel !== 'task') setModalFormSave(null)
           }}
         />
 
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          {editTaskPanel === 'task' ? (
-            <div
-              role="tabpanel"
-              aria-label="Información"
-              className="h-full min-h-0 overflow-y-auto px-4 py-4 md:px-6 md:py-5"
-            >
-              {editTaskItem ? (
+          {editTaskItem ? (
+            <>
+              <div
+                role="tabpanel"
+                aria-label="Información"
+                aria-hidden={editTaskPanel !== 'task'}
+                className={cn(
+                  'h-full min-h-0 overflow-y-auto px-4 py-4 md:px-6 md:py-5',
+                  editTaskPanel !== 'task' && 'hidden'
+                )}
+              >
                 <KanbanQuickAddAppointment
                   key={`${editTaskItem.id}-${editTaskFormKey}`}
                   variant="modal"
                   editItem={editTaskItem}
-                  readOnly={!canEditAppointmentCard(editTaskItem)}
+                  readOnly={!canAccessAppointment(editTaskItem)}
                   businessId={businessId}
                   currentUserId={currentUserId}
                   staffOptions={initialStaffOptions}
                   services={catalogServices}
                   teams={teamsForKanban}
                   pipelineStages={stages}
-                  hideTitleActions={compactAppNav}
-                  onSaveActionsChange={compactAppNav ? setModalFormSave : undefined}
+                  hideTitleActions
+                  onSaveActionsChange={setModalFormSave}
                   onDirtyChange={setEditTaskDirty}
                   onEditClose={attemptCloseEditTaskDialog}
                   onSaved={() => {
@@ -710,24 +714,34 @@ export function WorkBoardPageClient({
                     onInvalidateBoard?.()
                   }}
                 />
-              ) : (
-                <p className="text-sm text-zinc-500">Tarea no encontrada.</p>
-              )}
-            </div>
-          ) : editTaskItem ? (
-            <div
-              role="tabpanel"
-              aria-label="Actividad"
-              className="flex h-full min-h-0 flex-col overflow-hidden"
-            >
-              <TaskActivityPanel
-                appointmentId={editTaskItem.id}
-                enabled={editTaskDialogOpen}
-                showHeader={false}
-              />
-            </div>
-          ) : null}
+              </div>
+              <div
+                role="tabpanel"
+                aria-label="Actividad"
+                aria-hidden={editTaskPanel !== 'activity'}
+                className={cn(
+                  'flex h-full min-h-0 flex-col overflow-hidden',
+                  editTaskPanel !== 'activity' && 'hidden'
+                )}
+              >
+                <TaskActivityPanel
+                  appointmentId={editTaskItem.id}
+                  enabled={editTaskDialogOpen}
+                  showHeader={false}
+                />
+              </div>
+            </>
+          ) : (
+            <p className="p-4 text-sm text-zinc-500">Tarea no encontrada.</p>
+          )}
         </div>
+
+        {showEditFooter && modalFormSave ? (
+          <TaskDialogFooter
+            actions={modalFormSave}
+            onCancel={attemptCloseEditTaskDialog}
+          />
+        ) : null}
       </DialogContent>
     </Dialog>
   )
@@ -792,14 +806,14 @@ export function WorkBoardPageClient({
             kanbanClients={catalogClients}
             teams={teamsForKanban}
             canCreateAppointments={canCreateAppointments}
-            canMoveAppointmentCard={canMoveAppointmentCard}
+            canMoveAppointmentCard={canAccessAppointment}
             canDeleteWorkBoardItem={canDeleteWorkBoardItem}
             onStageUpdated={() => onInvalidateBoard?.()}
             kanbanFilters={kanbanFilters}
             dragDisabled={kanbanFilters.showArchivedOnly}
             canBulkReorderKanban={false}
-            canEditAppointmentCard={canEditAppointmentCard}
-            canOpenAppointmentDetail={canOpenAppointmentDetail}
+            canEditAppointmentCard={canAccessAppointment}
+            canOpenAppointmentDetail={canAccessAppointment}
             onOpenTaskEdit={openEditTaskDialog}
           />
         </>

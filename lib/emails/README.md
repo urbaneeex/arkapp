@@ -42,6 +42,8 @@ La **anon key** es pública en el cliente. Cualquiera podría llamar a `supabase
 
 ## Entregabilidad (Resend y DNS)
 
+Guía completa para arkapp.es: [`docs/email-deliverability.md`](../docs/email-deliverability.md).
+
 1. **Dominio en Resend**: verificado; remitente alineado con `RESEND_FROM_EMAIL`.
 2. **DNS**: **SPF**, **DKIM** y **DMARC** según Resend.
 3. **Redirect URLs** y **Site URL** correctos para OAuth y rutas legacy.

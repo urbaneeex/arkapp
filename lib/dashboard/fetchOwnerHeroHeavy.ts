@@ -19,6 +19,7 @@ import {
   workloadLabel,
 } from '@/lib/business/workloadConfig'
 import { formatAppointmentAuditFeed } from '@/lib/work-board/formatAppointmentAuditFeed'
+import { loadAppointmentActivityNameContext } from '@/lib/work-board/loadAppointmentActivityNameContext'
 import { computeOwnerTasksToday, type OwnerTasksTodayRow } from '@/lib/dashboard/ownerTasksToday'
 import {
   fetchOwnerRevenueCandidateRows,
@@ -289,11 +290,21 @@ export async function fetchOwnerHeavyMetrics(
   }
 
   const staffNames = new Map((staffRes.data ?? []).map((s) => [s.id, s.name as string]))
+  const activityNameContext =
+    !auditRes.error && auditRes.data?.length
+      ? await loadAppointmentActivityNameContext(admin, businessId, staffNames)
+      : null
   const activity =
-    !auditRes.error && auditRes.data
+    !auditRes.error && auditRes.data && activityNameContext
       ? formatAppointmentAuditFeed(
           auditRes.data as Parameters<typeof formatAppointmentAuditFeed>[0],
-          staffNames
+          activityNameContext.staffNames,
+          {
+            stageLabels: activityNameContext.stageLabels,
+            clientNames: activityNameContext.clientNames,
+            serviceNames: activityNameContext.serviceNames,
+            teamNames: activityNameContext.teamNames,
+          }
         )
       : []
 

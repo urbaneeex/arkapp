@@ -76,7 +76,7 @@ import {
 } from '@/components/work-board/kanbanTypography'
 import { KanbanQuickAddAppointment, type KanbanService } from '@/components/work-board/WorkBoardKanbanView'
 import type { WorkBoardStaffOption } from '@/lib/work-items/types'
-import { userCanMoveAppointmentCardClient } from '@/lib/work-board/appointmentParticipation'
+import { userCanAccessAppointmentClient, userCanDeleteAppointmentClient } from '@/lib/work-board/appointmentParticipation'
 import {
   appointmentHasCalendarSchedule,
   isCalendarTimeUnspecifiedMeta,
@@ -669,41 +669,44 @@ export function CalendarView({
   const router = useRouter()
   const supabase = createClient()
   const calendarCanDelete = useCallback(
-    (row: AppointmentRow | null) =>
-      Boolean(row && row.created_by != null && row.created_by === currentUserId),
-    [currentUserId]
+    (row: AppointmentRow | null) => {
+      if (!row) return false
+      const w = mapAppointmentRowToWorkItem(row as unknown as AppointmentRowInput)
+      return userCanDeleteAppointmentClient(w, currentUserId, businessId)
+    },
+    [businessId, currentUserId]
   )
 
   const calendarCanEditModal = useCallback(
-    (row: AppointmentRow | null) =>
-      Boolean(row?.created_by && row.created_by === currentUserId),
-    [currentUserId]
+    (row: AppointmentRow | null) => {
+      if (!row) return false
+      const w = mapAppointmentRowToWorkItem(row as unknown as AppointmentRowInput)
+      return userCanAccessAppointmentClient(w, currentUserId, businessId)
+    },
+    [businessId, currentUserId]
   )
 
   const canDragAppointmentRow = useCallback(
     (row: AppointmentRow) => {
       const w = mapAppointmentRowToWorkItem(row as unknown as AppointmentRowInput)
-      return userCanMoveAppointmentCardClient(w, currentUserId, businessId, myTeamIds)
+      return userCanAccessAppointmentClient(w, currentUserId, businessId)
     },
-    [businessId, currentUserId, myTeamIds]
+    [businessId, currentUserId]
   )
 
   const canDragAppointmentNormalized = useCallback(
     (apt: AppointmentNormalized) =>
-      userCanMoveAppointmentCardClient(
+      userCanAccessAppointmentClient(
         {
           business_id: apt.business_id,
           created_by: apt.created_by,
           staff_id: apt.staff_id,
           metadata: apt.metadata,
-          team_id: apt.team_id,
-          team_ids: apt.team_ids,
         },
         currentUserId,
-        businessId,
-        myTeamIds
+        businessId
       ),
-    [businessId, currentUserId, myTeamIds]
+    [businessId, currentUserId]
   )
 
   const [current, setCurrent] = useState(new Date())

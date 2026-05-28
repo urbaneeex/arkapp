@@ -3,7 +3,7 @@ import { createClient as createServerClient } from '@/lib/supabase/server'
 import { Resend } from 'resend'
 import { buildSchedulePublishedEmail } from '@/lib/email-templates'
 
-const RESEND_FROM = process.env.RESEND_FROM_EMAIL || 'Arkapp <hello@arkapp.es>'
+import { getResendFromEmail } from '@/lib/emails/resend-config'
 
 export async function POST(request: NextRequest) {
   try {
@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
         scheduleDescription: description ?? 'Nuevo horario recurrente publicado',
       })
       await resend.emails.send({
-        from: RESEND_FROM,
+        from: getResendFromEmail(),
         to: staffRow.email,
         subject,
         html,

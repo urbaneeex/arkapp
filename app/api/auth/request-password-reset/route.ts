@@ -10,7 +10,7 @@ import {
   hashPasswordResetToken,
 } from '@/lib/password-reset.server'
 
-const RESEND_FROM = process.env.RESEND_FROM_EMAIL || 'Arkapp <hello@arkapp.es>'
+import { getResendFromEmail } from '@/lib/emails/resend-config'
 
 const JSON_OK = {
   ok: true,
@@ -104,7 +104,7 @@ export async function POST(request: NextRequest) {
 
     const resend = new Resend(apiKey)
     const { error: sendErr } = await resend.emails.send({
-      from: RESEND_FROM,
+      from: getResendFromEmail(),
       to: raw,
       subject,
       html,

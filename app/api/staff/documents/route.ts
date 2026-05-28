@@ -4,7 +4,7 @@ import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { Resend } from 'resend'
 import { buildDocumentSignatureRequestEmail } from '@/lib/email-templates'
 
-const RESEND_FROM = process.env.RESEND_FROM_EMAIL || 'Arkapp <hello@arkapp.es>'
+import { getResendFromEmail } from '@/lib/emails/resend-config'
 
 async function getOwnerAccess(
   supabase: Awaited<ReturnType<typeof createServerClient>>,
@@ -144,7 +144,7 @@ export async function POST(request: NextRequest) {
           businessName: business?.name ?? '',
         })
         await resend.emails.send({
-          from: RESEND_FROM,
+          from: getResendFromEmail(),
           to: staffRow.email,
           subject,
           html,

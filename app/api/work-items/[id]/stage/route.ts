@@ -5,6 +5,7 @@ import { resolveUserBusinessAndPermissions } from '@/lib/user-permissions.server
 import { isPipelineStageSlug } from '@/lib/work-items/constants'
 import { appointmentStatusPatchForStageSlug } from '@/lib/work-items/appointmentStatusForStage'
 import { createServiceRoleClient } from '@/lib/supabase/admin'
+import { userCanAccessAppointmentClient } from '@/lib/work-board/appointmentParticipation'
 
 const BodySchema = z
   .object({
@@ -57,13 +58,17 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
   const { data: apt, error: aptErr } = await supabase
     .from('appointments')
-    .select('id, business_id, pipeline_stage_id, board_sort_order')
+    .select('id, business_id, pipeline_stage_id, board_sort_order, created_by, staff_id, metadata')
     .eq('id', id)
     .maybeSingle()
 
   const aptRow = apt as AptMoveRow | null
   if (aptErr || !aptRow || aptRow.business_id !== access.businessId) {
     return NextResponse.json({ error: 'not_found' }, { status: 404 })
+  }
+
+  if (!userCanAccessAppointmentClient(aptRow, user.id, access.businessId)) {
+    return NextResponse.json({ error: 'forbidden' }, { status: 403 })
   }
 
   const columnIds = parsed.data.column_item_ids
@@ -115,6 +120,17 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     if (!columnIds.includes(id)) {
       return NextResponse.json({ error: 'column_item_ids must include this appointment' }, { status: 400 })
     }
+
+    const { data: visibleRows, error: visibleErr } = await supabase
+      .from('appointments')
+      .select('id')
+      .eq('business_id', access.businessId)
+      .in('id', columnIds)
+
+    if (visibleErr || !visibleRows || visibleRows.length !== columnIds.length) {
+      return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+    }
+
     const admin = createServiceRoleClient()
     const { data: rows, error: rowsErr } = await admin
       .from('appointments')

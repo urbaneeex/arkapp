@@ -58,6 +58,7 @@ import {
 } from './kanbanTypography'
 import { deriveAppointmentScope } from '@/lib/work-board/deriveAppointmentScope'
 import { isTerminalWorkItemStage } from '@/lib/work-items/canMoveWorkItem'
+import { userCanAccessAppointmentClient } from '@/lib/work-board/appointmentParticipation'
 import { kanbanCardAccentFromStageColor, stageColorClassForSlug } from '@/lib/work-items/stageColors'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -291,7 +292,7 @@ export function KanbanQuickAddAppointment({
   wrapperStyle?: React.CSSProperties
   /** Si está definido, el panel es edición (modal o inline según variant). */
   editItem?: WorkItemCard | null
-  /** Solo consulta (asignado sin ser creador); actividad sigue en el padre. */
+  /** Reservado; participantes editan con el mismo permiso que ver/abrir. */
   readOnly?: boolean
   onEditClose?: () => void
   /** `modal`: formulario en dialog; `page`: inline con botón final «Crear tarea». */
@@ -2737,6 +2738,7 @@ function SortableKanbanCard({
           <KanbanQuickAddAppointment
             key={item.id}
             editItem={item}
+            readOnly={!userCanAccessAppointmentClient(item, currentUserId, businessId)}
             businessId={businessId}
             currentUserId={currentUserId}
             staffOptions={staffOptions}
@@ -2862,10 +2864,9 @@ export function WorkBoardKanbanView({
         onOpenTaskEdit(item)
         return
       }
-      if (!canEditAppointmentCard(item)) return
       setInlineEditId(item.id)
     },
-    [canOpenAppointmentDetail, canEditAppointmentCard, onOpenTaskEdit]
+    [canOpenAppointmentDetail, onOpenTaskEdit]
   )
 
   const canMarkTaskDone = true
@@ -3197,8 +3198,9 @@ export function WorkBoardKanbanView({
                   {colIdsVisible.map((itemId) => {
                     const item = itemById.get(itemId)
                     if (!item) return null
-                    const editAllowed = canEditAppointmentCard(item)
-                    const detailOpenAllowed = canOpenAppointmentDetail(item)
+                    const accessAllowed = canOpenAppointmentDetail(item)
+                    const editAllowed = accessAllowed
+                    const detailOpenAllowed = accessAllowed
                     const moveAllowed = canMoveAppointmentCard(item)
                     const showMarkDone =
                       moveAllowed &&
@@ -3221,7 +3223,7 @@ export function WorkBoardKanbanView({
                         sortDisabled={dragDisabled || !allowDragCard(item)}
                         onOpen={detailOpenAllowed ? handleCardOpen : undefined}
                         quickEdit={editAllowed ? cardQuickEdit : undefined}
-                        kanbanInteractionLocked={!detailOpenAllowed}
+                        kanbanInteractionLocked={false}
                         kanbanActions={kanbanActions}
                         inlineEditing={inlineEditId === item.id}
                         onCloseInlineEdit={closeInlineEdit}

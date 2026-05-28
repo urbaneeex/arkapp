@@ -4,7 +4,7 @@ import { createServiceRoleClient } from '@/lib/supabase/admin'
 import { isEmailValidForSending, getEmailInvalidReason } from '@/lib/email'
 import { isPhoneValidForSending, getPhoneForWhatsApp } from '@/lib/phone'
 
-const RESEND_FROM = process.env.RESEND_FROM_EMAIL || 'Arkapp <hello@arkapp.es>'
+import { getResendFromEmail } from '@/lib/emails/resend-config'
 
 function generateICS(
   businessName: string,
@@ -266,7 +266,7 @@ export async function runAppointmentNotifications(
               }).format(new Date(startTimeRaw))
             : 'Sin fecha fijada — el establecimiento te contactará para concertarla.'
           const emailPayload: Parameters<typeof resend.emails.send>[0] = {
-            from: RESEND_FROM,
+            from: getResendFromEmail(),
             to: clientEmail,
             subject: `📅 Confirmación de tu cita en ${business?.name ?? 'el negocio'}`,
             html: buildConfirmationEmailHtml(
