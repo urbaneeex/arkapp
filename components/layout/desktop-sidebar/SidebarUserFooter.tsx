@@ -42,7 +42,7 @@ export function SidebarUserFooter({ user }: { user: AccountMenuUser }) {
           className="z-[300] w-72 overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900 p-0 shadow-2xl"
         >
           <AccountMenuUserHeader user={user} businessName={shell?.businessName} compact />
-          <AccountMenuActions onAction={() => setOpen(false)} variant="popover" />
+          <AccountMenuActions user={user} onAction={() => setOpen(false)} variant="popover" />
         </PopoverContent>
       </Popover>
     </div>

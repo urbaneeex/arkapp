@@ -1,6 +1,5 @@
 import { Suspense } from 'react'
 import { redirect } from 'next/navigation'
-import { GlobalHeader } from '@/components/layout/GlobalHeader'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { MobileBottomNav } from '@/components/layout/MobileBottomNav'
 import { DashboardMain } from '@/components/layout/DashboardMain'
@@ -52,11 +51,6 @@ export default async function DashboardLayout({
                 <Suspense fallback={null}>
                   <Sidebar />
                 </Suspense>
-                <GlobalHeader
-                  initialUserName={ctx.displayName}
-                  initialUserEmail={user.email ?? ''}
-                  initialBusinessName={ctx.businessName}
-                />
                 <DashboardMain>{children}</DashboardMain>
                 <Suspense
                   fallback={

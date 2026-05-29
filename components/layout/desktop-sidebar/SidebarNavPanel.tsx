@@ -1,5 +1,6 @@
 'use client'
 
+import { Fragment } from 'react'
 import Link from 'next/link'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -20,6 +21,10 @@ const rowClass = (active: boolean) =>
       ? 'bg-zinc-800/80 text-zinc-100'
       : 'text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200'
   )
+
+function SidebarNavDivider() {
+  return <div role="separator" className="my-2 border-t border-zinc-800" aria-hidden />
+}
 
 function SidebarNavRowButton({
   label,
@@ -183,17 +188,21 @@ export function SidebarNavPanel({
   return (
     <nav className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-3 py-2" aria-label="Principal">
       {items.map((item) => {
+        const divider = item.dividerAfter ? <SidebarNavDivider /> : null
+
         if (item.kind === 'group') {
           const active = sidebarItemIsActive(pathname, searchParams, item)
           return (
-            <SidebarNavRowButton
-              key={item.id}
-              label={item.label}
-              icon={item.icon}
-              active={active}
-              showChevron
-              onClick={() => handleGroupOpen(item)}
-            />
+            <Fragment key={item.id}>
+              <SidebarNavRowButton
+                label={item.label}
+                icon={item.icon}
+                active={active}
+                showChevron
+                onClick={() => handleGroupOpen(item)}
+              />
+              {divider}
+            </Fragment>
           )
         }
 
@@ -204,21 +213,28 @@ export function SidebarNavPanel({
         if (item.appTab) {
           const tab = item.appTab as AppTabId
           return (
-            <button
-              key={item.id}
-              type="button"
-              onPointerDown={() => prefetchAppTabQueries(queryClient, tab)}
-              onClick={() => navigateAppTab(tab)}
-              className={rowClass(active)}
-              aria-current={active ? 'page' : undefined}
-            >
-              <item.icon className={cn(navIconClass, active && 'text-brand')} aria-hidden />
-              <span className="min-w-0 flex-1 truncate text-left">{item.label}</span>
-            </button>
+            <Fragment key={item.id}>
+              <button
+                type="button"
+                onPointerDown={() => prefetchAppTabQueries(queryClient, tab)}
+                onClick={() => navigateAppTab(tab)}
+                className={rowClass(active)}
+                aria-current={active ? 'page' : undefined}
+              >
+                <item.icon className={cn(navIconClass, active && 'text-brand')} aria-hidden />
+                <span className="min-w-0 flex-1 truncate text-left">{item.label}</span>
+              </button>
+              {divider}
+            </Fragment>
           )
         }
 
-        return <SidebarNavLeafLink key={item.id} leaf={item} active={active} />
+        return (
+          <Fragment key={item.id}>
+            <SidebarNavLeafLink leaf={item} active={active} />
+            {divider}
+          </Fragment>
+        )
       })}
     </nav>
   )

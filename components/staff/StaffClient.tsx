@@ -159,7 +159,7 @@ export function StaffClient({
     <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
       <header className="mb-6">
         <div className="flex justify-between items-center">
-          <h1 className="font-display text-2xl font-bold text-zinc-100">Organización</h1>
+          <h1 className="font-display text-2xl font-bold text-zinc-100">Empresa</h1>
           {canInviteStaff && activeTab === 'empleados' && (
             <Link href="/dashboard/staff/new" className="cursor-pointer">
               <Button>

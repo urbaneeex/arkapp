@@ -25,7 +25,7 @@ export const MOBILE_OVERFLOW_NAV_ITEMS: MobileOverflowNavItem[] = [
   {
     id: 'staff',
     href: '/dashboard/staff',
-    label: 'Organización',
+    label: 'Empresa',
     icon: Contact,
     anyOf: ['staff_view', 'teams_view', 'teams_manage'],
   },

@@ -44,6 +44,8 @@ type SidebarNavBase = {
   anyOf?: PermissionKey[]
   allOf?: PermissionKey[]
   requireOwner?: boolean
+  /** Línea separadora tras este ítem en el menú raíz. */
+  dividerAfter?: boolean
 }
 
 export type SidebarNavLeaf = SidebarNavBase & {
@@ -133,13 +135,22 @@ export const DESKTOP_SIDEBAR_NAV: SidebarNavItem[] = [
     icon: Clock,
     basePath: '/dashboard/fichar',
     children: JORNADA_CHILDREN,
+    dividerAfter: true,
   },
   { kind: 'leaf', id: 'clientes', label: 'Clientes', icon: Users, href: '/dashboard/clients', permission: 'clients_view' },
-  { kind: 'leaf', id: 'servicios', label: 'Servicios', icon: Briefcase, href: '/dashboard/services', permission: 'services_view' },
+  {
+    kind: 'leaf',
+    id: 'servicios',
+    label: 'Servicios',
+    icon: Briefcase,
+    href: '/dashboard/services',
+    permission: 'services_view',
+    dividerAfter: true,
+  },
   {
     kind: 'group',
     id: 'organizacion',
-    label: 'Organización',
+    label: 'Empresa',
     icon: UserCircle,
     basePath: '/dashboard/staff',
     anyOf: ['staff_view', 'teams_view', 'teams_manage'],
@@ -162,6 +173,7 @@ export const DESKTOP_SIDEBAR_NAV: SidebarNavItem[] = [
     basePath: '/dashboard/finances',
     permission: 'finances_view',
     children: FINANZAS_CHILDREN,
+    dividerAfter: true,
   },
   {
     kind: 'group',

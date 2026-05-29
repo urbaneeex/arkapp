@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { usePermissions } from '@/hooks/usePermissions'
@@ -11,6 +11,8 @@ import {
   AccountMenuUserHeader,
   type AccountMenuUser,
 } from '@/components/layout/AccountMenuActions'
+import { AccountContactCardOverlay } from '@/components/layout/AccountContactCardOverlay'
+import { resolveStaffContactCardPath } from '@/lib/staff/staffContactCard'
 import {
   MOBILE_OVERFLOW_NAV_ITEMS,
   hrefWithStackAccount,
@@ -19,6 +21,8 @@ import {
 export function AppAccountPanel({ user }: { user: AccountMenuUser }) {
   const router = useRouter()
   const { hasPermission, loading, isOwner } = usePermissions()
+  const hasContactCard = useMemo(() => Boolean(resolveStaffContactCardPath(user)), [user])
+  const [showContactCard, setShowContactCard] = useState(false)
 
   const visibleOverflow = useMemo(() => {
     if (loading) return MOBILE_OVERFLOW_NAV_ITEMS.filter((i) => !i.requireOwner)
@@ -33,12 +37,19 @@ export function AppAccountPanel({ user }: { user: AccountMenuUser }) {
   }
 
   return (
-    <div className="mx-auto w-full max-w-lg lg:max-w-2xl">
+    <>
+      <div className="mx-auto w-full max-w-lg lg:max-w-2xl">
       <PageHeader title="Cuenta" />
 
       <div className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/80">
         <AccountMenuUserHeader user={user} compact showEditButton />
-        <AccountMenuActions variant="sheet" hideProfileLink hideLogout />
+        <AccountMenuActions
+          user={user}
+          variant="sheet"
+          hideProfileLink
+          hideLogout
+          onContactCardOpen={() => setShowContactCard(true)}
+        />
       </div>
 
       <p className="mb-2 mt-6 px-1 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
@@ -75,6 +86,15 @@ export function AppAccountPanel({ user }: { user: AccountMenuUser }) {
       <div className="mt-6 overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/80 px-2 py-1">
         <AccountMenuLogoutButton variant="sheet" />
       </div>
-    </div>
+      </div>
+
+      {hasContactCard ? (
+        <AccountContactCardOverlay
+          user={user}
+          open={showContactCard}
+          onClose={() => setShowContactCard(false)}
+        />
+      ) : null}
+    </>
   )
 }

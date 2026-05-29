@@ -7,7 +7,7 @@ import { RequirePermission } from '@/components/auth/RequirePermission'
 import { getBusinessForUser } from '@/lib/supabase/business'
 
 export const metadata: Metadata = {
-  title: 'Organización',
+  title: 'Empresa',
 }
 
 export default async function StaffPage() {

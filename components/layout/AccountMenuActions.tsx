@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useTheme } from '@/contexts/ThemeContext'
 import { cn } from '@/lib/utils'
 import { Avatar } from '@/components/ui/avatar'
+import { AccountContactCardSection } from '@/components/layout/AccountContactCardSection'
 
 export type AccountMenuUser = {
   email: string
@@ -79,15 +80,19 @@ export function AccountMenuUserHeader({
 }
 
 export function AccountMenuActions({
+  user,
   onAction,
   variant = 'popover',
   hideProfileLink = false,
   hideLogout = false,
+  onContactCardOpen,
 }: {
+  user: AccountMenuUser
   onAction?: () => void
   variant?: 'popover' | 'sheet'
   hideProfileLink?: boolean
   hideLogout?: boolean
+  onContactCardOpen?: () => void
 }) {
   const { theme, setTheme } = useTheme()
 
@@ -142,6 +147,12 @@ export function AccountMenuActions({
         <Globe className="h-4 w-4 shrink-0 text-zinc-500" aria-hidden />
         <span>Idioma: Español 🇪🇸</span>
       </div>
+
+      <AccountContactCardSection
+        user={user}
+        variant={variant}
+        onOpenFullView={variant === 'sheet' ? onContactCardOpen : undefined}
+      />
 
       {!hideLogout ? (
         <div
