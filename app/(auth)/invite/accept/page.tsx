@@ -16,8 +16,8 @@ function InviteAcceptRedirect() {
   }, [router, searchParams])
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-zinc-950">
-      <p className="text-zinc-400">Redirigiendo...</p>
+    <div className="auth-card">
+      <p className="text-[#f1f0ec]/55">Redirigiendo...</p>
     </div>
   )
 }

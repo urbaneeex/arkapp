@@ -141,10 +141,10 @@ function ForgotPasswordContent() {
 
   if (showSentHydrating || showAutosendPending) {
     return (
-      <div className="w-full rounded-2xl bg-[#1c1c1e] p-8 shadow-lg">
+      <div className="w-full auth-card">
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <Spinner />
-          <p className="mt-4 text-[15px] text-[#8e8e93]">
+          <p className="mt-4 text-[15px] text-[#f1f0ec]/55">
             {showAutosendPending ? 'Enviando enlace a tu correo…' : 'Cargando…'}
           </p>
         </div>
@@ -154,7 +154,7 @@ function ForgotPasswordContent() {
 
   if (phase === 'sent') {
     return (
-      <div className="w-full rounded-2xl bg-[#1c1c1e] p-8 shadow-lg">
+      <div className="w-full auth-card">
         <AuthCheckEmailPanel
           email={displayEmail}
           description="Te hemos enviado un correo con un enlace para crear una nueva contraseña. Si no lo ves, revisa la carpeta de spam."
@@ -169,23 +169,23 @@ function ForgotPasswordContent() {
   }
 
   return (
-    <div className="w-full rounded-2xl bg-[#1c1c1e] p-8 shadow-lg">
+    <div className="w-full auth-card">
       <Link
         href="/login"
-        className="mb-6 inline-flex items-center gap-1 text-sm font-medium text-[#8e8e93] transition-colors hover:text-white"
+        className="mb-6 inline-flex items-center gap-1 text-sm font-medium text-[#f1f0ec]/55 transition-colors hover:text-[#f1f0ec]"
       >
         <ChevronLeft className="h-4 w-4 shrink-0" aria-hidden />
         Volver
       </Link>
 
-      <h1 className="font-display mb-2 text-[28px] font-bold text-white">Recuperar contraseña</h1>
-      <p className="mb-6 text-[15px] text-[#8e8e93]">Te enviaremos un enlace para cambiar tu contraseña</p>
+      <h1 className="auth-title mb-3">Recuperar contraseña</h1>
+      <p className="mb-6 text-[15px] text-[#f1f0ec]/55">Te enviaremos un enlace para cambiar tu contraseña</p>
 
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && <div className="rounded-lg bg-red-950/50 p-3 text-sm text-red-300">{error}</div>}
 
         <div>
-          <label htmlFor="email" className="text-sm text-[#aeaeb2]">
+          <label htmlFor="email" className="auth-label">
             Email
           </label>
           <input
@@ -195,22 +195,22 @@ function ForgotPasswordContent() {
             onChange={(e) => setEmail(e.target.value)}
             required
             autoComplete="email"
-            className="mt-1 h-11 w-full rounded-[10px] border border-[#3a3a3c] bg-[#2c2c2e] px-3 text-white placeholder:text-[#6b6b6d] outline-none focus:border-brand"
+            className="auth-input"
           />
         </div>
 
         <button
           type="submit"
           disabled={loading}
-          className="flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-brand text-sm font-medium text-white transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-60"
+          className="auth-btn"
         >
           {loading && <Spinner />}
           {loading ? 'Enviando...' : 'Enviar enlace'}
         </button>
       </form>
 
-      <p className="mt-6 text-center text-sm text-[#8e8e93]">
-        <Link href="/login" className="text-brand hover:underline">
+      <p className="mt-6 text-center text-sm text-[#f1f0ec]/55">
+        <Link href="/login" className="auth-link">
           Volver al inicio de sesión
         </Link>
       </p>
@@ -220,10 +220,10 @@ function ForgotPasswordContent() {
 
 function ForgotPasswordFallback() {
   return (
-    <div className="w-full rounded-2xl bg-[#1c1c1e] p-8 shadow-lg">
+    <div className="w-full auth-card">
       <div className="flex flex-col items-center justify-center py-16">
         <Spinner />
-        <p className="mt-4 text-sm text-[#8e8e93]">Cargando…</p>
+        <p className="mt-4 text-sm text-[#f1f0ec]/55">Cargando…</p>
       </div>
     </div>
   )

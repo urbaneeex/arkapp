@@ -3,11 +3,9 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Lock, Loader2, AlertCircle } from 'lucide-react'
+import { Loader2, AlertCircle } from 'lucide-react'
 import Link from 'next/link'
+import { AuthShell } from '@/components/auth/AuthShell'
 
 /**
  * Página para que un usuario ya logueado cambie su contraseña.
@@ -64,37 +62,34 @@ export default function SetPasswordPage() {
 
   if (checking || !hasUser) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-zinc-950">
-        <div className="bg-zinc-900 rounded-xl shadow-lg p-8 w-full max-w-md text-center">
+      <AuthShell>
+        <div className="auth-card text-center">
           <Loader2 className="w-8 h-8 text-brand animate-spin mx-auto mb-4" />
-          <p className="text-zinc-400">Comprobando sesión...</p>
+          <p className="text-[#f1f0ec]/55">Comprobando sesión...</p>
         </div>
-      </div>
+    </AuthShell>
     )
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-zinc-950 px-4">
-      <div className="bg-zinc-900 rounded-xl shadow-lg p-8 w-full max-w-md">
-        <div className="flex items-center gap-2 text-zinc-100 font-semibold mb-1">
-          <Lock className="h-5 w-5 text-brand" />
-          Cambiar contraseña
-        </div>
-        <p className="text-zinc-400 text-sm mb-6">
+    <AuthShell>
+      <div className="auth-card">
+        <h1 className="auth-title mb-3">Cambiar contraseña</h1>
+        <p className="mb-8 text-[15px] text-[#f1f0ec]/55">
           Introduce tu nueva contraseña.
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {error && (
-            <div className="p-3 rounded-lg bg-red-950/50 text-red-300 text-sm flex items-center gap-2">
+            <div className="flex items-center gap-2 rounded-lg bg-red-950/50 p-3 text-sm text-red-300">
               <AlertCircle className="h-4 w-4 shrink-0" />
               {error}
             </div>
           )}
 
           <div>
-            <Label htmlFor="password">Nueva contraseña *</Label>
-            <Input
+            <label htmlFor="password" className="auth-label">Nueva contraseña *</label>
+            <input
               id="password"
               type="password"
               value={password}
@@ -102,41 +97,41 @@ export default function SetPasswordPage() {
               placeholder="Mínimo 8 caracteres"
               required
               minLength={8}
-              className="mt-1"
+              className="auth-input"
             />
           </div>
 
           <div>
-            <Label htmlFor="confirmPassword">Repetir contraseña *</Label>
-            <Input
+            <label htmlFor="confirmPassword" className="auth-label">Repetir contraseña *</label>
+            <input
               id="confirmPassword"
               type="password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               placeholder="Repite la contraseña"
               required
-              className="mt-1"
+              className="auth-input"
             />
           </div>
 
-          <Button type="submit" className="w-full" disabled={loading}>
+          <button type="submit" className="auth-btn" disabled={loading}>
             {loading ? (
               <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <Loader2 className="h-4 w-4 animate-spin" />
                 Guardando...
               </>
             ) : (
               'Guardar contraseña'
             )}
-          </Button>
+          </button>
         </form>
 
-        <p className="text-center text-sm text-zinc-400 mt-4">
-          <Link href="/dashboard" className="text-brand hover:underline">
+        <p className="mt-6 text-sm text-[#f1f0ec]/55">
+          <Link href="/dashboard" className="auth-link">
             Volver al panel
           </Link>
         </p>
       </div>
-    </div>
+    </AuthShell>
   )
 }

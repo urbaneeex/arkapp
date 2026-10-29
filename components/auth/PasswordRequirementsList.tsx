@@ -12,7 +12,7 @@ export function PasswordRequirementsList({ password, showWhenEmpty = false }: Pr
   return (
     <ul className="mt-2 space-y-1 text-xs">
       {requirements.map((req) => (
-        <li key={req.id} className={req.ok ? 'text-emerald-400' : 'text-[#8e8e93]'}>
+        <li key={req.id} className={req.ok ? 'text-emerald-400' : 'text-[#f1f0ec]/55'}>
           {req.ok ? '✓' : '•'} {req.label}
         </li>
       ))}

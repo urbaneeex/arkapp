@@ -39,10 +39,10 @@ function Spinner() {
 function ResetInfoLinks() {
   return (
     <div className="mt-6 flex flex-col gap-2 text-sm">
-      <Link href="/login" className="text-brand hover:underline">
+      <Link href="/login" className="auth-link">
         Ir al inicio de sesión
       </Link>
-      <Link href="/forgot-password" className="text-brand hover:underline">
+      <Link href="/forgot-password" className="auth-link">
         Solicitar un nuevo enlace
       </Link>
     </div>
@@ -205,9 +205,9 @@ function ResetPasswordInner() {
 
   if (showCustomLoading) {
     return (
-      <div className="w-full max-w-md rounded-2xl bg-[#1c1c1e] p-8 shadow-lg">
-        <h1 className="font-display mb-2 text-[28px] font-bold text-white">Comprobando enlace</h1>
-        <p className="mb-6 flex items-center gap-2 text-[15px] text-[#8e8e93]">
+      <div className="w-full auth-card">
+        <h1 className="auth-title mb-3">Comprobando enlace</h1>
+        <p className="mb-6 flex items-center gap-2 text-[15px] text-[#f1f0ec]/55">
           <Spinner />
           Un momento…
         </p>
@@ -217,12 +217,12 @@ function ResetPasswordInner() {
 
   if (showCustomUsed) {
     return (
-      <div className="w-full max-w-md rounded-2xl bg-[#1c1c1e] p-8 shadow-lg">
-        <h1 className="font-display mb-2 text-[28px] font-bold text-white">Enlace ya utilizado</h1>
-        <p className="text-[15px] text-[#aeaeb2] leading-relaxed">
+      <div className="w-full auth-card">
+        <h1 className="auth-title mb-3">Enlace ya utilizado</h1>
+        <p className="text-[15px] text-[#f1f0ec]/70 leading-relaxed">
           Ya restableciste la contraseña con este enlace. Por seguridad, cada enlace solo sirve una vez.
         </p>
-        <p className="mt-3 text-sm text-[#8e8e93]">
+        <p className="mt-3 text-sm text-[#f1f0ec]/55">
           Si necesitas cambiarla otra vez, pide un correo nuevo desde «¿Olvidaste tu contraseña?».
         </p>
         <ResetInfoLinks />
@@ -232,9 +232,9 @@ function ResetPasswordInner() {
 
   if (showCustomExpired) {
     return (
-      <div className="w-full max-w-md rounded-2xl bg-[#1c1c1e] p-8 shadow-lg">
-        <h1 className="font-display mb-2 text-[28px] font-bold text-white">Enlace caducado</h1>
-        <p className="text-[15px] text-[#aeaeb2] leading-relaxed">
+      <div className="w-full auth-card">
+        <h1 className="auth-title mb-3">Enlace caducado</h1>
+        <p className="text-[15px] text-[#f1f0ec]/70 leading-relaxed">
           Este enlace ha superado el tiempo permitido (una hora). Los enlaces de recuperación caducan por seguridad.
         </p>
         <ResetInfoLinks />
@@ -244,9 +244,9 @@ function ResetPasswordInner() {
 
   if (showCustomInvalid) {
     return (
-      <div className="w-full max-w-md rounded-2xl bg-[#1c1c1e] p-8 shadow-lg">
-        <h1 className="font-display mb-2 text-[28px] font-bold text-white">Enlace no válido</h1>
-        <p className="text-[15px] text-[#aeaeb2] leading-relaxed">
+      <div className="w-full auth-card">
+        <h1 className="auth-title mb-3">Enlace no válido</h1>
+        <p className="text-[15px] text-[#f1f0ec]/70 leading-relaxed">
           No podemos validar este enlace. Puede ser incorrecto o haber sido sustituido por uno más reciente.
         </p>
         <ResetInfoLinks />
@@ -255,9 +255,9 @@ function ResetPasswordInner() {
   }
 
   return (
-    <div className="w-full max-w-md rounded-2xl bg-[#1c1c1e] p-8 shadow-lg">
-      <h1 className="font-display mb-2 text-[28px] font-bold text-white">Nueva contraseña</h1>
-      <p className="mb-6 text-[15px] text-[#8e8e93]">Introduce tu nueva contraseña para continuar</p>
+    <div className="w-full auth-card">
+      <h1 className="auth-title mb-3">Nueva contraseña</h1>
+      <p className="mb-6 text-[15px] text-[#f1f0ec]/55">Introduce tu nueva contraseña para continuar</p>
 
       {malformedTokenParam && (
         <div className="mb-4 rounded-lg bg-amber-950/40 border border-amber-800/40 p-3 text-sm text-amber-200">
@@ -283,7 +283,7 @@ function ResetPasswordInner() {
           {success && <div className="rounded-lg bg-emerald-950/50 p-3 text-sm text-emerald-300">{success}</div>}
 
           <div>
-            <label htmlFor="password" className="text-sm text-[#aeaeb2]">
+            <label htmlFor="password" className="auth-label">
               Nueva contraseña
             </label>
             <div className="relative mt-1">
@@ -293,7 +293,7 @@ function ResetPasswordInner() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className="h-11 w-full rounded-[10px] border border-[#3a3a3c] bg-[#2c2c2e] px-3 pr-10 text-white placeholder:text-[#6b6b6d] outline-none focus:border-brand"
+                className="auth-input pr-10"
               />
               <PasswordVisibilityToggle
                 show={showPassword}
@@ -306,7 +306,7 @@ function ResetPasswordInner() {
           <button
             type="submit"
             disabled={disabled || !readyToSubmit || malformedTokenParam}
-            className="flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-brand text-sm font-medium text-white transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-60"
+            className="auth-btn"
           >
             {loading && <Spinner />}
             {loading ? 'Actualizando...' : 'Guardar contraseña'}
@@ -321,7 +321,7 @@ export default function ResetPasswordPage() {
   return (
     <Suspense
       fallback={
-        <div className="w-full max-w-md rounded-2xl bg-[#1c1c1e] p-8 shadow-lg text-zinc-400 text-sm">
+        <div className="w-full auth-card text-zinc-400 text-sm">
           Cargando…
         </div>
       }

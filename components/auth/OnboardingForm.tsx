@@ -76,15 +76,15 @@ export function OnboardingForm({
   }
 
   return (
-    <div className="w-full max-w-md rounded-2xl bg-[#1c1c1e] p-8 shadow-lg">
-      <h1 className="font-display mb-2 text-[28px] font-bold text-white">Configura tu negocio</h1>
-      <p className="mb-6 text-[15px] text-[#8e8e93]">Un último paso antes de entrar a tu panel</p>
+    <div className="w-full auth-card">
+      <h1 className="auth-title mb-3">Configura tu negocio</h1>
+      <p className="mb-6 text-[15px] text-[#f1f0ec]/55">Un último paso antes de entrar a tu panel</p>
 
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && <div className="rounded-lg bg-red-950/50 p-3 text-sm text-red-300">{error}</div>}
 
         <div>
-          <label htmlFor="businessName" className="text-sm text-[#aeaeb2]">
+          <label htmlFor="businessName" className="auth-label">
             Nombre de tu negocio
           </label>
           <input
@@ -94,12 +94,12 @@ export function OnboardingForm({
             value={businessName}
             onChange={(e) => setBusinessName(e.target.value)}
             placeholder="Ej. Peluquería Carmen"
-            className="mt-1 h-11 w-full rounded-[10px] border border-[#3a3a3c] bg-[#2c2c2e] px-3 text-white outline-none focus:border-brand"
+            className="auth-input"
           />
         </div>
 
         <div>
-          <label htmlFor="ownerName" className="text-sm text-[#aeaeb2]">
+          <label htmlFor="ownerName" className="auth-label">
             Tu nombre
           </label>
           <input
@@ -109,7 +109,7 @@ export function OnboardingForm({
             value={ownerName}
             onChange={(e) => setOwnerName(e.target.value)}
             placeholder="Tu nombre completo"
-            className="mt-1 h-11 w-full rounded-[10px] border border-[#3a3a3c] bg-[#2c2c2e] px-3 text-white outline-none focus:border-brand"
+            className="auth-input"
           />
         </div>
 
@@ -127,7 +127,7 @@ export function OnboardingForm({
           <button
             type="submit"
             disabled={loading}
-            className="flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-brand text-sm font-medium text-white transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-60"
+            className="auth-btn"
           >
             {loading && <Spinner />}
             {loading ? 'Creando...' : 'Entrar a mi panel'}

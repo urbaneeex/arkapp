@@ -91,7 +91,7 @@ export function AuthCheckEmailPanel({
 
   const backLabel = 'label' in back && back.label ? back.label : 'Volver'
   const backClass =
-    'mb-8 inline-flex cursor-pointer items-center gap-1 text-sm font-medium text-[#8e8e93] transition-colors hover:text-white'
+    'mb-8 inline-flex cursor-pointer items-center gap-1 text-sm font-medium text-[#f1f0ec]/55 transition-colors hover:text-[#f1f0ec]'
 
   return (
     <>
@@ -107,20 +107,15 @@ export function AuthCheckEmailPanel({
         </button>
       )}
 
-      <div className="flex flex-col items-center text-center">
-        <div
-          className="mb-6 flex h-20 w-20 items-center justify-center rounded-2xl bg-brand/15 ring-1 ring-brand/25"
-          aria-hidden
-        >
-          <Mail className="h-10 w-10 text-[#60a5fa]" strokeWidth={1.5} />
-        </div>
+      <div className="flex flex-col items-start text-left">
+        <Mail className="mb-6 h-8 w-8 text-brand" strokeWidth={1.5} aria-hidden />
 
-        <h1 className="font-display text-[26px] font-bold leading-tight text-white sm:text-[28px]">Revisa tu correo</h1>
-        <p className="mt-2 text-[15px] font-semibold text-[#aeaeb2]">{email}</p>
-        <p className="mt-4 max-w-sm text-[15px] leading-relaxed text-[#8e8e93]">{description}</p>
+        <h1 className="auth-title">Revisa tu correo</h1>
+        <p className="mt-2 text-[15px] font-semibold text-[#f1f0ec]/70">{email}</p>
+        <p className="mt-4 max-w-sm text-[15px] leading-relaxed text-[#f1f0ec]/55">{description}</p>
 
         {resendBanner && (
-          <p className="mt-4 text-sm text-[#aeaeb2]" role="status">
+          <p className="mt-4 text-sm text-[#f1f0ec]/70" role="status">
             {resendBanner}
           </p>
         )}
@@ -128,7 +123,7 @@ export function AuthCheckEmailPanel({
         {continueHref ? (
           <Link
             href={continueHref}
-            className="mt-10 flex h-11 w-full max-w-sm cursor-pointer items-center justify-center rounded-full bg-brand text-sm font-medium text-white transition-colors hover:bg-brand-hover"
+            className="auth-btn mt-10 max-w-sm"
           >
             {continueLabel}
           </Link>
@@ -138,7 +133,7 @@ export function AuthCheckEmailPanel({
           type="button"
           onClick={() => void handleResend()}
           disabled={resendLoading || resendCooldown > 0}
-          className={`cursor-pointer text-sm font-semibold text-[#aeaeb2] transition-colors hover:text-white disabled:cursor-not-allowed disabled:opacity-50 ${continueHref ? 'mt-4' : 'mt-10'}`}
+          className={`auth-link cursor-pointer text-sm disabled:cursor-not-allowed disabled:opacity-50 ${continueHref ? 'mt-4' : 'mt-10'}`}
         >
           {resendLoading ? (
             <span className="inline-flex items-center gap-2">

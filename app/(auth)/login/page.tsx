@@ -299,7 +299,7 @@ function LoginPageInner() {
     mailUi === 'button' || mailUi === 'email_entry' || mailUi === 'google_only'
 
   return (
-    <div className="w-full max-w-md rounded-2xl bg-[#1c1c1e] p-8 shadow-lg">
+    <div className="w-full auth-card">
       {mailUi === 'signup_check_email' ? (
         <AuthCheckEmailPanel
           email={emailLocked}
@@ -313,7 +313,7 @@ function LoginPageInner() {
         <button
           type="button"
           onClick={backToEmailEntry}
-          className="mb-4 flex cursor-pointer items-center gap-1 text-sm text-[#8e8e93] transition-colors hover:text-white"
+          className="mb-4 flex cursor-pointer items-center gap-1 text-sm text-[#f1f0ec]/55 transition-colors hover:text-[#f1f0ec]"
         >
           ← Volver
         </button>
@@ -321,10 +321,10 @@ function LoginPageInner() {
 
       {showHero && (
         <>
-          <h1 className="font-display mb-2 text-center text-[26px] font-bold leading-tight text-white sm:text-[28px]">
+          <h1 className="auth-title mb-3">
             Te damos la bienvenida a Arkapp
           </h1>
-          <p className="mb-6 text-center text-[15px] text-[#8e8e93]">Inicia sesión o crea cuenta</p>
+          <p className="mb-8 text-[15px] text-[#f1f0ec]/55">Inicia sesión o crea cuenta</p>
         </>
       )}
 
@@ -379,7 +379,7 @@ function LoginPageInner() {
           {mailUi === 'button' && (
             <div className="space-y-3">
               <AuthMethodButton
-                icon={<Mail className="h-5 w-5 text-[#aeaeb2]" strokeWidth={1.75} aria-hidden />}
+                icon={<Mail className="h-5 w-5 text-[#f1f0ec]/70" strokeWidth={1.75} aria-hidden />}
                 onClick={() => {
                   setError('')
                   setSuccess('')
@@ -412,14 +412,14 @@ function LoginPageInner() {
                 placeholder="Correo electrónico"
                 autoComplete="email"
                 autoFocus={mailUi === 'email_entry'}
-                className="h-12 w-full rounded-xl border border-[#3a3a3c] bg-[#2c2c2e] px-4 text-sm text-white placeholder:text-[#6b6b6d] outline-none focus:border-brand"
+                className="auth-input"
               />
               {mailUi === 'google_only' && (
-                <div className="mt-3 text-sm leading-relaxed text-[#aeaeb2]">
-                  <p className="font-medium text-[#e8e8ed]">Cuenta registrada con Google</p>
+                <div className="mt-3 text-sm leading-relaxed text-[#f1f0ec]/70">
+                  <p className="font-medium text-[#f1f0ec]">Cuenta registrada con Google</p>
                   <p className="mt-2">
                     Para acceder a tu cuenta, presiona{' '}
-                    <span className="font-semibold text-white">«Continuar con Google»</span>.
+                    <span className="font-semibold text-[#f1f0ec]">«Continuar con Google»</span>.
                   </p>
                 </div>
               )}
@@ -427,7 +427,7 @@ function LoginPageInner() {
                 type="button"
                 onClick={() => void runEmailLookup()}
                 disabled={lookupLoading || !emailDraft.trim().includes('@')}
-                className="mt-8 flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-brand text-sm font-medium text-white transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-50"
+                className="mt-8 auth-btn"
               >
                 {lookupLoading && <Spinner />}
                 {lookupLoading ? 'Comprobando...' : 'Continuar'}
@@ -439,11 +439,11 @@ function LoginPageInner() {
 
       {mailUi === 'password_login' && (
         <form onSubmit={handleLoginSubmit} className="mt-4 space-y-4">
-          <h1 className="font-display mb-6 text-center text-[26px] font-bold leading-tight text-white sm:text-[28px]">
+          <h1 className="auth-title mb-8">
             Indica tu contraseña
           </h1>
           <div>
-            <label htmlFor="locked-email-login" className="text-sm text-[#aeaeb2]">
+            <label htmlFor="locked-email-login" className="auth-label">
               Correo electrónico
             </label>
             <input
@@ -452,11 +452,11 @@ function LoginPageInner() {
               value={emailLocked}
               readOnly
               tabIndex={-1}
-              className="mt-1 h-11 w-full cursor-default rounded-[10px] border border-[#3a3a3c] bg-[#2c2c2e]/80 px-3 text-[#aeaeb2] outline-none"
+              className="auth-input opacity-70 cursor-default"
             />
           </div>
           <div>
-            <label htmlFor="password-login" className="text-sm text-[#aeaeb2]">
+            <label htmlFor="password-login" className="auth-label">
               Contraseña
             </label>
             <div className="relative mt-1">
@@ -468,7 +468,7 @@ function LoginPageInner() {
                 required
                 autoComplete="current-password"
                 placeholder="Contraseña"
-                className="h-11 w-full rounded-[10px] border border-[#3a3a3c] bg-[#2c2c2e] px-3 pr-10 text-white placeholder:text-[#6b6b6d] outline-none focus:border-brand"
+                className="auth-input pr-10"
               />
               <PasswordVisibilityToggle show={showPassword} onToggle={() => setShowPassword((v) => !v)} />
             </div>
@@ -480,7 +480,7 @@ function LoginPageInner() {
                   ? `/forgot-password?autosend=1&email=${encodeURIComponent(emailLocked)}`
                   : '/forgot-password'
               }
-              className="text-sm text-brand hover:underline"
+              className="text-sm auth-link"
             >
               ¿Olvidaste tu contraseña?
             </Link>
@@ -488,7 +488,7 @@ function LoginPageInner() {
           <button
             type="submit"
             disabled={disabled}
-            className="flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-brand text-sm font-medium text-white transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-60"
+            className="auth-btn"
           >
             {loading && <Spinner />}
             {loading ? 'Entrando...' : 'Entrar'}
@@ -498,7 +498,7 @@ function LoginPageInner() {
 
       {mailUi === 'password_signup' && (
         <form onSubmit={handleSignupSubmit} className="mt-4 space-y-4">
-          <h1 className="font-display mb-6 text-center text-[26px] font-bold leading-tight text-white sm:text-[28px]">
+          <h1 className="auth-title mb-8">
             Define la contraseña para tu cuenta
           </h1>
           <div>
@@ -511,7 +511,7 @@ function LoginPageInner() {
               value={emailLocked}
               readOnly
               tabIndex={-1}
-              className="h-11 w-full cursor-default rounded-[10px] border border-[#3a3a3c] bg-[#2c2c2e]/80 px-3 text-sm text-[#aeaeb2] outline-none"
+              className="auth-input opacity-70 cursor-default"
             />
           </div>
           <div>
@@ -527,7 +527,7 @@ function LoginPageInner() {
                 required
                 autoComplete="new-password"
                 placeholder="Contraseña"
-                className="h-11 w-full rounded-[10px] border border-[#3a3a3c] bg-[#2c2c2e] px-3 pr-10 text-white placeholder:text-[#6b6b6d] outline-none focus:border-brand"
+                className="auth-input pr-10"
               />
               <PasswordVisibilityToggle show={showPassword} onToggle={() => setShowPassword((v) => !v)} />
             </div>
@@ -539,19 +539,19 @@ function LoginPageInner() {
               type="checkbox"
               checked={acceptedLegal}
               onChange={(e) => setAcceptedLegal(e.target.checked)}
-              className="mt-0.5 h-4 w-4 shrink-0 rounded border-[#5c5c5e] bg-[#2c2c2e] text-brand focus:ring-2 focus:ring-brand focus:ring-offset-0"
+              className="mt-0.5 h-4 w-4 shrink-0 rounded border-[#f1f0ec]/40 bg-transparent text-brand focus:ring-2 focus:ring-brand focus:ring-offset-0"
             />
-            <label htmlFor="acceptLegalSignup" className="text-[13px] leading-snug text-[#aeaeb2]">
+            <label htmlFor="acceptLegalSignup" className="text-[13px] leading-snug text-[#f1f0ec]/70">
               He leído y acepto la{' '}
               <Link
                 href="/privacidad"
-                className="text-brand hover:underline"
+                className="auth-link"
                 onClick={(e) => e.stopPropagation()}
               >
                 Política de protección de datos
               </Link>{' '}
               y los{' '}
-              <Link href="/terminos" className="text-brand hover:underline" onClick={(e) => e.stopPropagation()}>
+              <Link href="/terminos" className="auth-link" onClick={(e) => e.stopPropagation()}>
                 Términos y condiciones
               </Link>
               .
@@ -560,7 +560,7 @@ function LoginPageInner() {
           <button
             type="submit"
             disabled={disabled || !signupFormValid}
-            className="flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-brand text-sm font-medium text-white transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-50"
+            className="auth-btn"
           >
             {loading && <Spinner />}
             {loading ? 'Creando cuenta...' : 'Continuar'}
@@ -577,7 +577,7 @@ function LoginPageInner() {
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={<div className="w-full max-w-md rounded-2xl bg-[#1c1c1e] p-8 text-[#8e8e93]">Cargando…</div>}>
+    <Suspense fallback={<div className="w-full auth-card text-[#f1f0ec]/55">Cargando…</div>}>
       <LoginPageInner />
     </Suspense>
   )
